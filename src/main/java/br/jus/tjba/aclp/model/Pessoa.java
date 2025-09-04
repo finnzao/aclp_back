@@ -19,7 +19,7 @@ import java.util.Objects;
         indexes = {
                 @Index(name = "idx_pessoa_cpf", columnList = "cpf"),
                 @Index(name = "idx_pessoa_rg", columnList = "rg"),
-                @Index(name = "idx_pessoa_processo", columnList = "processo"), // REMOVIDO unique = true
+                @Index(name = "idx_pessoa_processo", columnList = "processo"),
                 @Index(name = "idx_pessoa_status", columnList = "status"),
                 @Index(name = "idx_pessoa_proximo_comparecimento", columnList = "proximo_comparecimento"),
                 @Index(name = "idx_pessoa_status_proximo", columnList = "status, proximo_comparecimento"),
@@ -63,7 +63,7 @@ public class Pessoa {
     @NotBlank(message = "Processo é obrigatório")
     @Pattern(regexp = "\\d{7}-\\d{2}\\.\\d{4}\\.\\d{1}\\.\\d{2}\\.\\d{4}",
             message = "Processo deve ter o formato 0000000-00.0000.0.00.0000")
-    @Column(name = "processo", nullable = false, length = 25) // REMOVIDO unique = true
+    @Column(name = "processo", nullable = false, length = 25)
     private String processo;
 
     @NotBlank(message = "Vara é obrigatória")
@@ -118,6 +118,7 @@ public class Pessoa {
     private String observacoes;
 
     @Column(name = "criado_em", nullable = false)
+    @Builder.Default
     private LocalDateTime criadoEm = LocalDateTime.now();
 
     @Column(name = "atualizado_em")
@@ -125,16 +126,28 @@ public class Pessoa {
 
     @Version
     @Column(name = "version")
+    @Builder.Default
     private Long version = 0L;
 
     @OneToMany(mappedBy = "pessoa", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @OrderBy("dataComparecimento DESC")
+    @Builder.Default
     private List<HistoricoComparecimento> historicoComparecimentos = new ArrayList<>();
 
     @AssertTrue(message = "Pelo menos CPF ou RG deve ser informado")
     public boolean isDocumentosValidos() {
         return (cpf != null && !cpf.trim().isEmpty()) ||
                 (rg != null && !rg.trim().isEmpty());
+    }
+
+    @PrePersist
+    public void prePersist() {
+        if (this.criadoEm == null) {
+            this.criadoEm = LocalDateTime.now();
+        }
+        if (this.version == null) {
+            this.version = 0L;
+        }
     }
 
     @PreUpdate

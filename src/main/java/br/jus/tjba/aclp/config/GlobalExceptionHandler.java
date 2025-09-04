@@ -9,7 +9,6 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
-import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -71,6 +70,30 @@ public class GlobalExceptionHandler {
             code = "RECURSO_NAO_ENCONTRADO";
             suggestions.add("Verifique se o ID está correto");
             suggestions.add("Use o endpoint de busca para localizar o recurso");
+        } else if (message.contains("ID deve ser")) {
+            code = "ID_INVALIDO";
+            suggestions.add("Use um número inteiro positivo");
+            suggestions.add("Verifique se o ID existe no sistema");
+        } else if (message.contains("obrigatório")) {
+            code = "CAMPO_OBRIGATORIO";
+            suggestions.add("Preencha todos os campos obrigatórios");
+            suggestions.add("Consulte a documentação da API");
+        } else if (message.contains("formato") || message.contains("válido")) {
+            code = "FORMATO_INVALIDO";
+            suggestions.add("Verifique o formato dos dados");
+            suggestions.add("Consulte exemplos na documentação");
+        } else if (message.contains("não é possível excluir")) {
+            code = "OPERACAO_NAO_PERMITIDA";
+            suggestions.add("Remova as dependências primeiro");
+            suggestions.add("Consulte a documentação sobre exclusões");
+        } else if (message.contains("termo") || message.contains("caracteres")) {
+            code = "TERMO_BUSCA_INVALIDO";
+            suggestions.add("Use pelo menos 2 caracteres na busca");
+            suggestions.add("Tente termos mais específicos");
+        } else if (message.contains("Status") || message.contains("status")) {
+            code = "STATUS_INVALIDO";
+            suggestions.add("Use: EM_CONFORMIDADE ou INADIMPLENTE");
+            suggestions.add("Verifique se o status foi escrito corretamente");
         } else {
             suggestions.add("Verifique os dados informados");
             suggestions.add("Consulte a documentação da API");
@@ -165,6 +188,8 @@ public class GlobalExceptionHandler {
             suggestions.add("Use apenas números inteiros (exemplo: 123)");
         } else if ("StatusComparecimento".equals(expectedType)) {
             suggestions.add("Use: EM_CONFORMIDADE ou INADIMPLENTE");
+        } else if ("TipoUsuario".equals(expectedType)) {
+            suggestions.add("Use: ADMIN ou USUARIO");
         } else {
             suggestions.add(String.format("Use um valor válido do tipo %s", expectedType));
         }
@@ -226,6 +251,10 @@ public class GlobalExceptionHandler {
             details = "Valor inválido para campo enum";
             suggestions.add("Para status use: EM_CONFORMIDADE ou INADIMPLENTE");
             suggestions.add("Para tipo de usuário use: ADMIN ou USUARIO");
+        } else if (exMessage.contains("localdatetime") || exMessage.contains("localdate")) {
+            details = "Formato de data inválido";
+            suggestions.add("Use o formato: yyyy-MM-dd para datas");
+            suggestions.add("Use o formato: yyyy-MM-ddTHH:mm:ss para data/hora");
         } else {
             suggestions.add("Use um validador JSON online");
             suggestions.add("Verifique se os tipos de dados estão corretos");
@@ -278,18 +307,33 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleEntityNotFound(EntityNotFoundException ex, HttpServletRequest request) {
         log.warn("Entidade não encontrada: {}", ex.getMessage());
 
+        String message = ex.getMessage();
+        String code = "RECURSO_NAO_ENCONTRADO";
+        List<String> suggestions = new ArrayList<>();
+
+        // Personalizar sugestões baseado no tipo de entidade
+        if (message.toLowerCase().contains("pessoa")) {
+            code = "PESSOA_NAO_ENCONTRADA";
+            suggestions.add("Verifique se o ID da pessoa está correto");
+            suggestions.add("Use o endpoint de busca para localizar pessoas");
+        } else if (message.toLowerCase().contains("usuário")) {
+            code = "USUARIO_NAO_ENCONTRADO";
+            suggestions.add("Verifique se o ID do usuário está correto");
+            suggestions.add("Use o endpoint de busca para localizar usuários");
+        } else {
+            suggestions.add("Verifique se o ID está correto");
+            suggestions.add("Use o endpoint de busca para localizar o recurso");
+        }
+
         ErrorResponse error = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.NOT_FOUND.value())
                 .error("Not Found")
-                .code("RECURSO_NAO_ENCONTRADO")
-                .message(ex.getMessage())
+                .code(code)
+                .message(message)
                 .details("O recurso solicitado não existe no sistema")
                 .path(request.getRequestURI())
-                .suggestions(Arrays.asList(
-                        "Verifique se o ID está correto",
-                        "Use o endpoint de busca para localizar o recurso"
-                ))
+                .suggestions(suggestions)
                 .build();
 
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
@@ -307,8 +351,23 @@ public class GlobalExceptionHandler {
         List<String> suggestions = new ArrayList<>();
 
         String rootCause = ex.getRootCause() != null ? ex.getRootCause().getMessage().toLowerCase() : "";
+        String fullMessage = ex.getMessage() != null ? ex.getMessage().toLowerCase() : "";
 
-        if (rootCause.contains("cpf") || rootCause.contains("uk_pessoa_cpf")) {
+        // Verificar erros de NOT NULL constraints
+        if (rootCause.contains("not-null") || rootCause.contains("null value") ||
+                rootCause.contains("viola a restrição de não-nulo") || rootCause.contains("violates not-null constraint")) {
+
+            message = "Campo obrigatório não foi preenchido corretamente";
+            details = "Um campo obrigatório do sistema não foi definido";
+            code = "CAMPO_OBRIGATORIO_NULO";
+            suggestions.add("Este é um erro interno do sistema");
+            suggestions.add("Contate o suporte técnico informando esta mensagem");
+            suggestions.add("Tente novamente em alguns instantes");
+
+            // Log adicional para debug
+            log.error("Erro de NOT NULL constraint detectado. Causa raiz: {}", rootCause);
+
+        } else if (rootCause.contains("cpf") || rootCause.contains("uk_pessoa_cpf")) {
             message = "CPF já está cadastrado no sistema";
             details = "Não é possível cadastrar duas pessoas com o mesmo CPF";
             code = "CPF_DUPLICADO";
@@ -320,24 +379,42 @@ public class GlobalExceptionHandler {
             code = "RG_DUPLICADO";
             suggestions.add("Use um RG diferente");
             suggestions.add("Verifique se a pessoa já está cadastrada");
+        } else if (rootCause.contains("processo") || rootCause.contains("uk_pessoa_processo")) {
+            message = "Processo já está cadastrado no sistema";
+            details = "Não é possível cadastrar duas pessoas com o mesmo número de processo";
+            code = "PROCESSO_DUPLICADO";
+            suggestions.add("Verifique se o processo foi digitado corretamente");
+            suggestions.add("Consulte se este processo já está cadastrado");
         } else if (rootCause.contains("email")) {
             message = "Email já está em uso";
             details = "Cada usuário deve ter um email único";
             code = "EMAIL_DUPLICADO";
             suggestions.add("Use um email diferente");
-        } else if (rootCause.contains("foreign key")) {
+            suggestions.add("Verifique se você já possui conta com este email");
+        } else if (rootCause.contains("foreign key") || rootCause.contains("violates foreign key constraint")) {
             message = "Operação não permitida";
-            details = "Existem registros dependentes";
+            details = "Existem registros dependentes que impedem esta operação";
             code = "OPERACAO_BLOQUEADA";
             suggestions.add("Remova as dependências primeiro");
+            suggestions.add("Verifique se há registros relacionados");
         } else {
+            // Erro genérico de integridade
             suggestions.add("Verifique se não há dados duplicados");
+            suggestions.add("Consulte a documentação da API");
+            suggestions.add("Se o erro persistir, contate o suporte");
+
+            // Log para debug de erros não mapeados
+            log.warn("Erro de integridade não mapeado. Causa raiz: {}", rootCause);
         }
+
+        // Determinar status HTTP baseado no tipo de erro
+        HttpStatus httpStatus = code.equals("CAMPO_OBRIGATORIO_NULO") ?
+                HttpStatus.INTERNAL_SERVER_ERROR : HttpStatus.CONFLICT;
 
         ErrorResponse error = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
-                .status(HttpStatus.CONFLICT.value())
-                .error("Conflict")
+                .status(httpStatus.value())
+                .error(httpStatus.getReasonPhrase())
                 .code(code)
                 .message(message)
                 .details(details)
@@ -345,9 +422,8 @@ public class GlobalExceptionHandler {
                 .suggestions(suggestions)
                 .build();
 
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+        return ResponseEntity.status(httpStatus).body(error);
     }
-
     // === EXCEÇÃO GENÉRICA ===
 
     @ExceptionHandler(Exception.class)
@@ -360,7 +436,7 @@ public class GlobalExceptionHandler {
 
         // Em desenvolvimento, pode mostrar mais detalhes
         if (isDevEnvironment()) {
-            details = ex.getMessage();
+            details = ex.getMessage() != null ? ex.getMessage() : "Erro interno não identificado";
         }
 
         ErrorResponse error = ErrorResponse.builder()

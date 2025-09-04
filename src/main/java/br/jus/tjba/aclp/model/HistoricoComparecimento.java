@@ -62,6 +62,7 @@ public class HistoricoComparecimento {
     private String anexos;
 
     @Column(name = "criado_em", nullable = false)
+    @Builder.Default
     private LocalDateTime criadoEm = LocalDateTime.now();
 
     @Column(name = "atualizado_em")
@@ -69,7 +70,18 @@ public class HistoricoComparecimento {
 
     @Version
     @Column(name = "version")
+    @Builder.Default
     private Long version = 0L;
+
+    @PrePersist
+    public void prePersist() {
+        if (this.criadoEm == null) {
+            this.criadoEm = LocalDateTime.now();
+        }
+        if (this.version == null) {
+            this.version = 0L;
+        }
+    }
 
     @PreUpdate
     public void preUpdate() {

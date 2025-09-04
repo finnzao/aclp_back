@@ -47,6 +47,7 @@ public class Usuario {
     @NotNull(message = "Tipo é obrigatório")
     @Enumerated(EnumType.STRING)
     @Column(name = "tipo", nullable = false, length = 20)
+    @Builder.Default
     private TipoUsuario tipo = TipoUsuario.USUARIO;
 
     @Size(max = 100, message = "Departamento deve ter no máximo 100 caracteres")
@@ -61,6 +62,7 @@ public class Usuario {
     private String avatar;
 
     @Column(name = "ativo", nullable = false)
+    @Builder.Default
     private Boolean ativo = Boolean.TRUE;
 
     @Column(name = "ultimo_login")
@@ -70,6 +72,7 @@ public class Usuario {
     private String configuracoes;
 
     @Column(name = "criado_em", nullable = false)
+    @Builder.Default
     private LocalDateTime criadoEm = LocalDateTime.now();
 
     @Column(name = "atualizado_em")
@@ -77,7 +80,24 @@ public class Usuario {
 
     @Version
     @Column(name = "version")
+    @Builder.Default
     private Long version = 0L;
+
+    @PrePersist
+    public void prePersist() {
+        if (this.criadoEm == null) {
+            this.criadoEm = LocalDateTime.now();
+        }
+        if (this.ativo == null) {
+            this.ativo = Boolean.TRUE;
+        }
+        if (this.tipo == null) {
+            this.tipo = TipoUsuario.USUARIO;
+        }
+        if (this.version == null) {
+            this.version = 0L;
+        }
+    }
 
     @PreUpdate
     public void preUpdate() {
