@@ -1,6 +1,7 @@
 package br.jus.tjba.aclp.model;
 
 import br.jus.tjba.aclp.model.enums.StatusComparecimento;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
@@ -18,14 +19,13 @@ import java.util.Objects;
         indexes = {
                 @Index(name = "idx_pessoa_cpf", columnList = "cpf"),
                 @Index(name = "idx_pessoa_rg", columnList = "rg"),
-                @Index(name = "idx_pessoa_processo", columnList = "processo", unique = true),
+                @Index(name = "idx_pessoa_processo", columnList = "processo"), // REMOVIDO unique = true
                 @Index(name = "idx_pessoa_status", columnList = "status"),
                 @Index(name = "idx_pessoa_proximo_comparecimento", columnList = "proximo_comparecimento"),
                 @Index(name = "idx_pessoa_status_proximo", columnList = "status, proximo_comparecimento"),
                 @Index(name = "idx_pessoa_comarca_status", columnList = "comarca, status")
         },
         uniqueConstraints = {
-                @UniqueConstraint(name = "uk_pessoa_processo", columnNames = "processo"),
                 @UniqueConstraint(name = "uk_pessoa_cpf", columnNames = "cpf"),
                 @UniqueConstraint(name = "uk_pessoa_rg", columnNames = "rg")
         }
@@ -34,6 +34,7 @@ import java.util.Objects;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Pessoa {
 
     @Id
@@ -62,7 +63,7 @@ public class Pessoa {
     @NotBlank(message = "Processo é obrigatório")
     @Pattern(regexp = "\\d{7}-\\d{2}\\.\\d{4}\\.\\d{1}\\.\\d{2}\\.\\d{4}",
             message = "Processo deve ter o formato 0000000-00.0000.0.00.0000")
-    @Column(name = "processo", nullable = false, unique = true, length = 25)
+    @Column(name = "processo", nullable = false, length = 25) // REMOVIDO unique = true
     private String processo;
 
     @NotBlank(message = "Vara é obrigatória")

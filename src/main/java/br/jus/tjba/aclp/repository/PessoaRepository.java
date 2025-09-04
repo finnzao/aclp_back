@@ -18,6 +18,8 @@ public interface PessoaRepository extends JpaRepository<Pessoa, Long> {
 
     Optional<Pessoa> findByCpf(String cpf);
 
+    Optional<Pessoa> findByRg(String rg);
+
     List<Pessoa> findByStatus(StatusComparecimento status);
 
     List<Pessoa> findByProximoComparecimento(LocalDate data);

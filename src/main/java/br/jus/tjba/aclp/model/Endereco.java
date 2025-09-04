@@ -1,5 +1,6 @@
 package br.jus.tjba.aclp.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -21,6 +22,7 @@ import java.util.Objects;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Endereco {
 
     @Id
@@ -62,6 +64,7 @@ public class Endereco {
     private String estado;
 
     @Column(name = "criado_em", nullable = false)
+    @Builder.Default
     private LocalDateTime criadoEm = LocalDateTime.now();
 
     @Column(name = "atualizado_em")
@@ -69,7 +72,18 @@ public class Endereco {
 
     @Version
     @Column(name = "version")
+    @Builder.Default
     private Long version = 0L;
+
+    @PrePersist
+    public void prePersist() {
+        if (this.criadoEm == null) {
+            this.criadoEm = LocalDateTime.now();
+        }
+        if (this.version == null) {
+            this.version = 0L;
+        }
+    }
 
     @PreUpdate
     public void preUpdate() {
