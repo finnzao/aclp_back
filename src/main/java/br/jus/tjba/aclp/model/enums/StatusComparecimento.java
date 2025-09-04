@@ -1,8 +1,16 @@
 package br.jus.tjba.aclp.model.enums;
 
+import com.fasterxml.jackson.annotation.JsonValue;
+import io.swagger.v3.oas.annotations.media.Schema;
+
+@Schema(description = "Status do comparecimento da pessoa", example = "EM_CONFORMIDADE")
 public enum StatusComparecimento {
-    EM_CONFORMIDADE("em conformidade", "Em Conformidade", "Pessoa está cumprindo as obrigações"),
-    INADIMPLENTE("inadimplente", "Inadimplente", "Pessoa não está cumprindo as obrigações");
+
+    @Schema(description = "Pessoa está cumprindo as obrigações regularmente")
+    EM_CONFORMIDADE("EM_CONFORMIDADE", "Em Conformidade", "Pessoa está cumprindo as obrigações"),
+
+    @Schema(description = "Pessoa não está cumprindo as obrigações")
+    INADIMPLENTE("INADIMPLENTE", "Inadimplente", "Pessoa não está cumprindo as obrigações");
 
     private final String code;
     private final String label;
@@ -14,6 +22,7 @@ public enum StatusComparecimento {
         this.description = description;
     }
 
+    @JsonValue
     public String getCode() {
         return code;
     }
@@ -54,6 +63,6 @@ public enum StatusComparecimento {
 
     @Override
     public String toString() {
-        return label;
+        return code;
     }
 }
