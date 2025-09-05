@@ -1,5 +1,6 @@
 package br.jus.tjba.aclp.model;
 
+import br.jus.tjba.aclp.model.enums.EstadoBrasil;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
@@ -35,7 +36,7 @@ public class Endereco {
     private String cep;
 
     @NotBlank(message = "Logradouro é obrigatório")
-    @Size(max = 200, message = "Logradouro deve ter no máximo 200 caracteres")
+    @Size(min = 5, max = 200, message = "Logradouro deve ter entre 5 e 200 caracteres")
     @Column(name = "logradouro", nullable = false, length = 200)
     private String logradouro;
 
@@ -48,18 +49,18 @@ public class Endereco {
     private String complemento;
 
     @NotBlank(message = "Bairro é obrigatório")
-    @Size(max = 100, message = "Bairro deve ter no máximo 100 caracteres")
+    @Size(min = 2, max = 100, message = "Bairro deve ter entre 2 e 100 caracteres")
     @Column(name = "bairro", nullable = false, length = 100)
     private String bairro;
 
     @NotBlank(message = "Cidade é obrigatória")
-    @Size(max = 100, message = "Cidade deve ter no máximo 100 caracteres")
+    @Size(min = 2, max = 100, message = "Cidade deve ter entre 2 e 100 caracteres")
     @Column(name = "cidade", nullable = false, length = 100)
     private String cidade;
 
     @NotBlank(message = "Estado é obrigatório")
-    @Size(min = 2, max = 2, message = "Estado deve ter 2 caracteres")
-    @Pattern(regexp = "[A-Z]{2}", message = "Estado deve ser a sigla com 2 letras maiúsculas")
+    @Size(min = 2, max = 2, message = "Estado deve ter exatamente 2 caracteres")
+    @Pattern(regexp = "[A-Z]{2}", message = "Estado deve ser uma sigla válida com 2 letras maiúsculas")
     @Column(name = "estado", nullable = false, length = 2)
     private String estado;
 
@@ -83,13 +84,20 @@ public class Endereco {
         if (this.version == null) {
             this.version = 0L;
         }
+        // Validar estado antes de persistir
+        validarEstado();
     }
 
     @PreUpdate
     public void preUpdate() {
         this.atualizadoEm = LocalDateTime.now();
+        // Validar estado antes de atualizar
+        validarEstado();
     }
 
+    /**
+     * Formata o CEP automaticamente
+     */
     public void setCep(String cep) {
         if (cep != null) {
             String digits = cep.replaceAll("[^\\d]", "");
@@ -103,8 +111,51 @@ public class Endereco {
         }
     }
 
+    /**
+     * Valida e formata o estado
+     */
     public void setEstado(String estado) {
-        this.estado = estado != null ? estado.toUpperCase() : null;
+        if (estado != null) {
+            String estadoLimpo = estado.trim().toUpperCase();
+
+            // Validar se é um estado brasileiro válido
+            if (!EstadoBrasil.isValidSigla(estadoLimpo)) {
+                throw new IllegalArgumentException(
+                        String.format("Estado '%s' é inválido. Estados válidos: %s",
+                                estado, EstadoBrasil.getSiglasValidas())
+                );
+            }
+
+            this.estado = estadoLimpo;
+        } else {
+            this.estado = null;
+        }
+    }
+
+    /**
+     * Valida o estado usando o enum
+     */
+    private void validarEstado() {
+        if (this.estado != null && !EstadoBrasil.isValidSigla(this.estado)) {
+            throw new IllegalArgumentException(
+                    String.format("Estado '%s' é inválido. Estados válidos: %s",
+                            this.estado, EstadoBrasil.getSiglasValidas())
+            );
+        }
+    }
+
+    /**
+     * Retorna o enum do estado
+     */
+    public EstadoBrasil getEstadoBrasil() {
+        return this.estado != null ? EstadoBrasil.fromString(this.estado) : null;
+    }
+
+    /**
+     * Define o estado usando o enum
+     */
+    public void setEstadoBrasil(EstadoBrasil estadoBrasil) {
+        this.estado = estadoBrasil != null ? estadoBrasil.getSigla() : null;
     }
 
     public String getEnderecoCompleto() {
@@ -135,6 +186,33 @@ public class Endereco {
         return cep != null ? cep.replaceAll("[^\\d]", "") : null;
     }
 
+    /**
+     * Retorna o nome completo do estado
+     */
+    public String getNomeEstado() {
+        EstadoBrasil estadoBrasil = getEstadoBrasil();
+        return estadoBrasil != null ? estadoBrasil.getNome() : this.estado;
+    }
+
+    /**
+     * Retorna a região do estado
+     */
+    public String getRegiaoEstado() {
+        EstadoBrasil estadoBrasil = getEstadoBrasil();
+        return estadoBrasil != null ? estadoBrasil.getRegiao() : "Não identificada";
+    }
+
+    /**
+     * Valida se todos os campos obrigatórios estão preenchidos
+     */
+    public boolean isCompleto() {
+        return cep != null && !cep.trim().isEmpty() &&
+                logradouro != null && !logradouro.trim().isEmpty() &&
+                bairro != null && !bairro.trim().isEmpty() &&
+                cidade != null && !cidade.trim().isEmpty() &&
+                estado != null && !estado.trim().isEmpty();
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -143,11 +221,13 @@ public class Endereco {
         return Objects.equals(cep, endereco.cep) &&
                 Objects.equals(logradouro, endereco.logradouro) &&
                 Objects.equals(numero, endereco.numero) &&
-                Objects.equals(bairro, endereco.bairro);
+                Objects.equals(bairro, endereco.bairro) &&
+                Objects.equals(cidade, endereco.cidade) &&
+                Objects.equals(estado, endereco.estado);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(cep, logradouro, numero, bairro);
+        return Objects.hash(cep, logradouro, numero, bairro, cidade, estado);
     }
 }

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste ACLP API</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold mb-8">Teste ACLP API</h1>
+        
+        <!-- Teste Usuarios -->
+        <div class="bg-white p-6 rounded-lg shadow mb-6">
+            <h2 class="text-xl font-semibold mb-4">Criar Usuário</h2>
+            <form id="usuarioForm" class="space-y-4">
+                <input type="text" id="nome" placeholder="Nome" class="w-full p-2 border rounded">
+                <input type="email" id="email" placeholder="Email" class="w-full p-2 border rounded">
+                <input type="password" id="senha" placeholder="Senha" class="w-full p-2 border rounded">
+                <select id="tipo" class="w-full p-2 border rounded">
+                    <option value="ADMIN">Administrador</option>
+                    <option value="USUARIO">Usuário</option>
+                </select>
+                <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">Criar Usuário</button>
+            </form>
+            <div id="usuarioResult" class="mt-4 p-2 bg-gray-100 rounded hidden"></div>
+        </div>
+
+        <!-- Lista Usuarios -->
+        <div class="bg-white p-6 rounded-lg shadow mb-6">
+            <h2 class="text-xl font-semibold mb-4">Listar Usuários</h2>
+            <button id="listarUsuarios" class="bg-green-500 text-white px-4 py-2 rounded">Listar</button>
+            <div id="listaUsuarios" class="mt-4"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8080/api';
+
+        // Criar usuário
+        document.getElementById('usuarioForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const userData = {
+                nome: document.getElementById('nome').value,
+                email: document.getElementById('email').value,
+                senha: document.getElementById('senha').value,
+                tipo: document.getElementById('tipo').value
+            };
+
+            try {
+                const response = await fetch(`${API_BASE}/usuarios`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(userData)
+                });
+
+                const result = await response.json();
+                document.getElementById('usuarioResult').innerHTML = 
+                    `<pre>${JSON.stringify(result, null, 2)}</pre>`;
+                document.getElementById('usuarioResult').classList.remove('hidden');
+            } catch (error) {
+                console.error('Erro:', error);
+            }
+        });
+
+        // Listar usuários
+        document.getElementById('listarUsuarios').addEventListener('click', async () => {
+            try {
+                const response = await fetch(`${API_BASE}/usuarios`);
+                const usuarios = await response.json();
+                
+                document.getElementById('listaUsuarios').innerHTML = usuarios.map(u => 
+                    `<div class="p-2 border rounded mb-2">
+                        <strong>${u.nome}</strong> - ${u.email} (${u.tipo})
+                    </div>`
+                ).join('');
+            } catch (error) {
+                console.error('Erro:', error);
+            }
+        });
+    </script>
+</body>
+</html>

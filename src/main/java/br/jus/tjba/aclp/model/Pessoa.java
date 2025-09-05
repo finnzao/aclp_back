@@ -27,7 +27,8 @@ import java.util.Objects;
         },
         uniqueConstraints = {
                 @UniqueConstraint(name = "uk_pessoa_cpf", columnNames = "cpf"),
-                @UniqueConstraint(name = "uk_pessoa_rg", columnNames = "rg")
+                @UniqueConstraint(name = "uk_pessoa_rg", columnNames = "rg"),
+                @UniqueConstraint(name = "uk_pessoa_processo", columnNames = "processo")
         }
 )
 @Data
@@ -63,7 +64,7 @@ public class Pessoa {
     @NotBlank(message = "Processo é obrigatório")
     @Pattern(regexp = "\\d{7}-\\d{2}\\.\\d{4}\\.\\d{1}\\.\\d{2}\\.\\d{4}",
             message = "Processo deve ter o formato 0000000-00.0000.0.00.0000")
-    @Column(name = "processo", nullable = false, length = 25)
+    @Column(name = "processo", nullable = false, unique = true, length = 25)
     private String processo;
 
     @NotBlank(message = "Vara é obrigatória")
@@ -108,9 +109,11 @@ public class Pessoa {
     @Column(name = "proximo_comparecimento", nullable = false)
     private LocalDate proximoComparecimento;
 
+    // === ENDEREÇO AGORA É OBRIGATÓRIO ===
+    @NotNull(message = "Endereço é obrigatório")
     @Valid
-    @ManyToOne(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    @JoinColumn(name = "endereco_id", foreignKey = @ForeignKey(name = "fk_pessoa_endereco"))
+    @ManyToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @JoinColumn(name = "endereco_id", nullable = false, foreignKey = @ForeignKey(name = "fk_pessoa_endereco"))
     private Endereco endereco;
 
     @Size(max = 500, message = "Observações deve ter no máximo 500 caracteres")
@@ -140,6 +143,12 @@ public class Pessoa {
                 (rg != null && !rg.trim().isEmpty());
     }
 
+    @AssertTrue(message = "Endereço deve estar completo quando fornecido")
+    public boolean isEnderecoValido() {
+        // Se endereço for fornecido, deve estar completo
+        return endereco == null || endereco.isCompleto();
+    }
+
     @PrePersist
     public void prePersist() {
         if (this.criadoEm == null) {
@@ -148,11 +157,21 @@ public class Pessoa {
         if (this.version == null) {
             this.version = 0L;
         }
+
+        // Validar se o endereço está presente (agora obrigatório)
+        if (this.endereco == null) {
+            throw new IllegalStateException("Endereço é obrigatório para cadastrar uma pessoa");
+        }
     }
 
     @PreUpdate
     public void preUpdate() {
         this.atualizadoEm = LocalDateTime.now();
+
+        // Validar se o endereço está presente (agora obrigatório)
+        if (this.endereco == null) {
+            throw new IllegalStateException("Endereço é obrigatório para uma pessoa");
+        }
     }
 
     public void setCpf(String cpf) {
@@ -225,12 +244,74 @@ public class Pessoa {
         return periodicidade + " dias";
     }
 
+    /**
+     * Retorna endereço completo formatado
+     */
+    public String getEnderecoCompleto() {
+        return endereco != null ? endereco.getEnderecoCompleto() : "Endereço não informado";
+    }
+
+    /**
+     * Retorna endereço resumido
+     */
+    public String getEnderecoResumido() {
+        return endereco != null ? endereco.getEnderecoResumido() : "Sem endereço";
+    }
+
+    /**
+     * Retorna cidade e estado
+     */
+    public String getCidadeEstado() {
+        if (endereco != null) {
+            return endereco.getCidade() + " - " + endereco.getEstado();
+        }
+        return "Não informado";
+    }
+
+    /**
+     * Retorna CEP formatado
+     */
+    public String getCep() {
+        return endereco != null ? endereco.getCep() : null;
+    }
+
+    /**
+     * Retorna nome do estado por extenso
+     */
+    public String getNomeEstado() {
+        return endereco != null ? endereco.getNomeEstado() : "Não informado";
+    }
+
+    /**
+     * Retorna região do estado
+     */
+    public String getRegiaoEstado() {
+        return endereco != null ? endereco.getRegiaoEstado() : "Não informada";
+    }
+
     public void adicionarHistorico(HistoricoComparecimento historico) {
         if (historicoComparecimentos == null) {
             historicoComparecimentos = new ArrayList<>();
         }
         historicoComparecimentos.add(historico);
         historico.setPessoa(this);
+    }
+
+    /**
+     * Verifica se a pessoa possui endereço completo
+     */
+    public boolean hasEnderecoCompleto() {
+        return endereco != null && endereco.isCompleto();
+    }
+
+    /**
+     * Resumo da pessoa para logs e relatórios
+     */
+    public String getResumo() {
+        return String.format("%s - %s - %s",
+                nome,
+                getIdentificacao(),
+                getCidadeEstado());
     }
 
     @Override

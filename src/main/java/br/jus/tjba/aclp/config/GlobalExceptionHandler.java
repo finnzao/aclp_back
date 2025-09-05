@@ -94,6 +94,38 @@ public class GlobalExceptionHandler {
             code = "STATUS_INVALIDO";
             suggestions.add("Use: EM_CONFORMIDADE ou INADIMPLENTE");
             suggestions.add("Verifique se o status foi escrito corretamente");
+        }
+        // === NOVOS TRATAMENTOS PARA ENDEREÇO ===
+        else if (message.contains("Estado") && message.contains("inválido")) {
+            code = "ESTADO_INVALIDO";
+            suggestions.add("Use uma sigla válida de estado brasileiro (ex: BA, SP, RJ)");
+            suggestions.add("Estados válidos: AC, AL, AP, AM, BA, CE, DF, ES, GO, MA, MT, MS, MG, PA, PB, PR, PE, PI, RJ, RN, RS, RO, RR, SC, SP, SE, TO");
+            suggestions.add("Verifique se a sigla foi escrita corretamente");
+        } else if (message.contains("CEP") && (message.contains("formato") || message.contains("inválido"))) {
+            code = "CEP_INVALIDO";
+            suggestions.add("Use o formato 00000-000 ou apenas números");
+            suggestions.add("Verifique se o CEP possui 8 dígitos");
+            suggestions.add("Exemplo: 40070-110 ou 40070110");
+        } else if (message.contains("endereço") && message.contains("obrigatório")) {
+            code = "ENDERECO_OBRIGATORIO";
+            suggestions.add("Preencha todos os campos obrigatórios do endereço");
+            suggestions.add("Campos obrigatórios: CEP, logradouro, bairro, cidade e estado");
+            suggestions.add("O número é opcional, mas recomendado");
+        } else if (message.contains("logradouro") || message.contains("Logradouro")) {
+            code = "LOGRADOURO_INVALIDO";
+            suggestions.add("O logradouro deve ter entre 5 e 200 caracteres");
+            suggestions.add("Informe o nome completo da rua/avenida");
+            suggestions.add("Exemplo: Avenida Sete de Setembro");
+        } else if (message.contains("bairro") || message.contains("Bairro")) {
+            code = "BAIRRO_INVALIDO";
+            suggestions.add("O bairro deve ter entre 2 e 100 caracteres");
+            suggestions.add("Informe o nome completo do bairro");
+            suggestions.add("Exemplo: Centro, Pituba, Barra");
+        } else if (message.contains("cidade") || message.contains("Cidade")) {
+            code = "CIDADE_INVALIDA";
+            suggestions.add("A cidade deve ter entre 2 e 100 caracteres");
+            suggestions.add("Informe o nome completo da cidade");
+            suggestions.add("Exemplo: Salvador, São Paulo, Rio de Janeiro");
         } else {
             suggestions.add("Verifique os dados informados");
             suggestions.add("Consulte a documentação da API");
@@ -125,11 +157,38 @@ public class GlobalExceptionHandler {
             fieldErrors.put(field, message != null ? message : "Campo inválido");
         });
 
-        List<String> suggestions = Arrays.asList(
-                "Corrija os campos destacados",
-                "Verifique os formatos esperados",
-                "Campos obrigatórios não podem ficar vazios"
-        );
+        List<String> suggestions = new ArrayList<>();
+
+        // Sugestões específicas baseadas nos campos com erro
+        if (fieldErrors.containsKey("cep")) {
+            suggestions.add("CEP deve ter o formato 00000-000");
+        }
+        if (fieldErrors.containsKey("estado")) {
+            suggestions.add("Estado deve ser uma sigla válida (ex: BA, SP, RJ)");
+        }
+        if (fieldErrors.containsKey("logradouro")) {
+            suggestions.add("Logradouro deve ter entre 5 e 200 caracteres");
+        }
+        if (fieldErrors.containsKey("bairro")) {
+            suggestions.add("Bairro deve ter entre 2 e 100 caracteres");
+        }
+        if (fieldErrors.containsKey("cidade")) {
+            suggestions.add("Cidade deve ter entre 2 e 100 caracteres");
+        }
+        if (fieldErrors.containsKey("cpf")) {
+            suggestions.add("CPF deve ter o formato 000.000.000-00");
+        }
+        if (fieldErrors.containsKey("processo")) {
+            suggestions.add("Processo deve ter o formato 0000000-00.0000.0.00.0000");
+        }
+        if (fieldErrors.containsKey("contato")) {
+            suggestions.add("Contato deve ter formato válido de telefone");
+        }
+
+        // Sugestões gerais
+        suggestions.add("Corrija os campos destacados");
+        suggestions.add("Verifique os formatos esperados");
+        suggestions.add("Campos obrigatórios não podem ficar vazios");
 
         ErrorResponse error = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
@@ -152,11 +211,24 @@ public class GlobalExceptionHandler {
 
         String message = "Dados não atendem às regras de validação";
         StringBuilder details = new StringBuilder();
+        List<String> suggestions = new ArrayList<>();
 
         ex.getConstraintViolations().forEach(violation -> {
             if (details.length() > 0) details.append("; ");
             details.append(violation.getPropertyPath()).append(": ").append(violation.getMessage());
+
+            // Adicionar sugestões específicas baseadas na violação
+            String violationMessage = violation.getMessage().toLowerCase();
+            if (violationMessage.contains("estado")) {
+                suggestions.add("Use uma sigla válida de estado brasileiro");
+            } else if (violationMessage.contains("cep")) {
+                suggestions.add("Use o formato 00000-000 para o CEP");
+            }
         });
+
+        if (suggestions.isEmpty()) {
+            suggestions.add("Corrija os dados conforme as regras especificadas");
+        }
 
         ErrorResponse error = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
@@ -166,7 +238,7 @@ public class GlobalExceptionHandler {
                 .message(message)
                 .details(details.toString())
                 .path(request.getRequestURI())
-                .suggestions(Arrays.asList("Corrija os dados conforme as regras especificadas"))
+                .suggestions(suggestions)
                 .build();
 
         return ResponseEntity.badRequest().body(error);
@@ -190,6 +262,9 @@ public class GlobalExceptionHandler {
             suggestions.add("Use: EM_CONFORMIDADE ou INADIMPLENTE");
         } else if ("TipoUsuario".equals(expectedType)) {
             suggestions.add("Use: ADMIN ou USUARIO");
+        } else if ("EstadoBrasil".equals(expectedType)) {
+            suggestions.add("Use uma sigla válida de estado brasileiro (ex: BA, SP, RJ)");
+            suggestions.add("Estados válidos: AC, AL, AP, AM, BA, CE, DF, ES, GO, MA, MT, MS, MG, PA, PB, PR, PE, PI, RJ, RN, RS, RO, RR, SC, SP, SE, TO");
         } else {
             suggestions.add(String.format("Use um valor válido do tipo %s", expectedType));
         }
@@ -251,10 +326,16 @@ public class GlobalExceptionHandler {
             details = "Valor inválido para campo enum";
             suggestions.add("Para status use: EM_CONFORMIDADE ou INADIMPLENTE");
             suggestions.add("Para tipo de usuário use: ADMIN ou USUARIO");
+            suggestions.add("Para estado use siglas válidas: BA, SP, RJ, etc.");
         } else if (exMessage.contains("localdatetime") || exMessage.contains("localdate")) {
             details = "Formato de data inválido";
             suggestions.add("Use o formato: yyyy-MM-dd para datas");
             suggestions.add("Use o formato: yyyy-MM-ddTHH:mm:ss para data/hora");
+        } else if (exMessage.contains("estado") || exMessage.contains("cep") || exMessage.contains("endereco")) {
+            details = "Erro nos dados de endereço";
+            suggestions.add("Verifique se o estado é uma sigla válida (ex: BA)");
+            suggestions.add("Verifique se o CEP tem o formato 00000-000");
+            suggestions.add("Certifique-se de que todos os campos obrigatórios do endereço estão preenchidos");
         } else {
             suggestions.add("Use um validador JSON online");
             suggestions.add("Verifique se os tipos de dados estão corretos");
@@ -274,7 +355,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(error);
     }
 
-    // === EXCEÇÕES DE RECURSOS ===
+// === EXCEÇÕES DE RECURSOS ===
 
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ErrorResponse> handleNoResourceFound(NoResourceFoundException ex, HttpServletRequest request) {
@@ -320,6 +401,10 @@ public class GlobalExceptionHandler {
             code = "USUARIO_NAO_ENCONTRADO";
             suggestions.add("Verifique se o ID do usuário está correto");
             suggestions.add("Use o endpoint de busca para localizar usuários");
+        } else if (message.toLowerCase().contains("endereço")) {
+            code = "ENDERECO_NAO_ENCONTRADO";
+            suggestions.add("Verifique se o endereço existe");
+            suggestions.add("Tente buscar pelo CEP primeiro");
         } else {
             suggestions.add("Verifique se o ID está correto");
             suggestions.add("Use o endpoint de busca para localizar o recurso");
@@ -397,6 +482,21 @@ public class GlobalExceptionHandler {
             code = "OPERACAO_BLOQUEADA";
             suggestions.add("Remova as dependências primeiro");
             suggestions.add("Verifique se há registros relacionados");
+        }
+        // === NOVOS TRATAMENTOS PARA ENDEREÇO ===
+        else if (rootCause.contains("endereco") || rootCause.contains("address")) {
+            message = "Erro de integridade no endereço";
+            details = "Violação de restrições relacionadas ao endereço";
+            code = "ENDERECO_INTEGRIDADE_VIOLADA";
+            suggestions.add("Verifique se todos os campos obrigatórios do endereço estão preenchidos");
+            suggestions.add("Certifique-se de que o estado é uma sigla válida");
+            suggestions.add("Verifique se o CEP tem formato correto");
+        } else if (rootCause.contains("cep")) {
+            message = "Erro relacionado ao CEP";
+            details = "CEP pode estar duplicado ou em formato inválido";
+            code = "CEP_INTEGRIDADE_VIOLADA";
+            suggestions.add("Verifique se o CEP tem o formato 00000-000");
+            suggestions.add("Certifique-se de que o CEP é válido");
         } else {
             // Erro genérico de integridade
             suggestions.add("Verifique se não há dados duplicados");
@@ -424,6 +524,7 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(httpStatus).body(error);
     }
+
     // === EXCEÇÃO GENÉRICA ===
 
     @ExceptionHandler(Exception.class)

@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACLP - Teste Cadastro de Pessoas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .loading { 
+            animation: spin 1s linear infinite; 
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .success { 
+            background-color: #10b981; 
+            color: white; 
+        }
+        .error { 
+            background-color: #ef4444; 
+            color: white; 
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <header class="bg-blue-600 text-white shadow-md">
+        <div class="container mx-auto px-4 py-4">
+            <h1 class="text-2xl font-bold">ACLP - Sistema de Acompanhamento</h1>
+            <p class="text-blue-100">Teste de Cadastro de Pessoas em Liberdade Provisória</p>
+        </div>
+    </header>
+
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <!-- Status da API -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4 flex items-center">
+                🔗 Status da API
+                <button id="testConnection" class="ml-4 bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">
+                    Testar Conexão
+                </button>
+            </h2>
+            <div id="apiStatus" class="p-3 rounded bg-gray-100">
+                <span class="text-gray-600">Clique em "Testar Conexão" para verificar se a API está funcionando</span>
+            </div>
+        </div>
+
+        <!-- Formulário de Cadastro -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-6 flex items-center">
+                👤 Cadastrar Nova Pessoa
+            </h2>
+
+            <form id="pessoaForm" class="space-y-6">
+                <!-- Dados Pessoais -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Nome Completo *</label>
+                        <input type="text" id="nome" required 
+                               class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                               placeholder="João Silva Santos">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Contato *</label>
+                        <input type="tel" id="contato" required 
+                               class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                               placeholder="(71) 99999-9999">
+                    </div>
+                </div>
+
+                <!-- Documentos -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">CPF</label>
+                        <input type="text" id="cpf" 
+                               class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                               placeholder="123.456.789-01">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">RG</label>
+                        <input type="text" id="rg" 
+                               class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                               placeholder="1234567890">
+                    </div>
+                </div>
+                <div class="text-sm text-gray-600 bg-blue-50 p-3 rounded-md">
+                    💡 <strong>Dica:</strong> Pelo menos um documento (CPF ou RG) deve ser informado
+                </div>
+
+                <!-- Dados Processuais -->
+                <div class="border-t pt-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">📋 Dados Processuais</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Número do Processo *</label>
+                            <input type="text" id="processo" required 
+                                   class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                   placeholder="1234567-89.2024.8.05.0001">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Vara *</label>
+                            <input type="text" id="vara" required 
+                                   class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                   placeholder="1ª Vara Criminal de Salvador">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Comarca *</label>
+                            <input type="text" id="comarca" required 
+                                   class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                   placeholder="Salvador">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Data da Decisão *</label>
+                            <input type="date" id="dataDecisao" required 
+                                   class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Comparecimentos -->
+                <div class="border-t pt-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">📅 Comparecimentos</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Periodicidade (dias) *</label>
+                            <select id="periodicidade" required 
+                                    class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                <option value="">Selecione...</option>
+                                <option value="7">7 dias (Semanal)</option>
+                                <option value="15">15 dias (Quinzenal)</option>
+                                <option value="30">30 dias (Mensal)</option>
+                                <option value="60">60 dias (Bimensal)</option>
+                                <option value="90">90 dias (Trimestral)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Data do Primeiro Comparecimento *</label>
+                            <input type="date" id="dataComparecimentoInicial" required 
+                                   class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Endereço -->
+                <div class="border-t pt-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">🏠 Endereço (Opcional)</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">CEP</label>
+                            <input type="text" id="cep" 
+                                   class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                   placeholder="40070-110">
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Logradouro</label>
+                            <input type="text" id="logradouro" 
+                                   class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                   placeholder="Rua das Flores">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Número</label>
+                            <input type="text" id="numero" 
+                                   class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                   placeholder="123">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Complemento</label>
+                            <input type="text" id="complemento" 
+                                   class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                   placeholder="Apto 45">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Bairro</label>
+                            <input type="text" id="bairro" 
+                                   class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                   placeholder="Centro">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Cidade</label>
+                            <input type="text" id="cidade" 
+                                   class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                   placeholder="Salvador">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+                            <select id="estado" 
+                                    class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                <option value="">Selecione...</option>
+                                <option value="BA">Bahia (BA)</option>
+                                <option value="SP">São Paulo (SP)</option>
+                                <option value="RJ">Rio de Janeiro (RJ)</option>
+                                <option value="MG">Minas Gerais (MG)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Observações</label>
+                            <textarea id="observacoes" rows="2" 
+                                      class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                      placeholder="Observações adicionais..."></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Botões -->
+                <div class="border-t pt-6 flex flex-col sm:flex-row gap-4">
+                    <button type="submit" id="submitBtn" 
+                            class="flex-1 bg-green-600 text-white py-3 px-6 rounded-md hover:bg-green-700 focus:ring-2 focus:ring-green-500 font-medium">
+                        <span id="submitText">💾 Cadastrar Pessoa</span>
+                        <span id="submitLoading" class="hidden">
+                            <svg class="loading inline w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                            Processando...
+                        </span>
+                    </button>
+                    <button type="button" id="clearBtn" 
+                            class="flex-1 bg-gray-500 text-white py-3 px-6 rounded-md hover:bg-gray-600 focus:ring-2 focus:ring-gray-500 font-medium">
+                        🗑️ Limpar Formulário
+                    </button>
+                    <button type="button" id="fillTestData" 
+                            class="flex-1 bg-blue-500 text-white py-3 px-6 rounded-md hover:bg-blue-600 focus:ring-2 focus:ring-blue-500 font-medium">
+                        🧪 Preencher Dados de Teste
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Resultado -->
+        <div id="resultado" class="hidden bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-xl font-semibold mb-4">📄 Resultado</h2>
+            <div id="resultadoContent" class="p-4 rounded-md font-mono text-sm overflow-auto max-h-96"></div>
+        </div>
+
+        <!-- Lista de Pessoas -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-xl font-semibold mb-4 flex items-center justify-between">
+                📋 Pessoas Cadastradas
+                <button id="listarPessoas" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                    🔄 Atualizar Lista
+                </button>
+            </h2>
+            <div id="listaPessoas" class="space-y-3"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8080/api';
+        
+        // Elementos do DOM
+        const form = document.getElementById('pessoaForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const submitText = document.getElementById('submitText');
+        const submitLoading = document.getElementById('submitLoading');
+        const resultado = document.getElementById('resultado');
+        const resultadoContent = document.getElementById('resultadoContent');
+
+        // Testar conexão com a API
+        document.getElementById('testConnection').addEventListener('click', async () => {
+            const statusEl = document.getElementById('apiStatus');
+            statusEl.innerHTML = '<span class="text-blue-600">🔄 Testando conexão...</span>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/test/health`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    statusEl.innerHTML = '<span class="text-green-600">✅ API funcionando! Backend conectado com sucesso.</span>';
+                    statusEl.className = 'p-3 rounded bg-green-50';
+                } else {
+                    throw new Error('API retornou erro');
+                }
+            } catch (error) {
+                statusEl.innerHTML = '<span class="text-red-600">❌ Erro de conexão. Verifique se o backend está rodando em http://localhost:8080</span>';
+                statusEl.className = 'p-3 rounded bg-red-50';
+                console.error('Erro de conexão:', error);
+            }
+        });
+
+        // Preencher dados de teste
+        document.getElementById('fillTestData').addEventListener('click', () => {
+            document.getElementById('nome').value = 'Roberto Silva Nascimento';
+            document.getElementById('cpf').value = '789.123.456-05';
+            document.getElementById('rg').value = '7891234560';
+            document.getElementById('contato').value = '(77) 99123-4567';
+            document.getElementById('processo').value = '5678901-23.2024.8.05.0201';
+            document.getElementById('vara').value = 'Vara Criminal de Vitória da Conquista';
+            document.getElementById('comarca').value = 'Vitória da Conquista';
+            document.getElementById('dataDecisao').value = '2024-02-20';
+            document.getElementById('periodicidade').value = '7';
+            document.getElementById('dataComparecimentoInicial').value = '2024-02-27';
+            document.getElementById('cep').value = '45000-000';
+            document.getElementById('logradouro').value = 'Praça Nove de Novembro';
+            document.getElementById('numero').value = '159';
+            document.getElementById('complemento').value = 'Loja 3';
+            document.getElementById('bairro').value = 'Centro';
+            document.getElementById('cidade').value = 'Vitória da Conquista';
+            document.getElementById('estado').value = 'BA';
+            document.getElementById('observacoes').value = 'Comerciante local, comparece sempre às segundas-feiras';
+        });
+
+        // Limpar formulário
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            form.reset();
+            resultado.classList.add('hidden');
+        });
+
+        // Submeter formulário
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // Mostrar loading
+            submitText.classList.add('hidden');
+            submitLoading.classList.remove('hidden');
+            submitBtn.disabled = true;
+
+            // Coletar dados do formulário
+            const formData = new FormData(form);
+            const pessoaData = {
+                nome: document.getElementById('nome').value,
+                cpf: document.getElementById('cpf').value || null,
+                rg: document.getElementById('rg').value || null,
+                contato: document.getElementById('contato').value,
+                processo: document.getElementById('processo').value,
+                vara: document.getElementById('vara').value,
+                comarca: document.getElementById('comarca').value,
+                dataDecisao: document.getElementById('dataDecisao').value,
+                periodicidade: parseInt(document.getElementById('periodicidade').value),
+                dataComparecimentoInicial: document.getElementById('dataComparecimentoInicial').value,
+                observacoes: document.getElementById('observacoes').value || null,
+                // Endereço (apenas se CEP estiver preenchido)
+                cep: document.getElementById('cep').value || null,
+                logradouro: document.getElementById('logradouro').value || null,
+                numero: document.getElementById('numero').value || null,
+                complemento: document.getElementById('complemento').value || null,
+                bairro: document.getElementById('bairro').value || null,
+                cidade: document.getElementById('cidade').value || null,
+                estado: document.getElementById('estado').value || null
+            };
+
+            try {
+                const response = await fetch(`${API_BASE}/pessoas`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(pessoaData)
+                });
+
+                const result = await response.json();
+
+                // Mostrar resultado
+                resultado.classList.remove('hidden');
+                
+                if (response.ok) {
+                    resultadoContent.className = 'p-4 rounded-md font-mono text-sm overflow-auto max-h-96 success';
+                    resultadoContent.innerHTML = `✅ <strong>Pessoa cadastrada com sucesso!</strong><br><br><pre>${JSON.stringify(result, null, 2)}</pre>`;
+                    form.reset(); // Limpar formulário após sucesso
+                    listarPessoas(); // Atualizar lista
+                } else {
+                    resultadoContent.className = 'p-4 rounded-md font-mono text-sm overflow-auto max-h-96 error';
+                    resultadoContent.innerHTML = `❌ <strong>Erro ao cadastrar pessoa:</strong><br><br><pre>${JSON.stringify(result, null, 2)}</pre>`;
+                }
+
+            } catch (error) {
+                resultado.classList.remove('hidden');
+                resultadoContent.className = 'p-4 rounded-md font-mono text-sm overflow-auto max-h-96 error';
+                resultadoContent.innerHTML = `❌ <strong>Erro de conexão:</strong><br><br>${error.message}`;
+                console.error('Erro:', error);
+            } finally {
+                // Esconder loading
+                submitText.classList.remove('hidden');
+                submitLoading.classList.add('hidden');
+                submitBtn.disabled = false;
+            }
+        });
+
+        // Listar pessoas
+        async function listarPessoas() {
+            const listaPessoas = document.getElementById('listaPessoas');
+            listaPessoas.innerHTML = '<div class="text-gray-500">🔄 Carregando pessoas...</div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/pessoas`);
+                const pessoas = await response.json();
+
+                if (response.ok && pessoas.length > 0) {
+                    listaPessoas.innerHTML = pessoas.map(pessoa => `
+                        <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h3 class="font-semibold text-lg">${pessoa.nome}</h3>
+                                    <p class="text-gray-600">${pessoa.identificacao || 'Sem documento'}</p>
+                                    <p class="text-sm text-gray-500">
+                                        📋 ${pessoa.processo} | 🏛️ ${pessoa.vara} | 📍 ${pessoa.comarca}
+                                    </p>
+                                    <p class="text-sm text-gray-500">
+                                        📞 ${pessoa.contato} | 📅 Periodicidade: ${pessoa.periodicidadeDescricao || pessoa.periodicidade + ' dias'}
+                                    </p>
+                                </div>
+                                <div class="text-right">
+                                    <span class="inline-block px-2 py-1 rounded text-xs ${pessoa.status === 'EM_CONFORMIDADE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                                        ${pessoa.status === 'EM_CONFORMIDADE' ? '✅ Em Conformidade' : '❌ Inadimplente'}
+                                    </span>
+                                    <p class="text-xs text-gray-500 mt-1">
+                                        Próximo: ${new Date(pessoa.proximoComparecimento).toLocaleDateString('pt-BR')}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                } else if (pessoas.length === 0) {
+                    listaPessoas.innerHTML = '<div class="text-gray-500 text-center py-8">📝 Nenhuma pessoa cadastrada ainda. Cadastre a primeira!</div>';
+                } else {
+                    throw new Error('Erro ao carregar pessoas');
+                }
+            } catch (error) {
+                listaPessoas.innerHTML = '<div class="text-red-500">❌ Erro ao carregar pessoas. Verifique se a API está funcionando.</div>';
+                console.error('Erro ao listar pessoas:', error);
+            }
+        }
+
+        // Carregar pessoas ao inicializar
+        document.getElementById('listarPessoas').addEventListener('click', listarPessoas);
+        
+        // Carregar pessoas automaticamente
+        window.addEventListener('load', () => {
+            // Testar conexão automaticamente
+            document.getElementById('testConnection').click();
+            // Carregar lista
+            listarPessoas();
+        });
+    </script>
+</body>
+</html>

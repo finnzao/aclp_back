@@ -3,6 +3,7 @@ package br.jus.tjba.aclp.service;
 import br.jus.tjba.aclp.dto.PessoaDTO;
 import br.jus.tjba.aclp.model.Endereco;
 import br.jus.tjba.aclp.model.Pessoa;
+import br.jus.tjba.aclp.model.enums.EstadoBrasil;
 import br.jus.tjba.aclp.model.enums.StatusComparecimento;
 import br.jus.tjba.aclp.repository.PessoaRepository;
 import jakarta.persistence.EntityNotFoundException;
@@ -54,14 +55,18 @@ public class PessoaService {
     public Pessoa save(PessoaDTO dto) {
         log.info("Iniciando cadastro de nova pessoa - Processo: {}", dto.getProcesso());
 
+        // Limpar e formatar dados antes das validações
+        dto.limparEFormatarDados();
+
         // Validações usando IllegalArgumentException - o GlobalExceptionHandler vai capturar
         validarDadosObrigatorios(dto);
         validarFormatos(dto);
         validarDuplicidades(dto);
         validarDatasLogicas(dto);
+        validarEnderecoCompleto(dto); // Nova validação para endereço obrigatório
 
-        // Criar endereço se fornecido
-        Endereco endereco = criarEnderecoSeNecessario(dto);
+        // Criar endereço (agora obrigatório)
+        Endereco endereco = criarEndereco(dto);
 
         // Criar pessoa
         Pessoa pessoa = Pessoa.builder()
@@ -86,7 +91,8 @@ public class PessoaService {
         pessoa.calcularProximoComparecimento();
 
         Pessoa pessoaSalva = pessoaRepository.save(pessoa);
-        log.info("Pessoa cadastrada com sucesso - ID: {}, Nome: {}", pessoaSalva.getId(), pessoaSalva.getNome());
+        log.info("Pessoa cadastrada com sucesso - ID: {}, Nome: {}, Endereço: {}",
+                pessoaSalva.getId(), pessoaSalva.getNome(), pessoaSalva.getEndereco().getEnderecoResumido());
 
         return pessoaSalva;
     }
@@ -102,13 +108,17 @@ public class PessoaService {
         Pessoa pessoa = pessoaRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Pessoa não encontrada com ID: " + id));
 
+        // Limpar e formatar dados antes das validações
+        dto.limparEFormatarDados();
+
         // Validações (excluindo duplicidades do próprio registro)
         validarDadosObrigatorios(dto);
         validarFormatos(dto);
         validarDuplicidadesParaUpdate(dto, id);
         validarDatasLogicas(dto);
+        validarEnderecoCompleto(dto); // Endereço agora é obrigatório também na atualização
 
-        // Atualizar dados
+        // Atualizar dados básicos
         pessoa.setNome(dto.getNome().trim());
         pessoa.setCpf(dto.getCpf());
         pessoa.setRg(dto.getRg());
@@ -121,22 +131,20 @@ public class PessoaService {
         pessoa.setDataComparecimentoInicial(dto.getDataComparecimentoInicial());
         pessoa.setObservacoes(dto.getObservacoes() != null ? dto.getObservacoes().trim() : null);
 
-        // Atualizar endereço
-        if (dto.getCep() != null && !dto.getCep().trim().isEmpty()) {
-            if (pessoa.getEndereco() == null) {
-                pessoa.setEndereco(criarEnderecoSeNecessario(dto));
-            } else {
-                atualizarEndereco(pessoa.getEndereco(), dto);
-            }
+        // Atualizar endereço (agora sempre obrigatório)
+        if (pessoa.getEndereco() == null) {
+            pessoa.setEndereco(criarEndereco(dto));
         } else {
-            pessoa.setEndereco(null);
+            atualizarEndereco(pessoa.getEndereco(), dto);
         }
 
         // Recalcular próximo comparecimento se necessário
         pessoa.calcularProximoComparecimento();
 
         Pessoa pessoaAtualizada = pessoaRepository.save(pessoa);
-        log.info("Pessoa atualizada com sucesso - ID: {}, Nome: {}", pessoaAtualizada.getId(), pessoaAtualizada.getNome());
+        log.info("Pessoa atualizada com sucesso - ID: {}, Nome: {}, Endereço: {}",
+                pessoaAtualizada.getId(), pessoaAtualizada.getNome(),
+                pessoaAtualizada.getEndereco().getEnderecoResumido());
 
         return pessoaAtualizada;
     }
@@ -153,7 +161,6 @@ public class PessoaService {
                 .orElseThrow(() -> new EntityNotFoundException("Pessoa não encontrada com ID: " + id));
 
         // Verificar se há dependências que impedem a exclusão
-        // Por exemplo, histórico de comparecimentos
         if (pessoa.getHistoricoComparecimentos() != null && !pessoa.getHistoricoComparecimentos().isEmpty()) {
             throw new IllegalArgumentException("Não é possível excluir pessoa que possui histórico de comparecimentos");
         }
@@ -243,6 +250,36 @@ public class PessoaService {
         }
     }
 
+    /**
+     * Nova validação para endereço completo obrigatório
+     */
+    private void validarEnderecoCompleto(PessoaDTO dto) {
+        if (dto.getCep() == null || dto.getCep().trim().isEmpty()) {
+            throw new IllegalArgumentException("CEP é obrigatório");
+        }
+
+        if (dto.getLogradouro() == null || dto.getLogradouro().trim().isEmpty()) {
+            throw new IllegalArgumentException("Logradouro é obrigatório");
+        }
+
+        if (dto.getBairro() == null || dto.getBairro().trim().isEmpty()) {
+            throw new IllegalArgumentException("Bairro é obrigatório");
+        }
+
+        if (dto.getCidade() == null || dto.getCidade().trim().isEmpty()) {
+            throw new IllegalArgumentException("Cidade é obrigatória");
+        }
+
+        if (dto.getEstado() == null || dto.getEstado().trim().isEmpty()) {
+            throw new IllegalArgumentException("Estado é obrigatório");
+        }
+
+        // Validar se todos os campos obrigatórios de endereço estão preenchidos
+        if (!dto.hasEnderecoCompleto()) {
+            throw new IllegalArgumentException("Endereço completo é obrigatório. Preencha: CEP, logradouro, bairro, cidade e estado");
+        }
+    }
+
     private void validarFormatos(PessoaDTO dto) {
         // Validar nome
         if (dto.getNome() != null && dto.getNome().trim().length() > 150) {
@@ -271,6 +308,62 @@ public class PessoaService {
         if (dto.getContato() != null && !validarFormatoContato(dto.getContato().trim())) {
             throw new IllegalArgumentException("Contato deve ter formato válido de telefone (ex: (11) 99999-9999)");
         }
+
+        // === VALIDAÇÕES DE ENDEREÇO ===
+
+        // Validar CEP
+        if (dto.getCep() != null && !dto.getCep().trim().isEmpty()) {
+            if (!validarFormatoCep(dto.getCep().trim())) {
+                throw new IllegalArgumentException("CEP deve ter formato válido (00000-000 ou apenas números)");
+            }
+        }
+
+        // Validar logradouro
+        if (dto.getLogradouro() != null && !dto.getLogradouro().trim().isEmpty()) {
+            String logradouro = dto.getLogradouro().trim();
+            if (logradouro.length() < 5 || logradouro.length() > 200) {
+                throw new IllegalArgumentException("Logradouro deve ter entre 5 e 200 caracteres");
+            }
+        }
+
+        // Validar bairro
+        if (dto.getBairro() != null && !dto.getBairro().trim().isEmpty()) {
+            String bairro = dto.getBairro().trim();
+            if (bairro.length() < 2 || bairro.length() > 100) {
+                throw new IllegalArgumentException("Bairro deve ter entre 2 e 100 caracteres");
+            }
+        }
+
+        // Validar cidade
+        if (dto.getCidade() != null && !dto.getCidade().trim().isEmpty()) {
+            String cidade = dto.getCidade().trim();
+            if (cidade.length() < 2 || cidade.length() > 100) {
+                throw new IllegalArgumentException("Cidade deve ter entre 2 e 100 caracteres");
+            }
+        }
+
+        // Validar estado usando o enum
+        if (dto.getEstado() != null && !dto.getEstado().trim().isEmpty()) {
+            try {
+                EstadoBrasil.fromString(dto.getEstado().trim());
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Estado inválido: " + dto.getEstado() + ". " + e.getMessage());
+            }
+        }
+
+        // Validar número (se fornecido)
+        if (dto.getNumero() != null && !dto.getNumero().trim().isEmpty()) {
+            if (dto.getNumero().trim().length() > 20) {
+                throw new IllegalArgumentException("Número deve ter no máximo 20 caracteres");
+            }
+        }
+
+        // Validar complemento (se fornecido)
+        if (dto.getComplemento() != null && !dto.getComplemento().trim().isEmpty()) {
+            if (dto.getComplemento().trim().length() > 100) {
+                throw new IllegalArgumentException("Complemento deve ter no máximo 100 caracteres");
+            }
+        }
     }
 
     private void validarDuplicidades(PessoaDTO dto) {
@@ -291,6 +384,14 @@ public class PessoaService {
                 throw new IllegalArgumentException("RG já está cadastrado no sistema");
             }
         }
+
+        // Verificar processo duplicado
+        if (dto.getProcesso() != null && !dto.getProcesso().trim().isEmpty()) {
+            Optional<Pessoa> pessoaComProcesso = pessoaRepository.findByProcesso(dto.getProcesso().trim());
+            if (pessoaComProcesso.isPresent()) {
+                throw new IllegalArgumentException("Processo já está cadastrado no sistema");
+            }
+        }
     }
 
     private void validarDuplicidadesParaUpdate(PessoaDTO dto, Long idAtual) {
@@ -309,6 +410,14 @@ public class PessoaService {
             Optional<Pessoa> pessoaComRg = pessoaRepository.findByRg(dto.getRg().trim());
             if (pessoaComRg.isPresent() && !pessoaComRg.get().getId().equals(idAtual)) {
                 throw new IllegalArgumentException("RG já está cadastrado no sistema");
+            }
+        }
+
+        // Verificar processo duplicado em outro registro
+        if (dto.getProcesso() != null && !dto.getProcesso().trim().isEmpty()) {
+            Optional<Pessoa> pessoaComProcesso = pessoaRepository.findByProcesso(dto.getProcesso().trim());
+            if (pessoaComProcesso.isPresent() && !pessoaComProcesso.get().getId().equals(idAtual)) {
+                throw new IllegalArgumentException("Processo já está cadastrado no sistema");
             }
         }
     }
@@ -333,32 +442,31 @@ public class PessoaService {
         }
     }
 
-    // ========== MÉTODOS DE APOIO ==========
+    // ========== MÉTODOS DE CRIAÇÃO/ATUALIZAÇÃO DE ENDEREÇO ==========
 
-    private Endereco criarEnderecoSeNecessario(PessoaDTO dto) {
-        if (dto.getCep() == null || dto.getCep().trim().isEmpty()) {
-            return null;
-        }
-
+    /**
+     * Cria um endereço completo (agora obrigatório)
+     */
+    private Endereco criarEndereco(PessoaDTO dto) {
         return Endereco.builder()
                 .cep(dto.getCep().trim())
-                .logradouro(dto.getLogradouro() != null ? dto.getLogradouro().trim() : null)
+                .logradouro(dto.getLogradouro().trim())
                 .numero(dto.getNumero() != null ? dto.getNumero().trim() : null)
                 .complemento(dto.getComplemento() != null ? dto.getComplemento().trim() : null)
-                .bairro(dto.getBairro() != null ? dto.getBairro().trim() : null)
-                .cidade(dto.getCidade() != null ? dto.getCidade().trim() : null)
-                .estado(dto.getEstado() != null ? dto.getEstado().trim().toUpperCase() : null)
+                .bairro(dto.getBairro().trim())
+                .cidade(dto.getCidade().trim())
+                .estado(dto.getEstado().trim().toUpperCase())
                 .build();
     }
 
     private void atualizarEndereco(Endereco endereco, PessoaDTO dto) {
         endereco.setCep(dto.getCep().trim());
-        endereco.setLogradouro(dto.getLogradouro() != null ? dto.getLogradouro().trim() : null);
+        endereco.setLogradouro(dto.getLogradouro().trim());
         endereco.setNumero(dto.getNumero() != null ? dto.getNumero().trim() : null);
         endereco.setComplemento(dto.getComplemento() != null ? dto.getComplemento().trim() : null);
-        endereco.setBairro(dto.getBairro() != null ? dto.getBairro().trim() : null);
-        endereco.setCidade(dto.getCidade() != null ? dto.getCidade().trim() : null);
-        endereco.setEstado(dto.getEstado() != null ? dto.getEstado().trim().toUpperCase() : null);
+        endereco.setBairro(dto.getBairro().trim());
+        endereco.setCidade(dto.getCidade().trim());
+        endereco.setEstado(dto.getEstado().trim().toUpperCase());
     }
 
     // ========== MÉTODOS UTILITÁRIOS ==========
@@ -374,6 +482,14 @@ public class PessoaService {
 
     private boolean validarFormatoContato(String contato) {
         return contato.matches("\\(?\\d{2}\\)?\\s?\\d{4,5}-?\\d{4}");
+    }
+
+    /**
+     * Valida formato do CEP
+     */
+    private boolean validarFormatoCep(String cep) {
+        String cepLimpo = cep.replaceAll("[^\\d]", "");
+        return cepLimpo.matches("\\d{8}");
     }
 
     private String limparCpf(String cpf) {
