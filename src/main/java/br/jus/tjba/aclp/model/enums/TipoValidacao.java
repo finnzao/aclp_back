@@ -1,9 +1,11 @@
 package br.jus.tjba.aclp.model.enums;
 
+import com.fasterxml.jackson.annotation.JsonValue;
+
 public enum TipoValidacao {
     PRESENCIAL("presencial", "Presencial", "Comparecimento físico no local"),
-    ONLINE("online", "Online", "Comparecimento virtual/remoto"),
-    JUSTIFICADO("justificado", "Justificado", "Ausência justificada documentalmente");
+    ONLINE("online", "Online/Virtual", "Comparecimento virtual/remoto"),
+    CADASTRO_INICIAL("cadastro_inicial", "Cadastro Inicial", "Primeiro registro no sistema");
 
     private final String code;
     private final String label;
@@ -15,6 +17,7 @@ public enum TipoValidacao {
         this.description = description;
     }
 
+    @JsonValue
     public String getCode() {
         return code;
     }
@@ -46,15 +49,27 @@ public enum TipoValidacao {
         return this == ONLINE;
     }
 
-    public boolean isJustificativa() {
-        return this == JUSTIFICADO;
+    public boolean isCadastroInicial() {
+        return this == CADASTRO_INICIAL;
+    }
+
+    public boolean isComparecimentoRegular() {
+        return this == PRESENCIAL || this == ONLINE;
     }
 
     public String getIcon() {
         return switch (this) {
             case PRESENCIAL -> "building";
             case ONLINE -> "monitor";
-            case JUSTIFICADO -> "file-text";
+            case CADASTRO_INICIAL -> "user-plus";
+        };
+    }
+
+    public String getCssClass() {
+        return switch (this) {
+            case PRESENCIAL -> "success";
+            case ONLINE -> "info";
+            case CADASTRO_INICIAL -> "primary";
         };
     }
 

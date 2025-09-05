@@ -1,0 +1,432 @@
+package br.jus.tjba.aclp.service;
+
+import br.jus.tjba.aclp.dto.ComparecimentoDTO;
+import br.jus.tjba.aclp.model.*;
+import br.jus.tjba.aclp.model.enums.StatusComparecimento;
+import br.jus.tjba.aclp.model.enums.TipoValidacao;
+import br.jus.tjba.aclp.repository.*;
+import jakarta.persistence.EntityNotFoundException;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.util.List;
+import java.util.Optional;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class ComparecimentoService {
+
+    private final PessoaRepository pessoaRepository;
+    private final HistoricoComparecimentoRepository historicoComparecimentoRepository;
+    private final HistoricoEnderecoRepository historicoEnderecoRepository;
+    private final EnderecoRepository enderecoRepository;
+
+    /**
+     * Registra um novo comparecimento (presencial ou online)
+     */
+    @Transactional
+    public HistoricoComparecimento registrarComparecimento(ComparecimentoDTO dto) {
+        log.info("Iniciando registro de comparecimento - Pessoa ID: {}, Tipo: {}",
+                dto.getPessoaId(), dto.getTipoValidacao());
+
+        // Limpar e validar dados
+        dto.limparEFormatarDados();
+        validarComparecimento(dto);
+
+        // Buscar pessoa
+        Pessoa pessoa = pessoaRepository.findById(dto.getPessoaId())
+                .orElseThrow(() -> new EntityNotFoundException("Pessoa não encontrada com ID: " + dto.getPessoaId()));
+
+        // Criar histórico de comparecimento
+        HistoricoComparecimento historico = criarHistoricoComparecimento(dto, pessoa);
+
+        // Processar mudança de endereço se necessário
+        if (dto.houveMudancaEndereco()) {
+            processarMudancaEndereco(dto, pessoa, historico);
+        }
+
+        // Salvar histórico
+        HistoricoComparecimento historicoSalvo = historicoComparecimentoRepository.save(historico);
+
+        // Atualizar dados da pessoa
+        atualizarDadosPessoa(pessoa, dto);
+
+        log.info("Comparecimento registrado com sucesso - ID: {}, Pessoa: {}, Mudança endereço: {}",
+                historicoSalvo.getId(), pessoa.getNome(), dto.houveMudancaEndereco());
+
+        return historicoSalvo;
+    }
+
+    /**
+     * Registra comparecimento inicial (cadastro)
+     */
+    @Transactional
+    public HistoricoComparecimento registrarComparecimentoInicial(Pessoa pessoa, String validadoPor) {
+        log.info("Registrando comparecimento inicial - Pessoa: {}", pessoa.getNome());
+
+        ComparecimentoDTO dto = ComparecimentoDTO.builder()
+                .pessoaId(pessoa.getId())
+                .dataComparecimento(pessoa.getDataComparecimentoInicial())
+                .horaComparecimento(LocalTime.now())
+                .tipoValidacao(TipoValidacao.CADASTRO_INICIAL)
+                .observacoes("Cadastro inicial no sistema")
+                .validadoPor(validadoPor)
+                .mudancaEndereco(Boolean.FALSE)
+                .build();
+
+        HistoricoComparecimento historico = criarHistoricoComparecimento(dto, pessoa);
+
+        // Criar histórico do endereço inicial
+        criarHistoricoEnderecoInicial(pessoa, historico);
+
+        return historicoComparecimentoRepository.save(historico);
+    }
+
+    /**
+     * Busca histórico de comparecimentos de uma pessoa
+     */
+    @Transactional(readOnly = true)
+    public List<HistoricoComparecimento> buscarHistoricoPorPessoa(Long pessoaId) {
+        log.info("Buscando histórico de comparecimentos - Pessoa ID: {}", pessoaId);
+
+        if (pessoaId == null || pessoaId <= 0) {
+            throw new IllegalArgumentException("ID da pessoa deve ser um número positivo");
+        }
+
+        return historicoComparecimentoRepository.findByPessoaIdOrderByDataComparecimentoDesc(pessoaId);
+    }
+
+    /**
+     * Busca comparecimentos por período
+     */
+    @Transactional(readOnly = true)
+    public List<HistoricoComparecimento> buscarComparecimentosPorPeriodo(LocalDate inicio, LocalDate fim) {
+        log.info("Buscando comparecimentos por período: {} a {}", inicio, fim);
+
+        if (inicio == null || fim == null) {
+            throw new IllegalArgumentException("Data de início e fim são obrigatórias");
+        }
+
+        if (inicio.isAfter(fim)) {
+            throw new IllegalArgumentException("Data de início não pode ser posterior à data de fim");
+        }
+
+        return historicoComparecimentoRepository.findByDataComparecimentoBetween(inicio, fim);
+    }
+
+    /**
+     * Busca comparecimentos com mudança de endereço
+     */
+    @Transactional(readOnly = true)
+    public List<HistoricoComparecimento> buscarComparecimentosComMudancaEndereco(Long pessoaId) {
+        log.info("Buscando comparecimentos com mudança de endereço - Pessoa ID: {}", pessoaId);
+
+        if (pessoaId == null || pessoaId <= 0) {
+            throw new IllegalArgumentException("ID da pessoa deve ser um número positivo");
+        }
+
+        return historicoComparecimentoRepository.findByPessoaIdAndMudancaEnderecoTrue(pessoaId);
+    }
+
+    /**
+     * Busca comparecimentos de hoje
+     */
+    @Transactional(readOnly = true)
+    public List<HistoricoComparecimento> buscarComparecimentosHoje() {
+        log.info("Buscando comparecimentos de hoje");
+        return historicoComparecimentoRepository.findByDataComparecimento(LocalDate.now());
+    }
+
+    /**
+     * Atualiza observações de um comparecimento
+     */
+    @Transactional
+    public HistoricoComparecimento atualizarObservacoes(Long historicoId, String observacoes) {
+        log.info("Atualizando observações do comparecimento ID: {}", historicoId);
+
+        HistoricoComparecimento historico = historicoComparecimentoRepository.findById(historicoId)
+                .orElseThrow(() -> new EntityNotFoundException("Histórico de comparecimento não encontrado com ID: " + historicoId));
+
+        historico.setObservacoes(observacoes != null ? observacoes.trim() : null);
+
+        return historicoComparecimentoRepository.save(historico);
+    }
+
+    // ========== MÉTODOS PRIVADOS ==========
+
+    private void validarComparecimento(ComparecimentoDTO dto) {
+        // Validar dados básicos
+        if (dto.getPessoaId() == null || dto.getPessoaId() <= 0) {
+            throw new IllegalArgumentException("ID da pessoa deve ser um número positivo");
+        }
+
+        if (dto.getDataComparecimento() == null) {
+            throw new IllegalArgumentException("Data do comparecimento é obrigatória");
+        }
+
+        if (dto.getDataComparecimento().isAfter(LocalDate.now())) {
+            throw new IllegalArgumentException("Data do comparecimento não pode ser futura");
+        }
+
+        if (dto.getTipoValidacao() == null) {
+            throw new IllegalArgumentException("Tipo de validação é obrigatório");
+        }
+
+        if (dto.getValidadoPor() == null || dto.getValidadoPor().trim().isEmpty()) {
+            throw new IllegalArgumentException("Validado por é obrigatório");
+        }
+
+        // Validar mudança de endereço
+        if (dto.houveMudancaEndereco()) {
+            if (dto.getNovoEndereco() == null) {
+                throw new IllegalArgumentException("Dados do novo endereço são obrigatórios quando há mudança");
+            }
+
+            if (!dto.getNovoEndereco().isCompleto()) {
+                throw new IllegalArgumentException("Todos os campos obrigatórios do novo endereço devem ser preenchidos");
+            }
+        }
+
+        // Validar duplicidade de comparecimento na mesma data
+        validarDuplicidadeComparecimento(dto);
+    }
+
+    private void validarDuplicidadeComparecimento(ComparecimentoDTO dto) {
+        List<HistoricoComparecimento> comparecimentosMesmaData =
+                historicoComparecimentoRepository.findByPessoaIdAndDataComparecimento(
+                        dto.getPessoaId(), dto.getDataComparecimento());
+
+        if (!comparecimentosMesmaData.isEmpty()) {
+            // Permitir apenas se for cadastro inicial
+            boolean temCadastroInicial = comparecimentosMesmaData.stream()
+                    .anyMatch(h -> h.getTipoValidacao() == TipoValidacao.CADASTRO_INICIAL);
+
+            if (temCadastroInicial && dto.getTipoValidacao() != TipoValidacao.CADASTRO_INICIAL) {
+                // OK - pode ter cadastro inicial + comparecimento regular no mesmo dia
+                return;
+            }
+
+            if (!temCadastroInicial || dto.getTipoValidacao() == TipoValidacao.CADASTRO_INICIAL) {
+                throw new IllegalArgumentException("Já existe comparecimento registrado para esta pessoa na data: " +
+                        dto.getDataComparecimento());
+            }
+        }
+    }
+
+    private HistoricoComparecimento criarHistoricoComparecimento(ComparecimentoDTO dto, Pessoa pessoa) {
+        return HistoricoComparecimento.builder()
+                .pessoa(pessoa)
+                .dataComparecimento(dto.getDataComparecimento())
+                .horaComparecimento(dto.getHoraComparecimento())
+                .tipoValidacao(dto.getTipoValidacao())
+                .observacoes(dto.getObservacoes())
+                .validadoPor(dto.getValidadoPor())
+                .anexos(dto.getAnexos())
+                .mudancaEndereco(dto.houveMudancaEndereco())
+                .motivoMudancaEndereco(dto.getMotivoMudancaEndereco())
+                .build();
+    }
+
+    private void processarMudancaEndereco(ComparecimentoDTO dto, Pessoa pessoa, HistoricoComparecimento historico) {
+        log.info("Processando mudança de endereço - Pessoa: {}", pessoa.getNome());
+
+        // 1. Finalizar endereço anterior no histórico
+        finalizarEnderecoAnterior(pessoa, dto.getDataComparecimento());
+
+        // 2. Atualizar endereço atual na tabela enderecos
+        atualizarEnderecoAtual(pessoa, dto.getNovoEndereco());
+
+        // 3. Criar novo registro no histórico de endereços
+        criarNovoHistoricoEndereco(pessoa, dto, historico);
+    }
+
+    private void finalizarEnderecoAnterior(Pessoa pessoa, LocalDate dataFim) {
+        Optional<HistoricoEndereco> enderecoAtivo =
+                historicoEnderecoRepository.findEnderecoAtivoPorPessoa(pessoa.getId());
+
+        enderecoAtivo.ifPresent(endereco -> {
+            endereco.setDataFim(dataFim);
+            historicoEnderecoRepository.save(endereco);
+            log.info("Endereço anterior finalizado - ID: {}, Data fim: {}", endereco.getId(), dataFim);
+        });
+    }
+
+    private void atualizarEnderecoAtual(Pessoa pessoa, ComparecimentoDTO.EnderecoDTO novoEnderecoDTO) {
+        Endereco enderecoAtual = pessoa.getEndereco();
+
+        // Atualizar dados do endereço atual
+        enderecoAtual.setCep(novoEnderecoDTO.getCep());
+        enderecoAtual.setLogradouro(novoEnderecoDTO.getLogradouro());
+        enderecoAtual.setNumero(novoEnderecoDTO.getNumero());
+        enderecoAtual.setComplemento(novoEnderecoDTO.getComplemento());
+        enderecoAtual.setBairro(novoEnderecoDTO.getBairro());
+        enderecoAtual.setCidade(novoEnderecoDTO.getCidade());
+        enderecoAtual.setEstado(novoEnderecoDTO.getEstado());
+
+        enderecoRepository.save(enderecoAtual);
+        log.info("Endereço atual atualizado - Pessoa: {}, Novo endereço: {}",
+                pessoa.getNome(), enderecoAtual.getEnderecoResumido());
+    }
+
+    private void criarNovoHistoricoEndereco(Pessoa pessoa, ComparecimentoDTO dto, HistoricoComparecimento historico) {
+        HistoricoEndereco novoHistorico = HistoricoEndereco.builder()
+                .pessoa(pessoa)
+                .cep(dto.getNovoEndereco().getCep())
+                .logradouro(dto.getNovoEndereco().getLogradouro())
+                .numero(dto.getNovoEndereco().getNumero())
+                .complemento(dto.getNovoEndereco().getComplemento())
+                .bairro(dto.getNovoEndereco().getBairro())
+                .cidade(dto.getNovoEndereco().getCidade())
+                .estado(dto.getNovoEndereco().getEstado())
+                .dataInicio(dto.getDataComparecimento())
+                .dataFim(null) // Endereço ativo
+                .motivoAlteracao(dto.getMotivoMudancaEndereco())
+                .validadoPor(dto.getValidadoPor())
+                .historicoComparecimento(historico)
+                .build();
+
+        historicoEnderecoRepository.save(novoHistorico);
+
+        // Adicionar ao histórico de comparecimento
+        historico.adicionarEnderecoAlterado(novoHistorico);
+
+        log.info("Novo histórico de endereço criado - ID: {}, Endereço: {}",
+                novoHistorico.getId(), novoHistorico.getEnderecoResumido());
+    }
+
+    private void criarHistoricoEnderecoInicial(Pessoa pessoa, HistoricoComparecimento historico) {
+        Endereco enderecoAtual = pessoa.getEndereco();
+
+        HistoricoEndereco historicoInicial = HistoricoEndereco.builder()
+                .pessoa(pessoa)
+                .cep(enderecoAtual.getCep())
+                .logradouro(enderecoAtual.getLogradouro())
+                .numero(enderecoAtual.getNumero())
+                .complemento(enderecoAtual.getComplemento())
+                .bairro(enderecoAtual.getBairro())
+                .cidade(enderecoAtual.getCidade())
+                .estado(enderecoAtual.getEstado())
+                .dataInicio(pessoa.getDataComparecimentoInicial())
+                .dataFim(null) // Endereço ativo
+                .motivoAlteracao("Endereço inicial no cadastro")
+                .validadoPor(historico.getValidadoPor())
+                .historicoComparecimento(historico)
+                .build();
+
+        historicoEnderecoRepository.save(historicoInicial);
+
+        log.info("Histórico de endereço inicial criado - Pessoa: {}, Endereço: {}",
+                pessoa.getNome(), historicoInicial.getEnderecoResumido());
+    }
+
+    private void atualizarDadosPessoa(Pessoa pessoa, ComparecimentoDTO dto) {
+        // Não atualizar para cadastro inicial
+        if (dto.getTipoValidacao() == TipoValidacao.CADASTRO_INICIAL) {
+            return;
+        }
+
+        // Atualizar último comparecimento
+        pessoa.setUltimoComparecimento(dto.getDataComparecimento());
+
+        // Calcular próximo comparecimento
+        pessoa.calcularProximoComparecimento();
+
+        // Atualizar status para EM_CONFORMIDADE se estava inadimplente
+        if (pessoa.getStatus() == StatusComparecimento.INADIMPLENTE) {
+            pessoa.setStatus(StatusComparecimento.EM_CONFORMIDADE);
+            log.info("Status da pessoa atualizado para EM_CONFORMIDADE - Pessoa: {}", pessoa.getNome());
+        }
+
+        pessoaRepository.save(pessoa);
+
+        log.info("Dados da pessoa atualizados - Último comparecimento: {}, Próximo: {}, Status: {}",
+                pessoa.getUltimoComparecimento(), pessoa.getProximoComparecimento(), pessoa.getStatus());
+    }
+
+    /**
+     * Verifica e atualiza automaticamente status de pessoas inadimplentes
+     */
+    @Transactional
+    public void verificarStatusInadimplentes() {
+        log.info("Verificando status de pessoas inadimplentes");
+
+        LocalDate hoje = LocalDate.now();
+        List<Pessoa> pessoasEmConformidade = pessoaRepository.findByStatus(StatusComparecimento.EM_CONFORMIDADE);
+
+        int contadorInadimplentes = 0;
+
+        for (Pessoa pessoa : pessoasEmConformidade) {
+            if (pessoa.getProximoComparecimento() != null &&
+                    pessoa.getProximoComparecimento().isBefore(hoje)) {
+
+                pessoa.setStatus(StatusComparecimento.INADIMPLENTE);
+                pessoaRepository.save(pessoa);
+                contadorInadimplentes++;
+
+                log.warn("Pessoa marcada como inadimplente - Nome: {}, Próximo comparecimento era: {}",
+                        pessoa.getNome(), pessoa.getProximoComparecimento());
+            }
+        }
+
+        log.info("Verificação concluída - {} pessoas marcadas como inadimplentes", contadorInadimplentes);
+    }
+
+    /**
+     * Busca estatísticas de comparecimentos
+     */
+    @Transactional(readOnly = true)
+    public EstatisticasComparecimento buscarEstatisticas(LocalDate inicio, LocalDate fim) {
+        log.info("Buscando estatísticas de comparecimentos: {} a {}", inicio, fim);
+
+        List<HistoricoComparecimento> comparecimentos =
+                historicoComparecimentoRepository.findByDataComparecimentoBetween(inicio, fim);
+
+        long totalComparecimentos = comparecimentos.size();
+        long comparecimentosPresenciais = comparecimentos.stream()
+                .filter(h -> h.getTipoValidacao() == TipoValidacao.PRESENCIAL)
+                .count();
+        long comparecimentosOnline = comparecimentos.stream()
+                .filter(h -> h.getTipoValidacao() == TipoValidacao.ONLINE)
+                .count();
+        long cadastrosIniciais = comparecimentos.stream()
+                .filter(h -> h.getTipoValidacao() == TipoValidacao.CADASTRO_INICIAL)
+                .count();
+        long mudancasEndereco = comparecimentos.stream()
+                .filter(HistoricoComparecimento::houveMudancaEndereco)
+                .count();
+
+        return EstatisticasComparecimento.builder()
+                .periodo(inicio + " a " + fim)
+                .totalComparecimentos(totalComparecimentos)
+                .comparecimentosPresenciais(comparecimentosPresenciais)
+                .comparecimentosOnline(comparecimentosOnline)
+                .cadastrosIniciais(cadastrosIniciais)
+                .mudancasEndereco(mudancasEndereco)
+                .percentualPresencial(totalComparecimentos > 0 ?
+                        (double) comparecimentosPresenciais / totalComparecimentos * 100 : 0.0)
+                .percentualOnline(totalComparecimentos > 0 ?
+                        (double) comparecimentosOnline / totalComparecimentos * 100 : 0.0)
+                .build();
+    }
+
+    /**
+     * DTO para estatísticas de comparecimentos
+     */
+    @lombok.Data
+    @lombok.Builder
+    public static class EstatisticasComparecimento {
+        private String periodo;
+        private long totalComparecimentos;
+        private long comparecimentosPresenciais;
+        private long comparecimentosOnline;
+        private long cadastrosIniciais;
+        private long mudancasEndereco;
+        private double percentualPresencial;
+        private double percentualOnline;
+    }
+}
