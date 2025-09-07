@@ -164,12 +164,11 @@ public interface HistoricoComparecimentoRepository extends JpaRepository<Histori
     List<HistoricoComparecimento> findComparecimentosComAnexos();
 
     /**
-     * Média de dias entre comparecimentos de uma pessoa
+     * Média de dias entre comparecimentos de uma pessoa (CORRIGIDA)
+     * Removida a query problemática - será implementada no service usando código Java
      */
-    @Query("SELECT AVG(FUNCTION('DATE_PART', 'day', h2.dataComparecimento - h1.dataComparecimento)) " +
-            "FROM HistoricoComparecimento h1, HistoricoComparecimento h2 " +
-            "WHERE h1.pessoa.id = :pessoaId AND h2.pessoa.id = :pessoaId " +
-            "AND h1.tipoValidacao != 'CADASTRO_INICIAL' AND h2.tipoValidacao != 'CADASTRO_INICIAL' " +
-            "AND h2.dataComparecimento > h1.dataComparecimento")
-    Double findMediaDiasEntreComparecimentos(@Param("pessoaId") Long pessoaId);
+    @Query("SELECT h FROM HistoricoComparecimento h WHERE h.pessoa.id = :pessoaId " +
+            "AND h.tipoValidacao != 'CADASTRO_INICIAL' " +
+            "ORDER BY h.dataComparecimento ASC")
+    List<HistoricoComparecimento> findComparecimentosParaCalculoMedia(@Param("pessoaId") Long pessoaId);
 }
