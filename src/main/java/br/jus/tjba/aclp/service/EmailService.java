@@ -219,43 +219,48 @@ public class EmailService {
      */
     private String criarConteudoVerificacao(String codigo, String tipoUsuario, int validadeMinutos) {
         String tipoTexto = "ADMIN".equals(tipoUsuario) ? "Administrador" : "Usuário";
-        String dataHora = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));
+        String dataHora = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"));
 
         return String.format("""
                 🏛️ TRIBUNAL DE JUSTIÇA DA BAHIA
                 Sistema ACLP - Acompanhamento de Comparecimento em Liberdade Provisória
                 
                 ═══════════════════════════════════════════════════════════════
-                CÓDIGO DE VERIFICAÇÃO
+                ✉️  CÓDIGO DE VERIFICAÇÃO
                 ═══════════════════════════════════════════════════════════════
                 
-                Olá,
+                Prezado(a) usuário(a),
                 
-                Você solicitou um código de verificação para cadastro no Sistema ACLP.
+                Você solicitou um código de verificação para acessar o Sistema ACLP.
                 
-                📧 SEU CÓDIGO DE VERIFICAÇÃO: %s
+                🔑 SEU CÓDIGO DE VERIFICAÇÃO: %s
                 
-                ⏰ Este código é válido por %d minutos
-                👤 Tipo de usuário: %s
+                📋 Detalhes da solicitação:
+                ⏰ Válido por: %d minutos
+                👤 Tipo de acesso: %s
                 🕐 Solicitado em: %s
                 
-                ⚠️  IMPORTANTE:
-                • Use este código apenas se você solicitou o cadastro
-                • Não compartilhe este código com terceiros
-                • O código expira automaticamente após %d minutos
-                • Caso não tenha solicitado, ignore este email
+                ⚠️  INSTRUÇÕES IMPORTANTES:
+                • Digite este código na tela de verificação
+                • Não compartilhe este código com outras pessoas
+                • O código expira automaticamente em %d minutos
+                • Se não foi você quem solicitou, ignore este email
                 
                 ═══════════════════════════════════════════════════════════════
                 
-                Se precisar de ajuda, entre em contato com o suporte técnico.
+                📞 Precisa de ajuda?
+                Entre em contato com o suporte técnico do TJBA
                 
                 Atenciosamente,
-                Equipe ACLP - TJBA
+                Equipe de Tecnologia da Informação
+                Tribunal de Justiça do Estado da Bahia
                 
-                ---
-                Esta é uma mensagem automática, não responda este email.
-                Sistema ACLP - Versão 2.0.0
-                """, codigo, validadeMinutos, tipoTexto, dataHora, validadeMinutos);
+                ═══════════════════════════════════════════════════════════════
+                Esta é uma mensagem automática do Sistema ACLP.
+                Não responda este email.
+                
+                Sistema ACLP - Versão 2.0.0 | %s
+                """, codigo, validadeMinutos, tipoTexto, dataHora, validadeMinutos, dataHora);
     }
 
     /**

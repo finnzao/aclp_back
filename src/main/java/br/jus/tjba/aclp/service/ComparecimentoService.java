@@ -13,7 +13,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Slf4j
@@ -377,6 +379,68 @@ public class ComparecimentoService {
     }
 
     /**
+     * Migra pessoas existentes criando seus comparecimentos iniciais
+     */
+    @Transactional
+    public Map<String, Object> migrarCadastrosIniciais(String validadoPor) {
+        log.info("Iniciando migração de cadastros iniciais");
+
+        List<Pessoa> todasPessoas = pessoaRepository.findAll();
+
+        if (todasPessoas.isEmpty()) {
+            log.warn("Nenhuma pessoa encontrada para migração");
+            return Map.of(
+                    "status", "warning",
+                    "message", "Nenhuma pessoa encontrada para migração",
+                    "totalPessoas", 0,
+                    "pessoasMigradas", 0
+            );
+        }
+
+        int pessoasMigradas = 0;
+        List<String> erros = new ArrayList<>();
+
+        for (Pessoa pessoa : todasPessoas) {
+            try {
+                // Verificar se já tem cadastro inicial
+                boolean jaTempComparecimento = historicoComparecimentoRepository
+                        .existsCadastroInicialPorPessoa(pessoa.getId());
+
+                if (!jaTempComparecimento) {
+                    // Criar comparecimento inicial
+                    registrarComparecimentoInicial(pessoa, validadoPor);
+                    pessoasMigradas++;
+
+                    log.debug("Cadastro inicial criado para pessoa: {} (ID: {})",
+                            pessoa.getNome(), pessoa.getId());
+                } else {
+                    log.debug("Pessoa já possui cadastro inicial: {} (ID: {})",
+                            pessoa.getNome(), pessoa.getId());
+                }
+
+            } catch (Exception e) {
+                String erro = String.format("Erro ao migrar pessoa %s (ID: %d): %s",
+                        pessoa.getNome(), pessoa.getId(), e.getMessage());
+                erros.add(erro);
+                log.error(erro, e);
+            }
+        }
+
+        Map<String, Object> resultado = Map.of(
+                "status", "success",
+                "message", String.format("Migração concluída. %d de %d pessoas migradas",
+                        pessoasMigradas, todasPessoas.size()),
+                "totalPessoas", todasPessoas.size(),
+                "pessoasMigradas", pessoasMigradas,
+                "pessoasJaComCadastro", todasPessoas.size() - pessoasMigradas - erros.size(),
+                "erros", erros.size(),
+                "detalhesErros", erros
+        );
+
+        log.info("Migração concluída - Resultado: {}", resultado);
+        return resultado;
+    }
+    /**
      * Busca estatísticas de comparecimentos
      */
     @Transactional(readOnly = true)
@@ -428,5 +492,150 @@ public class ComparecimentoService {
         private long mudancasEndereco;
         private double percentualPresencial;
         private double percentualOnline;
+    }
+
+    /**
+     * Busca estatísticas gerais de todo o sistema
+     */
+    @Transactional(readOnly = true)
+    public EstatisticasGerais buscarEstatisticasGerais() {
+        log.info("Buscando estatísticas gerais do sistema");
+
+        List<HistoricoComparecimento> todosComparecimentos =
+                historicoComparecimentoRepository.findAll();
+
+        if (todosComparecimentos.isEmpty()) {
+            log.warn("Nenhum comparecimento encontrado no sistema");
+            return criarEstatisticasVazias();
+        }
+
+        // Encontrar período total
+        LocalDate menorData = todosComparecimentos.stream()
+                .map(HistoricoComparecimento::getDataComparecimento)
+                .min(LocalDate::compareTo)
+                .orElse(LocalDate.now());
+
+        LocalDate maiorData = todosComparecimentos.stream()
+                .map(HistoricoComparecimento::getDataComparecimento)
+                .max(LocalDate::compareTo)
+                .orElse(LocalDate.now());
+
+        // Calcular estatísticas
+        long totalComparecimentos = todosComparecimentos.size();
+        long comparecimentosPresenciais = todosComparecimentos.stream()
+                .filter(h -> h.getTipoValidacao() == TipoValidacao.PRESENCIAL)
+                .count();
+        long comparecimentosOnline = todosComparecimentos.stream()
+                .filter(h -> h.getTipoValidacao() == TipoValidacao.ONLINE)
+                .count();
+        long cadastrosIniciais = todosComparecimentos.stream()
+                .filter(h -> h.getTipoValidacao() == TipoValidacao.CADASTRO_INICIAL)
+                .count();
+        long mudancasEndereco = todosComparecimentos.stream()
+                .filter(HistoricoComparecimento::houveMudancaEndereco)
+                .count();
+
+        return EstatisticasGerais.builder()
+                .periodo(menorData + " a " + maiorData)
+                .dataInicio(menorData)
+                .dataFim(maiorData)
+                .totalComparecimentos(totalComparecimentos)
+                .comparecimentosPresenciais(comparecimentosPresenciais)
+                .comparecimentosOnline(comparecimentosOnline)
+                .cadastrosIniciais(cadastrosIniciais)
+                .mudancasEndereco(mudancasEndereco)
+                .percentualPresencial(totalComparecimentos > 0 ?
+                        (double) comparecimentosPresenciais / totalComparecimentos * 100 : 0.0)
+                .percentualOnline(totalComparecimentos > 0 ?
+                        (double) comparecimentosOnline / totalComparecimentos * 100 : 0.0)
+                .build();
+    }
+
+    /**
+     * Busca resumo completo do sistema
+     */
+    @Transactional(readOnly = true)
+    public ResumoSistema buscarResumoSistema() {
+        log.info("Buscando resumo completo do sistema");
+
+        // Estatísticas de pessoas
+        long totalPessoas = pessoaRepository.count();
+        long pessoasEmConformidade = pessoaRepository.countByStatus(StatusComparecimento.EM_CONFORMIDADE);
+        long pessoasInadimplentes = pessoaRepository.countByStatus(StatusComparecimento.INADIMPLENTE);
+
+        // Pessoas com comparecimento hoje
+        long comparecimentosHoje = pessoaRepository.findByProximoComparecimento(LocalDate.now()).size();
+
+        // Pessoas em atraso
+        long pessoasAtrasadas = pessoaRepository.findByProximoComparecimentoBefore(LocalDate.now()).size();
+
+        // Estatísticas de comparecimentos
+        EstatisticasGerais estatisticasComparecimentos = buscarEstatisticasGerais();
+
+        return ResumoSistema.builder()
+                .totalPessoas(totalPessoas)
+                .pessoasEmConformidade(pessoasEmConformidade)
+                .pessoasInadimplentes(pessoasInadimplentes)
+                .comparecimentosHoje(comparecimentosHoje)
+                .pessoasAtrasadas(pessoasAtrasadas)
+                .percentualConformidade(totalPessoas > 0 ?
+                        (double) pessoasEmConformidade / totalPessoas * 100 : 0.0)
+                .estatisticasComparecimentos(estatisticasComparecimentos)
+                .dataConsulta(LocalDate.now())
+                .build();
+    }
+
+    /**
+     * Cria estatísticas vazias quando não há dados
+     */
+    private EstatisticasGerais criarEstatisticasVazias() {
+        return EstatisticasGerais.builder()
+                .periodo("Nenhum dado encontrado")
+                .dataInicio(LocalDate.now())
+                .dataFim(LocalDate.now())
+                .totalComparecimentos(0L)
+                .comparecimentosPresenciais(0L)
+                .comparecimentosOnline(0L)
+                .cadastrosIniciais(0L)
+                .mudancasEndereco(0L)
+                .percentualPresencial(0.0)
+                .percentualOnline(0.0)
+                .build();
+    }
+
+
+
+    /**
+     * DTO para estatísticas gerais (sem necessidade de especificar período)
+     */
+    @lombok.Data
+    @lombok.Builder
+    public static class EstatisticasGerais {
+        private String periodo;
+        private LocalDate dataInicio;
+        private LocalDate dataFim;
+        private long totalComparecimentos;
+        private long comparecimentosPresenciais;
+        private long comparecimentosOnline;
+        private long cadastrosIniciais;
+        private long mudancasEndereco;
+        private double percentualPresencial;
+        private double percentualOnline;
+    }
+
+    /**
+     * DTO para resumo completo do sistema
+     */
+    @lombok.Data
+    @lombok.Builder
+    public static class ResumoSistema {
+        private long totalPessoas;
+        private long pessoasEmConformidade;
+        private long pessoasInadimplentes;
+        private long comparecimentosHoje;
+        private long pessoasAtrasadas;
+        private double percentualConformidade;
+        private EstatisticasGerais estatisticasComparecimentos;
+        private LocalDate dataConsulta;
     }
 }

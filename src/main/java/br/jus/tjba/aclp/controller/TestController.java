@@ -1,5 +1,6 @@
 package br.jus.tjba.aclp.controller;
 
+import br.jus.tjba.aclp.dto.ApiResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -11,16 +12,25 @@ import java.util.Map;
 public class TestController {
 
     @GetMapping("/health")
-    public ResponseEntity<Map<String, String>> health() {
-        return ResponseEntity.ok(Map.of("status", "OK", "message", "API funcionando"));
+    public ResponseEntity<ApiResponse<Map<String, String>>> health() {
+        Map<String, String> healthData = Map.of(
+                "status", "OK",
+                "timestamp", String.valueOf(System.currentTimeMillis())
+        );
+        return ResponseEntity.ok(
+                ApiResponse.success("API funcionando corretamente", healthData)
+        );
     }
 
     @GetMapping("/info")
-    public ResponseEntity<Map<String, Object>> info() {
-        return ResponseEntity.ok(Map.of(
+    public ResponseEntity<ApiResponse<Map<String, Object>>> info() {
+        Map<String, Object> infoData = Map.of(
                 "application", "ACLP",
                 "version", "1.0.0",
                 "timestamp", System.currentTimeMillis()
-        ));
+        );
+        return ResponseEntity.ok(
+                ApiResponse.success("Informações do sistema", infoData)
+        );
     }
 }

@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACLP - Teste Verificação de Email</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .loading { animation: spin 1s linear infinite; }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .success { background-color: #10b981; color: white; }
+        .error { background-color: #ef4444; color: white; }
+        .warning { background-color: #f59e0b; color: white; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <header class="bg-blue-600 text-white shadow-md">
+        <div class="container mx-auto px-4 py-4">
+            <h1 class="text-2xl font-bold">ACLP - Teste de Verificação por Email</h1>
+            <p class="text-blue-100">Sistema de verificação antes do cadastro de usuários</p>
+        </div>
+    </header>
+
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <!-- Status da API -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4 flex items-center">
+                🔗 Status da API
+                <button id="testConnection" class="ml-4 bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">
+                    Testar Conexão
+                </button>
+            </h2>
+            <div id="apiStatus" class="p-3 rounded bg-gray-100">
+                <span class="text-gray-600">Clique em "Testar Conexão" para verificar se a API está funcionando</span>
+            </div>
+        </div>
+
+        <!-- Etapa 1: Solicitar Código -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4 flex items-center">
+                📧 Etapa 1: Solicitar Código de Verificação
+            </h2>
+
+            <form id="solicitarCodigoForm" class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                        <input type="email" id="emailSolicitar" required 
+                               class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                               placeholder="usuario@exemplo.com">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Tipo de Usuário *</label>
+                        <select id="tipoUsuario" required 
+                                class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                            <option value="USUARIO">Usuário</option>
+                            <option value="ADMIN">Administrador (requer @tjba.jus.br)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="bg-blue-50 p-4 rounded-md">
+                    <h3 class="font-medium text-blue-900 mb-2">💡 Dicas para teste:</h3>
+                    <ul class="text-sm text-blue-800 space-y-1">
+                        <li>• <strong>USUARIO:</strong> Qualquer email válido</li>
+                        <li>• <strong>ADMIN:</strong> Deve terminar com @tjba.jus.br</li>
+                        <li>• O código tem validade de 10 minutos</li>
+                        <li>• Máximo 5 tentativas de verificação</li>
+                    </ul>
+                </div>
+
+                <button type="submit" id="solicitarBtn" 
+                        class="w-full bg-blue-600 text-white py-3 px-6 rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 font-medium">
+                    <span id="solicitarText">📨 Solicitar Código</span>
+                    <span id="solicitarLoading" class="hidden">
+                        <svg class="loading inline w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        Enviando...
+                    </span>
+                </button>
+            </form>
+
+            <div id="resultadoSolicitar" class="hidden mt-4 p-4 rounded-md"></div>
+        </div>
+
+        <!-- Etapa 2: Verificar Código -->
+        <div id="etapaVerificar" class="bg-white rounded-lg shadow-md p-6 mb-6 opacity-50">
+            <h2 class="text-xl font-semibold mb-4 flex items-center">
+                🔑 Etapa 2: Verificar Código
+            </h2>
+
+            <form id="verificarCodigoForm" class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                        <input type="email" id="emailVerificar" required 
+                               class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                               placeholder="Mesmo email da etapa 1">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Código de 6 Dígitos *</label>
+                        <input type="text" id="codigoVerificar" required maxlength="6" pattern="[0-9]{6}"
+                               class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500 text-center text-xl font-mono"
+                               placeholder="123456">
+                    </div>
+                </div>
+
+                <div class="bg-yellow-50 p-4 rounded-md">
+                    <h3 class="font-medium text-yellow-900 mb-2">⚠️ Verificação de Código:</h3>
+                    <ul class="text-sm text-yellow-800 space-y-1">
+                        <li>• Digite o código de 6 dígitos recebido no email</li>
+                        <li>• O código expira em 10 minutos</li>
+                        <li>• Você tem 5 tentativas para acertar</li>
+                        <li>• Se errar 5 vezes, solicite um novo código</li>
+                    </ul>
+                </div>
+
+                <button type="submit" id="verificarBtn" disabled
+                        class="w-full bg-green-600 text-white py-3 px-6 rounded-md hover:bg-green-700 focus:ring-2 focus:ring-green-500 font-medium disabled:bg-gray-400 disabled:cursor-not-allowed">
+                    <span id="verificarText">✅ Verificar Código</span>
+                    <span id="verificarLoading" class="hidden">
+                        <svg class="loading inline w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        Verificando...
+                    </span>
+                </button>
+            </form>
+
+            <div id="resultadoVerificar" class="hidden mt-4 p-4 rounded-md"></div>
+        </div>
+
+        <!-- Etapa 3: Criar Usuário -->
+        <div id="etapaCriarUsuario" class="bg-white rounded-lg shadow-md p-6 mb-6 opacity-50">
+            <h2 class="text-xl font-semibold mb-4 flex items-center">
+                👤 Etapa 3: Criar Usuário
+            </h2>
+
+            <form id="criarUsuarioForm" class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Nome Completo *</label>
+                        <input type="text" id="nomeUsuario" required 
+                               class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                               placeholder="João Silva Santos">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                        <input type="email" id="emailUsuario" required readonly
+                               class="w-full p-3 border border-gray-300 rounded-md bg-gray-100"
+                               placeholder="Será preenchido automaticamente">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Senha *</label>
+                        <input type="password" id="senhaUsuario" required 
+                               class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                               placeholder="Senha forte">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Tipo *</label>
+                        <select id="tipoUsuarioFinal" required readonly
+                                class="w-full p-3 border border-gray-300 rounded-md bg-gray-100">
+                            <option value="USUARIO">Usuário</option>
+                            <option value="ADMIN">Administrador</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Departamento</label>
+                        <input type="text" id="departamentoUsuario" 
+                               class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                               placeholder="TI, Administração, etc.">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Telefone</label>
+                        <input type="tel" id="telefoneUsuario" 
+                               class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                               placeholder="(71) 99999-9999">
+                    </div>
+                </div>
+
+                <input type="hidden" id="tokenVerificacao" value="">
+
+                <button type="submit" id="criarUsuarioBtn" disabled
+                        class="w-full bg-purple-600 text-white py-3 px-6 rounded-md hover:bg-purple-700 focus:ring-2 focus:ring-purple-500 font-medium disabled:bg-gray-400 disabled:cursor-not-allowed">
+                    <span id="criarUsuarioText">👤 Criar Usuário</span>
+                    <span id="criarUsuarioLoading" class="hidden">
+                        <svg class="loading inline w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        Criando...
+                    </span>
+                </button>
+            </form>
+
+            <div id="resultadoCriarUsuario" class="hidden mt-4 p-4 rounded-md"></div>
+        </div>
+
+        <!-- Utilitários -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4 flex items-center">
+                🛠️ Utilitários
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <button id="consultarStatus" 
+                        class="bg-gray-500 text-white py-2 px-4 rounded hover:bg-gray-600">
+                    📊 Consultar Status
+                </button>
+                <button id="reenviarCodigo" 
+                        class="bg-orange-500 text-white py-2 px-4 rounded hover:bg-orange-600">
+                    📨 Reenviar Código
+                </button>
+                <button id="limparTudo" 
+                        class="bg-red-500 text-white py-2 px-4 rounded hover:bg-red-600">
+                    🗑️ Limpar Tudo
+                </button>
+            </div>
+
+            <div id="resultadoUtilitarios" class="hidden mt-4 p-4 rounded-md"></div>
+        </div>
+
+        <!-- Log de Ações -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-xl font-semibold mb-4 flex items-center">
+                📝 Log de Ações
+            </h2>
+            <div id="logAcoes" class="bg-gray-50 p-4 rounded-md h-64 overflow-y-auto font-mono text-sm">
+                <div class="text-gray-500">Log de ações aparecerá aqui...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8080/api';
+        let currentEmail = '';
+        let currentTipoUsuario = '';
+
+        // Função para adicionar ao log
+        function addLog(message, type = 'info') {
+            const logEl = document.getElementById('logAcoes');
+            const timestamp = new Date().toLocaleTimeString();
+            const colors = {
+                info: 'text-blue-600',
+                success: 'text-green-600',
+                error: 'text-red-600',
+                warning: 'text-yellow-600'
+            };
+            
+            logEl.innerHTML += `<div class="${colors[type]}">[${timestamp}] ${message}</div>`;
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        // Função para mostrar resultado
+        function showResult(elementId, message, isSuccess = true) {
+            const el = document.getElementById(elementId);
+            el.innerHTML = message;
+            el.className = `mt-4 p-4 rounded-md ${isSuccess ? 'success' : 'error'}`;
+            el.classList.remove('hidden');
+        }
+
+        // Testar conexão
+        document.getElementById('testConnection').addEventListener('click', async () => {
+            const statusEl = document.getElementById('apiStatus');
+            statusEl.innerHTML = '<span class="text-blue-600">🔄 Testando conexão...</span>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/verificacao/health`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    statusEl.innerHTML = '<span class="text-green-600">✅ API de verificação funcionando!</span>';
+                    statusEl.className = 'p-3 rounded bg-green-50';
+                    addLog('API de verificação conectada com sucesso', 'success');
+                } else {
+                    throw new Error('API retornou erro');
+                }
+            } catch (error) {
+                statusEl.innerHTML = '<span class="text-red-600">❌ Erro de conexão com API de verificação</span>';
+                statusEl.className = 'p-3 rounded bg-red-50';
+                addLog('Erro de conexão: ' + error.message, 'error');
+            }
+        });
+
+        // Etapa 1: Solicitar código
+        document.getElementById('solicitarCodigoForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('emailSolicitar').value;
+            const tipo = document.getElementById('tipoUsuario').value;
+            
+            // Validação ADMIN
+            if (tipo === 'ADMIN' && !email.endsWith('@tjba.jus.br')) {
+                showResult('resultadoSolicitar', '❌ Administradores devem usar email @tjba.jus.br', false);
+                addLog(`Tentativa de criar ADMIN com email não institucional: ${email}`, 'warning');
+                return;
+            }
+
+            // Mostrar loading
+            toggleLoading('solicitar', true);
+            
+            try {
+                const response = await fetch(`${API_BASE}/verificacao/solicitar-codigo`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        email: email,
+                        tipoUsuario: tipo
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (response.ok && result.status === 'success') {
+                    showResult('resultadoSolicitar', 
+                        `✅ <strong>Código enviado com sucesso!</strong><br>
+                         📧 Email: ${result.email}<br>
+                         ⏰ Válido por: ${result.validadePorMinutos} minutos<br>
+                         🔁 Tentativas permitidas: ${result.tentativasPermitidas}`, true);
+                    
+                    // Habilitar próxima etapa
+                    habilitarEtapa('verificar', email, tipo);
+                    addLog(`Código enviado para ${result.email}`, 'success');
+                } else {
+                    showResult('resultadoSolicitar', 
+                        `❌ <strong>Erro:</strong> ${result.message}<br><pre>${JSON.stringify(result, null, 2)}</pre>`, false);
+                    addLog(`Erro ao solicitar código: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showResult('resultadoSolicitar', `❌ <strong>Erro de conexão:</strong> ${error.message}`, false);
+                addLog(`Erro de conexão: ${error.message}`, 'error');
+            } finally {
+                toggleLoading('solicitar', false);
+            }
+        });
+
+        // Etapa 2: Verificar código
+        document.getElementById('verificarCodigoForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('emailVerificar').value;
+            const codigo = document.getElementById('codigoVerificar').value;
+            
+            if (codigo.length !== 6 || !/^\d{6}$/.test(codigo)) {
+                showResult('resultadoVerificar', '❌ Código deve ter exatamente 6 dígitos', false);
+                return;
+            }
+
+            toggleLoading('verificar', true);
+            
+            try {
+                const response = await fetch(`${API_BASE}/verificacao/verificar-codigo`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        email: email,
+                        codigo: codigo
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (response.ok && result.verificado) {
+                    showResult('resultadoVerificar', 
+                        `✅ <strong>Código verificado com sucesso!</strong><br>
+                         🎟️ Token gerado para criação do usuário<br>
+                         ⏰ Válido até: ${result.validoAte}`, true);
+                    
+                    // Habilitar próxima etapa
+                    habilitarEtapaCriarUsuario(email, currentTipoUsuario, result.tokenVerificacao);
+                    addLog(`Código verificado com sucesso para ${email}`, 'success');
+                } else {
+                    showResult('resultadoVerificar', 
+                        `❌ <strong>Erro:</strong> ${result.message}<br>
+                         ${result.tentativasRestantes ? `Tentativas restantes: ${result.tentativasRestantes}` : ''}`, false);
+                    addLog(`Erro na verificação: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showResult('resultadoVerificar', `❌ <strong>Erro de conexão:</strong> ${error.message}`, false);
+                addLog(`Erro de conexão: ${error.message}`, 'error');
+            } finally {
+                toggleLoading('verificar', false);
+            }
+        });
+
+        // Etapa 3: Criar usuário
+        document.getElementById('criarUsuarioForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const userData = {
+                nome: document.getElementById('nomeUsuario').value,
+                email: document.getElementById('emailUsuario').value,
+                senha: document.getElementById('senhaUsuario').value,
+                tipo: document.getElementById('tipoUsuarioFinal').value,
+                departamento: document.getElementById('departamentoUsuario').value || null,
+                telefone: document.getElementById('telefoneUsuario').value || null
+            };
+
+            toggleLoading('criarUsuario', true);
+            
+            try {
+                const response = await fetch(`${API_BASE}/usuarios`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(userData)
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showResult('resultadoCriarUsuario', 
+                        `✅ <strong>Usuário criado com sucesso!</strong><br>
+                         👤 Nome: ${result.nome}<br>
+                         📧 Email: ${result.email}<br>
+                         🏷️ Tipo: ${result.tipo}<br>
+                         📅 Criado em: ${new Date(result.criadoEm).toLocaleString()}`, true);
+                    
+                    addLog(`Usuário criado: ${result.nome} (${result.email})`, 'success');
+                    
+                    // Limpar formulário
+                    document.getElementById('criarUsuarioForm').reset();
+                    desabilitarTodasEtapas();
+                } else {
+                    showResult('resultadoCriarUsuario', 
+                        `❌ <strong>Erro ao criar usuário:</strong><br><pre>${JSON.stringify(result, null, 2)}</pre>`, false);
+                    addLog(`Erro ao criar usuário: ${result.message || 'Erro desconhecido'}`, 'error');
+                }
+            } catch (error) {
+                showResult('resultadoCriarUsuario', `❌ <strong>Erro de conexão:</strong> ${error.message}`, false);
+                addLog(`Erro de conexão: ${error.message}`, 'error');
+            } finally {
+                toggleLoading('criarUsuario', false);
+            }
+        });
+
+        // Funções utilitárias
+        function toggleLoading(action, show) {
+            const textEl = document.getElementById(`${action}Text`);
+            const loadingEl = document.getElementById(`${action}Loading`);
+            const btnEl = document.getElementById(`${action}Btn`);
+            
+            if (show) {
+                textEl.classList.add('hidden');
+                loadingEl.classList.remove('hidden');
+                btnEl.disabled = true;
+            } else {
+                textEl.classList.remove('hidden');
+                loadingEl.classList.add('hidden');
+                btnEl.disabled = false;
+            }
+        }
+
+        function habilitarEtapa(etapa, email, tipo) {
+            currentEmail = email;
+            currentTipoUsuario = tipo;
+            
+            const etapaEl = document.getElementById(`etapa${etapa.charAt(0).toUpperCase() + etapa.slice(1)}`);
+            etapaEl.classList.remove('opacity-50');
+            
+            if (etapa === 'verificar') {
+                document.getElementById('emailVerificar').value = email;
+                document.getElementById('verificarBtn').disabled = false;
+            }
+        }
+
+        function habilitarEtapaCriarUsuario(email, tipo, token) {
+            const etapaEl = document.getElementById('etapaCriarUsuario');
+            etapaEl.classList.remove('opacity-50');
+            
+            document.getElementById('emailUsuario').value = email;
+            document.getElementById('tipoUsuarioFinal').value = tipo;
+            document.getElementById('tokenVerificacao').value = token;
+            document.getElementById('criarUsuarioBtn').disabled = false;
+        }
+
+        function desabilitarTodasEtapas() {
+            document.getElementById('etapaVerificar').classList.add('opacity-50');
+            document.getElementById('etapaCriarUsuario').classList.add('opacity-50');
+            document.getElementById('verificarBtn').disabled = true;
+            document.getElementById('criarUsuarioBtn').disabled = true;
+        }
+
+        // Utilitários
+        document.getElementById('consultarStatus').addEventListener('click', async () => {
+            if (!currentEmail) {
+                showResult('resultadoUtilitarios', '❌ Nenhum email em processo de verificação', false);
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/verificacao/status?email=${encodeURIComponent(currentEmail)}`);
+                const result = await response.json();
+                
+                showResult('resultadoUtilitarios', 
+                    `📊 <strong>Status de Verificação:</strong><br><pre>${JSON.stringify(result, null, 2)}</pre>`, true);
+                addLog(`Status consultado para ${currentEmail}`, 'info');
+            } catch (error) {
+                showResult('resultadoUtilitarios', `❌ Erro: ${error.message}`, false);
+            }
+        });
+
+        document.getElementById('reenviarCodigo').addEventListener('click', async () => {
+            if (!currentEmail) {
+                showResult('resultadoUtilitarios', '❌ Nenhum email em processo de verificação', false);
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/verificacao/reenviar-codigo`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({email: currentEmail})
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showResult('resultadoUtilitarios', `✅ Código reenviado para ${result.email}`, true);
+                    addLog(`Código reenviado para ${currentEmail}`, 'success');
+                } else {
+                    showResult('resultadoUtilitarios', `❌ Erro: ${result.message}`, false);
+                }
+            } catch (error) {
+                showResult('resultadoUtilitarios', `❌ Erro: ${error.message}`, false);
+            }
+        });
+
+        document.getElementById('limparTudo').addEventListener('click', () => {
+            // Limpar formulários
+            document.getElementById('solicitarCodigoForm').reset();
+            document.getElementById('verificarCodigoForm').reset();
+            document.getElementById('criarUsuarioForm').reset();
+            
+            // Esconder resultados
+            document.querySelectorAll('[id^="resultado"]').forEach(el => el.classList.add('hidden'));
+            
+            // Desabilitar etapas
+            desabilitarTodasEtapas();
+            
+            // Limpar variáveis
+            currentEmail = '';
+            currentTipoUsuario = '';
+            
+            // Limpar log
+            document.getElementById('logAcoes').innerHTML = '<div class="text-gray-500">Log de ações aparecerá aqui...</div>';
+            
+            addLog('Sistema limpo - pronto para novo teste', 'info');
+        });
+
+        // Auto-carregar ao inicializar
+        window.addEventListener('load', () => {
+            document.getElementById('testConnection').click();
+            addLog('Sistema de teste iniciado', 'info');
+        });
+    </script>
+</body>
+</html>

@@ -1,5 +1,6 @@
 package br.jus.tjba.aclp.controller;
 
+import br.jus.tjba.aclp.dto.ApiResponse;
 import br.jus.tjba.aclp.dto.UsuarioDTO;
 import br.jus.tjba.aclp.model.Usuario;
 import br.jus.tjba.aclp.model.enums.TipoUsuario;
@@ -25,55 +26,90 @@ public class UsuarioController {
     private final UsuarioService usuarioService;
 
     @GetMapping
-    public ResponseEntity<List<Usuario>> findAll() {
+    public ResponseEntity<ApiResponse<List<Usuario>>> findAll() {
         log.info("Buscando todos os usuários");
         List<Usuario> usuarios = usuarioService.findAll();
-        return ResponseEntity.ok(usuarios);
+        return ResponseEntity.ok(
+                ApiResponse.success("Usuários listados com sucesso", usuarios)
+        );
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Usuario> findById(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<Usuario>> findById(@PathVariable Long id) {
         log.info("Buscando usuário por ID: {}", id);
         return usuarioService.findById(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+                .map(usuario -> ResponseEntity.ok(
+                        ApiResponse.success("Usuário encontrado com sucesso", usuario)
+                ))
+                .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+                        ApiResponse.error("Usuário não encontrado com ID: " + id)
+                ));
     }
 
     @PostMapping
-    public ResponseEntity<Usuario> save(@Valid @RequestBody UsuarioDTO dto) {
+    public ResponseEntity<ApiResponse<Usuario>> save(@Valid @RequestBody UsuarioDTO dto) {
         log.info("Cadastrando novo usuário: {}", dto.getEmail());
 
-        // O GlobalExceptionHandler cuidará dos erros de validação
-        Usuario usuario = usuarioService.save(dto);
-        log.info("Usuário cadastrado com sucesso. ID: {}", usuario.getId());
-        return ResponseEntity.status(HttpStatus.CREATED).body(usuario);
+        try {
+            Usuario usuario = usuarioService.save(dto);
+            log.info("Usuário cadastrado com sucesso. ID: {}", usuario.getId());
+            return ResponseEntity.status(HttpStatus.CREATED).body(
+                    ApiResponse.success("Usuário cadastrado com sucesso", usuario)
+            );
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(
+                    ApiResponse.error(e.getMessage())
+            );
+        }
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Usuario> update(@PathVariable Long id, @Valid @RequestBody UsuarioDTO dto) {
+    public ResponseEntity<ApiResponse<Usuario>> update(@PathVariable Long id, @Valid @RequestBody UsuarioDTO dto) {
         log.info("Atualizando usuário ID: {}", id);
 
-        // O GlobalExceptionHandler cuidará dos erros de validação
-        Usuario usuario = usuarioService.update(id, dto);
-        log.info("Usuário atualizado com sucesso. ID: {}", usuario.getId());
-        return ResponseEntity.ok(usuario);
+        try {
+            Usuario usuario = usuarioService.update(id, dto);
+            log.info("Usuário atualizado com sucesso. ID: {}", usuario.getId());
+            return ResponseEntity.ok(
+                    ApiResponse.success("Usuário atualizado com sucesso", usuario)
+            );
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(
+                    ApiResponse.error(e.getMessage())
+            );
+        }
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
         log.info("Desativando usuário ID: {}", id);
 
-        // O GlobalExceptionHandler cuidará dos erros
-        usuarioService.delete(id);
-        log.info("Usuário desativado com sucesso. ID: {}", id);
-        return ResponseEntity.noContent().build();
+        try {
+            usuarioService.delete(id);
+            log.info("Usuário desativado com sucesso. ID: {}", id);
+            return ResponseEntity.ok(
+                    ApiResponse.success("Usuário desativado com sucesso")
+            );
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(
+                    ApiResponse.error(e.getMessage())
+            );
+        }
     }
 
     @GetMapping("/tipo/{tipo}")
-    public ResponseEntity<List<Usuario>> findByTipo(@PathVariable TipoUsuario tipo) {
+    public ResponseEntity<ApiResponse<List<Usuario>>> findByTipo(@PathVariable TipoUsuario tipo) {
         log.info("Buscando usuários por tipo: {}", tipo);
-        List<Usuario> usuarios = usuarioService.findByTipo(tipo);
-        return ResponseEntity.ok(usuarios);
+        try {
+            List<Usuario> usuarios = usuarioService.findByTipo(tipo);
+            return ResponseEntity.ok(
+                    ApiResponse.success("Usuários encontrados com sucesso", usuarios)
+            );
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(
+                    ApiResponse.error(e.getMessage())
+            );
+        }
     }
 
     @RequestMapping(method = RequestMethod.OPTIONS)
