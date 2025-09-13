@@ -1,9 +1,9 @@
 package br.jus.tjba.aclp.controller;
 
-import br.jus.tjba.aclp.dto.ApiResponse;
 import br.jus.tjba.aclp.dto.ComparecimentoDTO;
 import br.jus.tjba.aclp.model.HistoricoComparecimento;
 import br.jus.tjba.aclp.service.ComparecimentoService;
+import br.jus.tjba.aclp.service.StatusSchedulerService;
 import br.jus.tjba.aclp.util.ApiResponseUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -17,6 +17,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -31,6 +33,7 @@ import java.util.Map;
 public class ComparecimentoController {
 
     private final ComparecimentoService comparecimentoService;
+    private final StatusSchedulerService statusSchedulerService;
 
     @PostMapping
     @Operation(summary = "Registrar comparecimento",
@@ -158,9 +161,22 @@ public class ComparecimentoController {
     public ResponseEntity<Map<String, Object>> verificarStatusInadimplentes() {
         log.info("Executando verificação de status inadimplentes");
 
-        comparecimentoService.verificarStatusInadimplentes();
-        return ApiResponseUtil.success("Processo concluído. Verifique os logs para detalhes.",
-                "Verificação de status inadimplentes executada com sucesso");
+        try {
+            long pessoasMarcadas = statusSchedulerService.verificarStatusManual();
+
+            String mensagem = pessoasMarcadas == 0
+                    ? "Nenhuma pessoa foi marcada como inadimplente"
+                    : String.format("%d pessoa(s) foram marcadas como inadimplentes", pessoasMarcadas);
+
+            Map<String, Object> dados = new HashMap<>();
+            dados.put("pessoasMarcadas", pessoasMarcadas);
+            dados.put("executadoEm", LocalDateTime.now().toString());
+
+            return ApiResponseUtil.success(dados, mensagem);
+        } catch (Exception e) {
+            log.error("Erro na verificação de inadimplentes", e);
+            return ApiResponseUtil.internalServerError("Erro ao verificar inadimplentes: " + e.getMessage());
+        }
     }
 
     @GetMapping("/estatisticas")
@@ -246,5 +262,4 @@ public class ComparecimentoController {
     public ResponseEntity<Void> options() {
         return ResponseEntity.ok().build();
     }
-
 }

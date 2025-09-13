@@ -350,33 +350,6 @@ public class ComparecimentoService {
                 pessoa.getUltimoComparecimento(), pessoa.getProximoComparecimento(), pessoa.getStatus());
     }
 
-    /**
-     * Verifica e atualiza automaticamente status de pessoas inadimplentes
-     */
-    @Transactional
-    public void verificarStatusInadimplentes() {
-        log.info("Verificando status de pessoas inadimplentes");
-
-        LocalDate hoje = LocalDate.now();
-        List<Pessoa> pessoasEmConformidade = pessoaRepository.findByStatus(StatusComparecimento.EM_CONFORMIDADE);
-
-        int contadorInadimplentes = 0;
-
-        for (Pessoa pessoa : pessoasEmConformidade) {
-            if (pessoa.getProximoComparecimento() != null &&
-                    pessoa.getProximoComparecimento().isBefore(hoje)) {
-
-                pessoa.setStatus(StatusComparecimento.INADIMPLENTE);
-                pessoaRepository.save(pessoa);
-                contadorInadimplentes++;
-
-                log.warn("Pessoa marcada como inadimplente - Nome: {}, Próximo comparecimento era: {}",
-                        pessoa.getNome(), pessoa.getProximoComparecimento());
-            }
-        }
-
-        log.info("Verificação concluída - {} pessoas marcadas como inadimplentes", contadorInadimplentes);
-    }
 
     /**
      * Migra pessoas existentes criando seus comparecimentos iniciais
