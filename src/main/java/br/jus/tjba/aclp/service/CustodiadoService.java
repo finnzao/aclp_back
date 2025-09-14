@@ -210,6 +210,43 @@ public class CustodiadoService {
         return custodiadoRepository.buscarPorNomeOuProcesso(termoLimpo, termoLimpo);
     }
 
+    /**
+     * Busca endereço atual de um custodiado usando repository específico
+     * Evita lazy loading dos relacionamentos
+     */
+    public String getEnderecoCompleto(Long custodiadoId) {
+        Optional<HistoricoEndereco> enderecoAtivo =
+                historicoEnderecoRepository.findEnderecoAtivoPorCustodiado(custodiadoId);
+
+        return enderecoAtivo.map(HistoricoEndereco::getEnderecoCompleto)
+                .orElse("Endereço não informado");
+    }
+
+    /**
+     * Busca endereço resumido de um custodiado usando repository específico
+     */
+    public String getEnderecoResumido(Long custodiadoId) {
+        Optional<HistoricoEndereco> enderecoAtivo =
+                historicoEnderecoRepository.findEnderecoAtivoPorCustodiado(custodiadoId);
+
+        return enderecoAtivo.map(HistoricoEndereco::getEnderecoResumido)
+                .orElse("Sem endereço");
+    }
+
+    /**
+     * Busca cidade e estado de um custodiado
+     */
+    public String getCidadeEstado(Long custodiadoId) {
+        Optional<HistoricoEndereco> enderecoAtivo =
+                historicoEnderecoRepository.findEnderecoAtivoPorCustodiado(custodiadoId);
+
+        if (enderecoAtivo.isPresent()) {
+            HistoricoEndereco endereco = enderecoAtivo.get();
+            return endereco.getCidade() + " - " + endereco.getEstado();
+        }
+        return "Não informado";
+    }
+
     // Método para criar histórico de endereço inicial
     private void criarHistoricoEnderecoInicial(Custodiado custodiado, CustodiadoDTO dto) {
         HistoricoEndereco enderecoInicial = HistoricoEndereco.builder()

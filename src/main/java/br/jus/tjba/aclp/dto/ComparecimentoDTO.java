@@ -22,10 +22,6 @@ public class ComparecimentoDTO {
 
     private Long custodiadoId;
 
-    public Long getCustodiadoId() {
-        return custodiadoId;
-    }
-
     public void setCustodiadoId(Long custodiadoId) {
         this.custodiadoId = custodiadoId;
     }

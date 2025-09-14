@@ -1,6 +1,7 @@
 package br.jus.tjba.aclp.model;
 
 import br.jus.tjba.aclp.model.enums.EstadoBrasil;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
@@ -103,6 +104,7 @@ public class HistoricoEndereco {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "historico_comparecimento_id",
             foreignKey = @ForeignKey(name = "fk_historico_endereco_comparecimento"))
+    @JsonIgnore // ✅ CORREÇÃO: Evita referência circular com HistoricoComparecimento
     private HistoricoComparecimento historicoComparecimento;
 
     // Auditoria
@@ -268,6 +270,27 @@ public class HistoricoEndereco {
     public void finalizarEndereco(LocalDate dataFim) {
         this.dataFim = dataFim;
         this.ativo = Boolean.FALSE;
+    }
+
+    /**
+     * Método auxiliar para obter ID do comparecimento sem causar lazy loading
+     * Usado quando precisamos saber se o endereço está vinculado a um comparecimento
+     *
+     * @return ID do comparecimento ou null se não vinculado
+     */
+    public Long getHistoricoComparecimentoId() {
+        // Como o campo historicoComparecimento tem @JsonIgnore,
+        // podemos acessar apenas o ID sem causar problemas de serialização
+        return historicoComparecimento != null ? historicoComparecimento.getId() : null;
+    }
+
+    /**
+     * Verifica se este endereço foi criado durante um comparecimento
+     *
+     * @return true se foi uma mudança durante comparecimento
+     */
+    public boolean isMudancaDuranteComparecimento() {
+        return historicoComparecimento != null;
     }
 
     @Override

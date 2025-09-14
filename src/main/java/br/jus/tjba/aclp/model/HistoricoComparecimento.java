@@ -1,6 +1,8 @@
 package br.jus.tjba.aclp.model;
 
 import br.jus.tjba.aclp.model.enums.TipoValidacao;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -39,7 +41,20 @@ public class HistoricoComparecimento {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "custodiado_id", nullable = false,
             foreignKey = @ForeignKey(name = "fk_historico_custodiado"))
+    @JsonIgnore // Ignora o objeto custodiado completo
     private Custodiado custodiado;
+
+    // Adiciona apenas o ID do custodiado no JSON
+    @JsonProperty("custodiadoId")
+    public Long getCustodiadoId() {
+        return custodiado != null ? custodiado.getId() : null;
+    }
+
+    // Adiciona o nome do custodiado no JSON
+    @JsonProperty("custodiadoNome")
+    public String getCustodiadoNome() {
+        return custodiado != null ? custodiado.getNome() : null;
+    }
 
     @NotNull(message = "Data do comparecimento é obrigatória")
     @Column(name = "data_comparecimento", nullable = false)
@@ -74,9 +89,10 @@ public class HistoricoComparecimento {
     @Column(name = "motivo_mudanca_endereco", length = 500)
     private String motivoMudancaEndereco;
 
-    // Relacionamentos
+    // Relacionamentos - também ignorados para evitar ciclos
     @OneToMany(mappedBy = "historicoComparecimento", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @Builder.Default
+    @JsonIgnore // Ignora na serialização JSON
     private List<HistoricoEndereco> enderecosAlterados = new ArrayList<>();
 
     // Auditoria
@@ -228,14 +244,11 @@ public class HistoricoComparecimento {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         HistoricoComparecimento that = (HistoricoComparecimento) o;
-        return Objects.equals(custodiado, that.custodiado) &&
-                Objects.equals(dataComparecimento, that.dataComparecimento) &&
-                Objects.equals(horaComparecimento, that.horaComparecimento) &&
-                Objects.equals(tipoValidacao, that.tipoValidacao);
+        return Objects.equals(id, that.id);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(custodiado, dataComparecimento, horaComparecimento, tipoValidacao);
+        return Objects.hash(id);
     }
 }

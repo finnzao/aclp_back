@@ -1,6 +1,7 @@
 package br.jus.tjba.aclp.model;
 
 import br.jus.tjba.aclp.model.enums.StatusComparecimento;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
@@ -115,15 +116,17 @@ public class Custodiado {
     @Builder.Default
     private Long version = 0L;
 
-    // Relacionamentos
+    // Relacionamentos - IGNORAR na serialização JSON para evitar referências circulares
     @OneToMany(mappedBy = "custodiado", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @OrderBy("dataComparecimento DESC")
     @Builder.Default
+    @JsonIgnore // IMPORTANTE: Ignora na serialização JSON
     private List<HistoricoComparecimento> historicoComparecimentos = new ArrayList<>();
 
     @OneToMany(mappedBy = "custodiado", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @OrderBy("dataInicio DESC")
     @Builder.Default
+    @JsonIgnore // IMPORTANTE: Ignora na serialização JSON
     private List<HistoricoEndereco> historicoEnderecos = new ArrayList<>();
 
     // Validações
@@ -219,33 +222,92 @@ public class Custodiado {
                 !proximoComparecimento.isAfter(limite);
     }
 
-    // Métodos para endereço
+    // Métodos para endereço - SEM carregar relacionamentos automaticamente
     public HistoricoEndereco getEnderecoAtual() {
+        // Não acessa a lista diretamente para evitar lazy loading
+        // Este método deve ser usado apenas quando a lista já foi carregada
         return historicoEnderecos.stream()
                 .filter(HistoricoEndereco::isEnderecoAtivo)
                 .findFirst()
                 .orElse(null);
     }
 
-    public String getEnderecoCompleto() {
-        HistoricoEndereco enderecoAtual = getEnderecoAtual();
-        return enderecoAtual != null ? enderecoAtual.getEnderecoCompleto() : "Endereço não informado";
-    }
-
+    /**
+     * Retorna o endereço atual em formato resumido.
+     * Evita lazy loading ao verificar se a lista já foi inicializada.
+     *
+     * @return String com endereço resumido ou mensagem padrão
+     */
     public String getEnderecoResumido() {
-        HistoricoEndereco enderecoAtual = getEnderecoAtual();
-        return enderecoAtual != null ? enderecoAtual.getEnderecoResumido() : "Sem endereço";
+        // Verificar se a lista de endereços foi inicializada para evitar lazy loading
+        if (historicoEnderecos == null || historicoEnderecos.isEmpty()) {
+            return "Endereço não carregado";
+        }
+
+        // Buscar endereço ativo
+        HistoricoEndereco enderecoAtivo = historicoEnderecos.stream()
+                .filter(HistoricoEndereco::isEnderecoAtivo)
+                .findFirst()
+                .orElse(null);
+
+        if (enderecoAtivo != null) {
+            return enderecoAtivo.getEnderecoResumido();
+        }
+
+        return "Sem endereço ativo";
     }
 
-    public String getCidadeEstado() {
-        HistoricoEndereco enderecoAtual = getEnderecoAtual();
-        if (enderecoAtual != null) {
-            return enderecoAtual.getCidade() + " - " + enderecoAtual.getEstado();
+    /**
+     * Retorna o endereço completo atual.
+     * Evita lazy loading ao verificar se a lista já foi inicializada.
+     *
+     * @return String com endereço completo ou mensagem padrão
+     */
+    public String getEnderecoCompleto() {
+        // Verificar se a lista de endereços foi inicializada para evitar lazy loading
+        if (historicoEnderecos == null || historicoEnderecos.isEmpty()) {
+            return "Endereço não informado";
         }
+
+        // Buscar endereço ativo
+        HistoricoEndereco enderecoAtivo = historicoEnderecos.stream()
+                .filter(HistoricoEndereco::isEnderecoAtivo)
+                .findFirst()
+                .orElse(null);
+
+        if (enderecoAtivo != null) {
+            return enderecoAtivo.getEnderecoCompleto();
+        }
+
+        return "Endereço não informado";
+    }
+
+    /**
+     * Retorna cidade e estado do endereço atual.
+     * Evita lazy loading ao verificar se a lista já foi inicializada.
+     *
+     * @return String no formato "Cidade - Estado" ou mensagem padrão
+     */
+    public String getCidadeEstado() {
+        // Verificar se a lista de endereços foi inicializada para evitar lazy loading
+        if (historicoEnderecos == null || historicoEnderecos.isEmpty()) {
+            return "Não informado";
+        }
+
+        // Buscar endereço ativo
+        HistoricoEndereco enderecoAtivo = historicoEnderecos.stream()
+                .filter(HistoricoEndereco::isEnderecoAtivo)
+                .findFirst()
+                .orElse(null);
+
+        if (enderecoAtivo != null) {
+            return enderecoAtivo.getCidade() + " - " + enderecoAtivo.getEstado();
+        }
+
         return "Não informado";
     }
 
-    // Métodos auxiliares
+    // Métodos auxiliares que NÃO dependem dos relacionamentos
     public String getIdentificacao() {
         if (cpf != null && !cpf.trim().isEmpty()) {
             return "CPF: " + cpf;
@@ -283,10 +345,9 @@ public class Custodiado {
     }
 
     public String getResumo() {
-        return String.format("%s - %s - %s",
+        return String.format("%s - %s",
                 nome,
-                getIdentificacao(),
-                getCidadeEstado());
+                getIdentificacao());
     }
 
     @Override
