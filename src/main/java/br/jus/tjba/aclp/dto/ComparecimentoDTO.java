@@ -20,10 +20,15 @@ import java.time.LocalTime;
 @Builder
 public class ComparecimentoDTO {
 
-    private Long id;
+    private Long custodiadoId;
 
-    @NotNull(message = "ID da pessoa é obrigatório")
-    private Long pessoaId;
+    public Long getCustodiadoId() {
+        return custodiadoId;
+    }
+
+    public void setCustodiadoId(Long custodiadoId) {
+        this.custodiadoId = custodiadoId;
+    }
 
     @NotNull(message = "Data do comparecimento é obrigatória")
     private LocalDate dataComparecimento;
@@ -63,7 +68,7 @@ public class ComparecimentoDTO {
     }
 
     public boolean isComparecimentoValido() {
-        return pessoaId != null &&
+        return custodiadoId != null &&
                 dataComparecimento != null &&
                 tipoValidacao != null &&
                 validadoPor != null && !validadoPor.trim().isEmpty();

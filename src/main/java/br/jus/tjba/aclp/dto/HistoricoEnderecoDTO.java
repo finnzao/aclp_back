@@ -160,7 +160,7 @@ public class HistoricoEnderecoDTO {
         private String cidade;
         private String estado;
         private String regiao;
-        private Long totalPessoas;
+        private Long totalCustodidos;
         private Long totalEnderecos;
         private Double mediaDiasResidencia;
     }

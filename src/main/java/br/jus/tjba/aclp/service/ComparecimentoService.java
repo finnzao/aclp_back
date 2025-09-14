@@ -13,10 +13,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -134,6 +134,386 @@ public class ComparecimentoService {
     }
 
     /**
+     * Busca estatísticas de comparecimentos por período
+     */
+    @Transactional(readOnly = true)
+    public EstatisticasComparecimento buscarEstatisticas(LocalDate inicio, LocalDate fim) {
+        log.info("Buscando estatísticas de comparecimentos: {} a {}", inicio, fim);
+
+        List<HistoricoComparecimento> comparecimentos =
+                historicoComparecimentoRepository.findByDataComparecimentoBetween(inicio, fim);
+
+        long totalComparecimentos = comparecimentos.size();
+        long comparecimentosPresenciais = comparecimentos.stream()
+                .filter(h -> h.getTipoValidacao() == TipoValidacao.PRESENCIAL)
+                .count();
+        long comparecimentosOnline = comparecimentos.stream()
+                .filter(h -> h.getTipoValidacao() == TipoValidacao.ONLINE)
+                .count();
+        long cadastrosIniciais = comparecimentos.stream()
+                .filter(h -> h.getTipoValidacao() == TipoValidacao.CADASTRO_INICIAL)
+                .count();
+        long mudancasEndereco = comparecimentos.stream()
+                .filter(HistoricoComparecimento::houveMudancaEndereco)
+                .count();
+
+        return EstatisticasComparecimento.builder()
+                .periodo(inicio + " a " + fim)
+                .totalComparecimentos(totalComparecimentos)
+                .comparecimentosPresenciais(comparecimentosPresenciais)
+                .comparecimentosOnline(comparecimentosOnline)
+                .cadastrosIniciais(cadastrosIniciais)
+                .mudancasEndereco(mudancasEndereco)
+                .percentualPresencial(totalComparecimentos > 0 ?
+                        (double) comparecimentosPresenciais / totalComparecimentos * 100 : 0.0)
+                .percentualOnline(totalComparecimentos > 0 ?
+                        (double) comparecimentosOnline / totalComparecimentos * 100 : 0.0)
+                .build();
+    }
+
+    /**
+     * Busca estatísticas gerais de todos os comparecimentos
+     */
+    @Transactional(readOnly = true)
+    public EstatisticasGerais buscarEstatisticasGerais() {
+        log.info("Buscando estatísticas gerais de comparecimentos");
+
+        // Total de comparecimentos
+        long totalComparecimentos = historicoComparecimentoRepository.count();
+
+        // Comparecimentos por tipo
+        List<HistoricoComparecimento> todosComparecimentos = historicoComparecimentoRepository.findAll();
+
+        long comparecimentosPresenciais = todosComparecimentos.stream()
+                .filter(h -> h.getTipoValidacao() == TipoValidacao.PRESENCIAL)
+                .count();
+        long comparecimentosOnline = todosComparecimentos.stream()
+                .filter(h -> h.getTipoValidacao() == TipoValidacao.ONLINE)
+                .count();
+        long cadastrosIniciais = todosComparecimentos.stream()
+                .filter(h -> h.getTipoValidacao() == TipoValidacao.CADASTRO_INICIAL)
+                .count();
+
+        // Mudanças de endereço
+        long totalMudancasEndereco = todosComparecimentos.stream()
+                .filter(HistoricoComparecimento::houveMudancaEndereco)
+                .count();
+
+        // Comparecimentos hoje
+        long comparecimentosHoje = historicoComparecimentoRepository
+                .findByDataComparecimento(LocalDate.now()).size();
+
+        // Comparecimentos este mês
+        LocalDate inicioMes = LocalDate.now().withDayOfMonth(1);
+        LocalDate fimMes = LocalDate.now();
+        long comparecimentosEsteMes = historicoComparecimentoRepository
+                .findByDataComparecimentoBetween(inicioMes, fimMes).size();
+
+        // Custodiados únicos com comparecimento
+        long custodiadosComComparecimento = todosComparecimentos.stream()
+                .map(h -> h.getCustodiado().getId())
+                .distinct()
+                .count();
+
+        return EstatisticasGerais.builder()
+                .totalComparecimentos(totalComparecimentos)
+                .comparecimentosPresenciais(comparecimentosPresenciais)
+                .comparecimentosOnline(comparecimentosOnline)
+                .cadastrosIniciais(cadastrosIniciais)
+                .totalMudancasEndereco(totalMudancasEndereco)
+                .comparecimentosHoje(comparecimentosHoje)
+                .comparecimentosEsteMes(comparecimentosEsteMes)
+                .custodiadosComComparecimento(custodiadosComComparecimento)
+                .percentualPresencial(totalComparecimentos > 0 ?
+                        (double) comparecimentosPresenciais / totalComparecimentos * 100 : 0.0)
+                .percentualOnline(totalComparecimentos > 0 ?
+                        (double) comparecimentosOnline / totalComparecimentos * 100 : 0.0)
+                .mediaComparecimentosPorCustodiado(custodiadosComComparecimento > 0 ?
+                        (double) totalComparecimentos / custodiadosComComparecimento : 0.0)
+                .build();
+    }
+
+    /**
+     * Busca resumo completo do sistema com análises avançadas
+     */
+    @Transactional(readOnly = true)
+    public ResumoSistema buscarResumoSistema() {
+        log.info("Buscando resumo completo do sistema com análises avançadas");
+
+        LocalDate hoje = LocalDate.now();
+
+        // === DADOS BÁSICOS ===
+
+        // Totais de custodiados
+        long totalCustodiados = custodiadoRepository.count();
+        long custodiadosEmConformidade = custodiadoRepository.countByStatus(StatusComparecimento.EM_CONFORMIDADE);
+        long custodiadosInadimplentes = custodiadoRepository.countByStatus(StatusComparecimento.INADIMPLENTE);
+
+        // Custodiados com comparecimento hoje
+        long comparecimentosHoje = custodiadoRepository.findComparecimentosHoje().size();
+
+        // Total de comparecimentos
+        long totalComparecimentos = historicoComparecimentoRepository.count();
+
+        // Comparecimentos este mês
+        LocalDate inicioMes = hoje.withDayOfMonth(1);
+        long comparecimentosEsteMes = historicoComparecimentoRepository
+                .findByDataComparecimentoBetween(inicioMes, hoje).size();
+
+        // Mudanças de endereço
+        long totalMudancasEndereco = historicoComparecimentoRepository
+                .findByMudancaEnderecoTrue().size();
+
+        // Endereços ativos
+        long enderecosAtivos = historicoEnderecoRepository.findAllEnderecosAtivos().size();
+
+        // Custodiados sem histórico
+        long custodiadosSemHistorico = custodiadoRepository.findCustodiadosSemHistorico().size();
+
+        // Custodiados sem endereço ativo
+        long custodiadosSemEnderecoAtivo = historicoEnderecoRepository.countCustodiadosSemEnderecoAtivo();
+
+        // Percentuais básicos
+        double percentualConformidade = totalCustodiados > 0 ?
+                (double) custodiadosEmConformidade / totalCustodiados * 100 : 0.0;
+        double percentualInadimplencia = totalCustodiados > 0 ?
+                (double) custodiadosInadimplentes / totalCustodiados * 100 : 0.0;
+
+        // === NOVOS DADOS SOLICITADOS ===
+
+        // 1. Relatório dos últimos 6 meses
+        RelatorioUltimosMeses relatorioMeses = calcularRelatorioUltimosMeses(6);
+
+        // 2. Tendência de conformidade (últimos 6 meses)
+        List<TendenciaMensal> tendenciaConformidade = calcularTendenciaConformidade(6);
+
+        // 3. Comparecimentos próximos 7 dias
+        ProximosComparecimentos proximosComparecimentos = calcularProximosComparecimentos(7);
+
+        // 4. Análises adicionais
+        AnaliseComparecimentos analiseComparecimentos = calcularAnaliseComparecimentos();
+
+        return ResumoSistema.builder()
+                // Dados básicos
+                .totalCustodiados(totalCustodiados)
+                .custodiadosEmConformidade(custodiadosEmConformidade)
+                .custodiadosInadimplentes(custodiadosInadimplentes)
+                .comparecimentosHoje(comparecimentosHoje)
+                .totalComparecimentos(totalComparecimentos)
+                .comparecimentosEsteMes(comparecimentosEsteMes)
+                .totalMudancasEndereco(totalMudancasEndereco)
+                .enderecosAtivos(enderecosAtivos)
+                .custodiadosSemHistorico(custodiadosSemHistorico)
+                .custodiadosSemEnderecoAtivo(custodiadosSemEnderecoAtivo)
+                .percentualConformidade(percentualConformidade)
+                .percentualInadimplencia(percentualInadimplencia)
+                .dataConsulta(hoje)
+                // Novos dados
+                .relatorioUltimosMeses(relatorioMeses)
+                .tendenciaConformidade(tendenciaConformidade)
+                .proximosComparecimentos(proximosComparecimentos)
+                .analiseComparecimentos(analiseComparecimentos)
+                .build();
+    }
+
+    /**
+     * Calcula relatório dos últimos N meses
+     */
+    private RelatorioUltimosMeses calcularRelatorioUltimosMeses(int meses) {
+        LocalDate hoje = LocalDate.now();
+        LocalDate inicioPeríodo = hoje.minusMonths(meses).withDayOfMonth(1);
+
+        List<HistoricoComparecimento> comparecimentosPeriodo =
+                historicoComparecimentoRepository.findByDataComparecimentoBetween(inicioPeríodo, hoje);
+
+        long totalComparecimentosPeriodo = comparecimentosPeriodo.size();
+        long comparecimentosPresenciais = comparecimentosPeriodo.stream()
+                .filter(h -> h.getTipoValidacao() == TipoValidacao.PRESENCIAL)
+                .count();
+        long comparecimentosOnline = comparecimentosPeriodo.stream()
+                .filter(h -> h.getTipoValidacao() == TipoValidacao.ONLINE)
+                .count();
+        long mudancasEnderecoPeriodo = comparecimentosPeriodo.stream()
+                .filter(HistoricoComparecimento::houveMudancaEndereco)
+                .count();
+
+        // Calcular média mensal
+        double mediaComparecimentosMensal = totalComparecimentosPeriodo / (double) meses;
+
+        return RelatorioUltimosMeses.builder()
+                .mesesAnalisados(meses)
+                .periodoInicio(inicioPeríodo)
+                .periodoFim(hoje)
+                .totalComparecimentos(totalComparecimentosPeriodo)
+                .comparecimentosPresenciais(comparecimentosPresenciais)
+                .comparecimentosOnline(comparecimentosOnline)
+                .mudancasEndereco(mudancasEnderecoPeriodo)
+                .mediaComparecimentosMensal(mediaComparecimentosMensal)
+                .percentualPresencial(totalComparecimentosPeriodo > 0 ?
+                        (double) comparecimentosPresenciais / totalComparecimentosPeriodo * 100 : 0.0)
+                .percentualOnline(totalComparecimentosPeriodo > 0 ?
+                        (double) comparecimentosOnline / totalComparecimentosPeriodo * 100 : 0.0)
+                .build();
+    }
+
+    /**
+     * Calcula tendência de conformidade mensal
+     */
+    private List<TendenciaMensal> calcularTendenciaConformidade(int meses) {
+        List<TendenciaMensal> tendencias = new ArrayList<>();
+        LocalDate hoje = LocalDate.now();
+
+        for (int i = meses - 1; i >= 0; i--) {
+            YearMonth mesAnalise = YearMonth.now().minusMonths(i);
+            LocalDate inicioMes = mesAnalise.atDay(1);
+            LocalDate fimMes = mesAnalise.atEndOfMonth();
+
+            // Se o mês é o atual, usar até hoje
+            if (mesAnalise.equals(YearMonth.now())) {
+                fimMes = hoje;
+            }
+
+            // Buscar snapshot do status no final do mês
+            long totalCustodiadosNoMes = custodiadoRepository.count(); // Simplificado
+
+            // Contar custodiados em conformidade baseado em comparecimentos do mês
+            List<HistoricoComparecimento> comparecimentosMes =
+                    historicoComparecimentoRepository.findByDataComparecimentoBetween(inicioMes, fimMes);
+
+            Set<Long> custodiadosQueCompareceram = comparecimentosMes.stream()
+                    .map(h -> h.getCustodiado().getId())
+                    .collect(Collectors.toSet());
+
+            long emConformidade = custodiadosQueCompareceram.size();
+            long inadimplentes = totalCustodiadosNoMes - emConformidade;
+
+            double taxaConformidade = totalCustodiadosNoMes > 0 ?
+                    (double) emConformidade / totalCustodiadosNoMes * 100 : 0.0;
+            double taxaInadimplencia = totalCustodiadosNoMes > 0 ?
+                    (double) inadimplentes / totalCustodiadosNoMes * 100 : 0.0;
+
+            tendencias.add(TendenciaMensal.builder()
+                    .mes(mesAnalise.format(DateTimeFormatter.ofPattern("yyyy-MM")))
+                    .mesNome(mesAnalise.format(DateTimeFormatter.ofPattern("MMMM/yyyy", new Locale("pt", "BR"))))
+                    .totalCustodiados(totalCustodiadosNoMes)
+                    .emConformidade(emConformidade)
+                    .inadimplentes(inadimplentes)
+                    .taxaConformidade(taxaConformidade)
+                    .taxaInadimplencia(taxaInadimplencia)
+                    .totalComparecimentos((long) comparecimentosMes.size())
+                    .build());
+        }
+
+        return tendencias;
+    }
+
+    /**
+     * Calcula comparecimentos previstos para os próximos dias
+     */
+    private ProximosComparecimentos calcularProximosComparecimentos(int dias) {
+        LocalDate hoje = LocalDate.now();
+        LocalDate dataLimite = hoje.plusDays(dias);
+
+        List<Custodiado> custodiadosComComparecimento =
+                custodiadoRepository.findByProximoComparecimentoBetween(hoje, dataLimite);
+
+        // Agrupar por data
+        Map<LocalDate, List<Custodiado>> comparecimentosPorDia = new TreeMap<>();
+        for (Custodiado custodiado : custodiadosComComparecimento) {
+            LocalDate dataComparecimento = custodiado.getProximoComparecimento();
+            comparecimentosPorDia.computeIfAbsent(dataComparecimento, k -> new ArrayList<>()).add(custodiado);
+        }
+
+        // Criar lista de detalhes por dia
+        List<ComparecimentoDiario> detalhesPorDia = new ArrayList<>();
+        for (Map.Entry<LocalDate, List<Custodiado>> entry : comparecimentosPorDia.entrySet()) {
+            LocalDate data = entry.getKey();
+            List<Custodiado> custodiados = entry.getValue();
+
+            detalhesPorDia.add(ComparecimentoDiario.builder()
+                    .data(data)
+                    .diaSemana(data.format(DateTimeFormatter.ofPattern("EEEE", new Locale("pt", "BR"))))
+                    .totalPrevisto(custodiados.size())
+                    .custodiados(custodiados.stream()
+                            .map(c -> DetalheCustodiado.builder()
+                                    .id(c.getId())
+                                    .nome(c.getNome())
+                                    .processo(c.getProcesso())
+                                    .periodicidade(c.getPeriodicidadeDescricao())
+                                    .diasAtraso(c.getDiasAtraso())
+                                    .build())
+                            .collect(Collectors.toList()))
+                    .build());
+        }
+
+        // Identificar custodiados em atraso que deveriam comparecer
+        List<Custodiado> custodiadosAtrasados = custodiadoRepository.findByProximoComparecimentoBefore(hoje);
+
+        return ProximosComparecimentos.builder()
+                .diasAnalisados(dias)
+                .totalPrevistoProximosDias(custodiadosComComparecimento.size())
+                .totalAtrasados(custodiadosAtrasados.size())
+                .comparecimentosHoje(comparecimentosPorDia.getOrDefault(hoje, new ArrayList<>()).size())
+                .comparecimentosAmanha(comparecimentosPorDia.getOrDefault(hoje.plusDays(1), new ArrayList<>()).size())
+                .detalhesPorDia(detalhesPorDia)
+                .custodiadosAtrasados(custodiadosAtrasados.stream()
+                        .limit(10) // Limitar para não ficar muito grande
+                        .map(c -> DetalheCustodiado.builder()
+                                .id(c.getId())
+                                .nome(c.getNome())
+                                .processo(c.getProcesso())
+                                .periodicidade(c.getPeriodicidadeDescricao())
+                                .diasAtraso(c.getDiasAtraso())
+                                .build())
+                        .collect(Collectors.toList()))
+                .build();
+    }
+
+    /**
+     * Calcula análises adicionais de comparecimentos
+     */
+    private AnaliseComparecimentos calcularAnaliseComparecimentos() {
+        LocalDate hoje = LocalDate.now();
+
+        // Taxa de comparecimento online vs presencial nos últimos 30 dias
+        LocalDate inicio30Dias = hoje.minusDays(30);
+        List<HistoricoComparecimento> comparecimentos30Dias =
+                historicoComparecimentoRepository.findByDataComparecimentoBetween(inicio30Dias, hoje);
+
+        long online30 = comparecimentos30Dias.stream()
+                .filter(h -> h.getTipoValidacao() == TipoValidacao.ONLINE)
+                .count();
+        long presencial30 = comparecimentos30Dias.stream()
+                .filter(h -> h.getTipoValidacao() == TipoValidacao.PRESENCIAL)
+                .count();
+
+        // Picos de comparecimento (dias da semana com mais comparecimentos)
+        Map<String, Long> comparecimentosPorDiaSemana = comparecimentos30Dias.stream()
+                .collect(Collectors.groupingBy(
+                        h -> h.getDataComparecimento().getDayOfWeek().toString(),
+                        Collectors.counting()
+                ));
+
+        // Horários mais comuns (se houver registro de hora)
+        Map<Integer, Long> comparecimentosPorHora = comparecimentos30Dias.stream()
+                .filter(h -> h.getHoraComparecimento() != null)
+                .collect(Collectors.groupingBy(
+                        h -> h.getHoraComparecimento().getHour(),
+                        Collectors.counting()
+                ));
+
+        return AnaliseComparecimentos.builder()
+                .comparecimentosUltimos30Dias(comparecimentos30Dias.size())
+                .comparecimentosOnlineUltimos30Dias(online30)
+                .comparecimentosPresenciaisUltimos30Dias(presencial30)
+                .taxaOnlineUltimos30Dias(comparecimentos30Dias.size() > 0 ?
+                        (double) online30 / comparecimentos30Dias.size() * 100 : 0.0)
+                .comparecimentosPorDiaSemana(comparecimentosPorDiaSemana)
+                .comparecimentosPorHora(comparecimentosPorHora)
+                .build();
+    }
+
+    /**
      * Migra custodiados existentes criando seus comparecimentos iniciais
      */
     @Transactional
@@ -210,7 +590,7 @@ public class ComparecimentoService {
 
     private void validarComparecimento(ComparecimentoDTO dto) {
         // Validar dados básicos
-        if (dto.getPessoaId() == null || dto.getPessoaId() <= 0) {
+        if (dto.getCustodiadoId() == null || dto.getCustodiadoId() <= 0) {
             throw new IllegalArgumentException("ID do custodiado deve ser um número positivo");
         }
 
@@ -248,7 +628,7 @@ public class ComparecimentoService {
     private void validarDuplicidadeComparecimento(ComparecimentoDTO dto) {
         List<HistoricoComparecimento> comparecimentosMesmaData =
                 historicoComparecimentoRepository.findByCustodiadoIdAndDataComparecimento(
-                        dto.getPessoaId(), dto.getDataComparecimento());
+                        dto.getCustodiadoId(), dto.getDataComparecimento());
 
         if (!comparecimentosMesmaData.isEmpty()) {
             // Permitir apenas se for cadastro inicial
@@ -349,46 +729,10 @@ public class ComparecimentoService {
                 custodiado.getUltimoComparecimento(), custodiado.getProximoComparecimento(), custodiado.getStatus());
     }
 
-    /**
-     * Busca estatísticas de comparecimentos
-     */
-    @Transactional(readOnly = true)
-    public EstatisticasComparecimento buscarEstatisticas(LocalDate inicio, LocalDate fim) {
-        log.info("Buscando estatísticas de comparecimentos: {} a {}", inicio, fim);
-
-        List<HistoricoComparecimento> comparecimentos =
-                historicoComparecimentoRepository.findByDataComparecimentoBetween(inicio, fim);
-
-        long totalComparecimentos = comparecimentos.size();
-        long comparecimentosPresenciais = comparecimentos.stream()
-                .filter(h -> h.getTipoValidacao() == TipoValidacao.PRESENCIAL)
-                .count();
-        long comparecimentosOnline = comparecimentos.stream()
-                .filter(h -> h.getTipoValidacao() == TipoValidacao.ONLINE)
-                .count();
-        long cadastrosIniciais = comparecimentos.stream()
-                .filter(h -> h.getTipoValidacao() == TipoValidacao.CADASTRO_INICIAL)
-                .count();
-        long mudancasEndereco = comparecimentos.stream()
-                .filter(HistoricoComparecimento::houveMudancaEndereco)
-                .count();
-
-        return EstatisticasComparecimento.builder()
-                .periodo(inicio + " a " + fim)
-                .totalComparecimentos(totalComparecimentos)
-                .comparecimentosPresenciais(comparecimentosPresenciais)
-                .comparecimentosOnline(comparecimentosOnline)
-                .cadastrosIniciais(cadastrosIniciais)
-                .mudancasEndereco(mudancasEndereco)
-                .percentualPresencial(totalComparecimentos > 0 ?
-                        (double) comparecimentosPresenciais / totalComparecimentos * 100 : 0.0)
-                .percentualOnline(totalComparecimentos > 0 ?
-                        (double) comparecimentosOnline / totalComparecimentos * 100 : 0.0)
-                .build();
-    }
+    // ========== CLASSES INTERNAS - DTOs ==========
 
     /**
-     * DTO para estatísticas de comparecimentos
+     * DTO para estatísticas de comparecimentos por período
      */
     @lombok.Data
     @lombok.Builder
@@ -401,5 +745,140 @@ public class ComparecimentoService {
         private long mudancasEndereco;
         private double percentualPresencial;
         private double percentualOnline;
+    }
+
+    /**
+     * DTO para estatísticas gerais do sistema
+     */
+    @lombok.Data
+    @lombok.Builder
+    public static class EstatisticasGerais {
+        private long totalComparecimentos;
+        private long comparecimentosPresenciais;
+        private long comparecimentosOnline;
+        private long cadastrosIniciais;
+        private long totalMudancasEndereco;
+        private long comparecimentosHoje;
+        private long comparecimentosEsteMes;
+        private long custodiadosComComparecimento;
+        private double percentualPresencial;
+        private double percentualOnline;
+        private double mediaComparecimentosPorCustodiado;
+    }
+
+    /**
+     * DTO para resumo completo do sistema
+     */
+    @lombok.Data
+    @lombok.Builder
+    public static class ResumoSistema {
+        // Dados básicos
+        private long totalCustodiados;
+        private long custodiadosEmConformidade;
+        private long custodiadosInadimplentes;
+        private long comparecimentosHoje;
+        private long totalComparecimentos;
+        private long comparecimentosEsteMes;
+        private long totalMudancasEndereco;
+        private long enderecosAtivos;
+        private long custodiadosSemHistorico;
+        private long custodiadosSemEnderecoAtivo;
+        private double percentualConformidade;
+        private double percentualInadimplencia;
+        private LocalDate dataConsulta;
+
+        // Novos dados
+        private RelatorioUltimosMeses relatorioUltimosMeses;
+        private List<TendenciaMensal> tendenciaConformidade;
+        private ProximosComparecimentos proximosComparecimentos;
+        private AnaliseComparecimentos analiseComparecimentos;
+    }
+
+    /**
+     * DTO para relatório dos últimos meses
+     */
+    @lombok.Data
+    @lombok.Builder
+    public static class RelatorioUltimosMeses {
+        private int mesesAnalisados;
+        private LocalDate periodoInicio;
+        private LocalDate periodoFim;
+        private long totalComparecimentos;
+        private long comparecimentosPresenciais;
+        private long comparecimentosOnline;
+        private long mudancasEndereco;
+        private double mediaComparecimentosMensal;
+        private double percentualPresencial;
+        private double percentualOnline;
+    }
+
+    /**
+     * DTO para tendência mensal
+     */
+    @lombok.Data
+    @lombok.Builder
+    public static class TendenciaMensal {
+        private String mes; // formato: yyyy-MM
+        private String mesNome; // formato: "Janeiro/2024"
+        private long totalCustodiados;
+        private long emConformidade;
+        private long inadimplentes;
+        private double taxaConformidade;
+        private double taxaInadimplencia;
+        private long totalComparecimentos;
+    }
+
+    /**
+     * DTO para próximos comparecimentos
+     */
+    @lombok.Data
+    @lombok.Builder
+    public static class ProximosComparecimentos {
+        private int diasAnalisados;
+        private long totalPrevistoProximosDias;
+        private long totalAtrasados;
+        private long comparecimentosHoje;
+        private long comparecimentosAmanha;
+        private List<ComparecimentoDiario> detalhesPorDia;
+        private List<DetalheCustodiado> custodiadosAtrasados;
+    }
+
+    /**
+     * DTO para comparecimentos diários
+     */
+    @lombok.Data
+    @lombok.Builder
+    public static class ComparecimentoDiario {
+        private LocalDate data;
+        private String diaSemana;
+        private int totalPrevisto;
+        private List<DetalheCustodiado> custodiados;
+    }
+
+    /**
+     * DTO para detalhe de custodiado
+     */
+    @lombok.Data
+    @lombok.Builder
+    public static class DetalheCustodiado {
+        private Long id;
+        private String nome;
+        private String processo;
+        private String periodicidade;
+        private long diasAtraso;
+    }
+
+    /**
+     * DTO para análise de comparecimentos
+     */
+    @lombok.Data
+    @lombok.Builder
+    public static class AnaliseComparecimentos {
+        private long comparecimentosUltimos30Dias;
+        private long comparecimentosOnlineUltimos30Dias;
+        private long comparecimentosPresenciaisUltimos30Dias;
+        private double taxaOnlineUltimos30Dias;
+        private Map<String, Long> comparecimentosPorDiaSemana;
+        private Map<Integer, Long> comparecimentosPorHora;
     }
 }

@@ -18,7 +18,16 @@ import java.time.LocalDate;
 @Builder
 public class CustodiadoDTO {
 
-    private Long id;
+    @NotNull(message = "ID do custodiado é obrigatório")
+    private Long custodiadoId;
+
+    public Long getCustodiadoId() {
+        return custodiadoId;
+    }
+
+    public void setCustodiadoId(Long custodiadoId) {
+        this.custodiadoId = custodiadoId;
+    }
 
     @NotBlank(message = "Nome é obrigatório")
     @Size(min = 2, max = 150, message = "Nome deve ter entre 2 e 150 caracteres")
