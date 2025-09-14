@@ -1,8 +1,8 @@
 package br.jus.tjba.aclp.service;
 
-import br.jus.tjba.aclp.model.Pessoa;
+import br.jus.tjba.aclp.model.Custodiado;
 import br.jus.tjba.aclp.model.enums.StatusComparecimento;
-import br.jus.tjba.aclp.repository.PessoaRepository;
+import br.jus.tjba.aclp.repository.CustodiadoRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -21,7 +21,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class StatusSchedulerService {
 
-    private final PessoaRepository pessoaRepository;
+    private final CustodiadoRepository custodiadoRepository;
 
     /**
      * Executa TODOS OS DIAS à 01:00 da manhã
@@ -60,17 +60,17 @@ public class StatusSchedulerService {
         long contador = 0;
 
         // Buscar apenas pessoas EM_CONFORMIDADE (para otimizar)
-        List<Pessoa> pessoasEmConformidade = pessoaRepository.findByStatus(StatusComparecimento.EM_CONFORMIDADE);
+        List<Custodiado> pessoasEmConformidade = custodiadoRepository.findByStatus(StatusComparecimento.EM_CONFORMIDADE);
 
         log.debug("Verificando {} pessoas em conformidade", pessoasEmConformidade.size());
 
-        for (Pessoa pessoa : pessoasEmConformidade) {
+        for (Custodiado pessoa : pessoasEmConformidade) {
             if (pessoa.getProximoComparecimento() != null &&
                     pessoa.getProximoComparecimento().isBefore(hoje)) {
 
-                // Pessoa está atrasada - marcar como inadimplente
+                // Custodiado está atrasada - marcar como inadimplente
                 pessoa.setStatus(StatusComparecimento.INADIMPLENTE);
-                pessoaRepository.save(pessoa);
+                custodiadoRepository.save(pessoa);
                 contador++;
 
                 long diasAtraso = java.time.temporal.ChronoUnit.DAYS
@@ -108,9 +108,9 @@ public class StatusSchedulerService {
         long emConformidade = 0;
         long inadimplentes = 0;
 
-        List<Pessoa> todasPessoas = pessoaRepository.findAll();
+        List<Custodiado> todasCustodiados = custodiadoRepository.findAll();
 
-        for (Pessoa pessoa : todasPessoas) {
+        for (Custodiado pessoa : todasCustodiados) {
             StatusComparecimento statusAnterior = pessoa.getStatus();
             StatusComparecimento statusNovo;
 
@@ -128,7 +128,7 @@ public class StatusSchedulerService {
             // Atualizar apenas se mudou
             if (!statusAnterior.equals(statusNovo)) {
                 pessoa.setStatus(statusNovo);
-                pessoaRepository.save(pessoa);
+                custodiadoRepository.save(pessoa);
 
                 log.info("📝 Status alterado: {} (ID: {}) {} → {}",
                         pessoa.getNome(), pessoa.getId(), statusAnterior, statusNovo);
@@ -145,17 +145,17 @@ public class StatusSchedulerService {
      * Obter estatísticas de status das pessoas
      */
     public StatusInfo obterStatusInfo() {
-        long totalPessoas = pessoaRepository.count();
-        long emConformidade = pessoaRepository.countByStatus(StatusComparecimento.EM_CONFORMIDADE);
-        long inadimplentes = pessoaRepository.countByStatus(StatusComparecimento.INADIMPLENTE);
+        long totalCustodiados = custodiadoRepository.count();
+        long emConformidade = custodiadoRepository.countByStatus(StatusComparecimento.EM_CONFORMIDADE);
+        long inadimplentes = custodiadoRepository.countByStatus(StatusComparecimento.INADIMPLENTE);
 
         return StatusInfo.builder()
-                .totalPessoas(totalPessoas)
+                .totalCustodiados(totalCustodiados)
                 .emConformidade(emConformidade)
                 .inadimplentes(inadimplentes)
                 .dataConsulta(LocalDate.now())
-                .percentualConformidade(totalPessoas > 0 ?
-                        (double) emConformidade / totalPessoas * 100 : 0.0)
+                .percentualConformidade(totalCustodiados > 0 ?
+                        (double) emConformidade / totalCustodiados * 100 : 0.0)
                 .build();
     }
 
@@ -165,7 +165,7 @@ public class StatusSchedulerService {
     @lombok.Data
     @lombok.Builder
     public static class StatusInfo {
-        private long totalPessoas;
+        private long totalCustodiados;
         private long emConformidade;
         private long inadimplentes;
         private LocalDate dataConsulta;

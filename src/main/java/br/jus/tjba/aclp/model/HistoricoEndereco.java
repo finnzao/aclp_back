@@ -16,11 +16,11 @@ import java.util.Objects;
 @Entity
 @Table(name = "historico_enderecos",
         indexes = {
-                @Index(name = "idx_historico_endereco_pessoa", columnList = "pessoa_id"),
+                @Index(name = "idx_historico_endereco_custodiado", columnList = "custodiado_id"),
                 @Index(name = "idx_historico_endereco_data_inicio", columnList = "data_inicio"),
                 @Index(name = "idx_historico_endereco_data_fim", columnList = "data_fim"),
-                @Index(name = "idx_historico_endereco_pessoa_periodo", columnList = "pessoa_id, data_inicio, data_fim"),
-                @Index(name = "idx_historico_endereco_ativo", columnList = "pessoa_id, data_fim"),
+                @Index(name = "idx_historico_endereco_custodiado_periodo", columnList = "custodiado_id, data_inicio, data_fim"),
+                @Index(name = "idx_historico_endereco_ativo", columnList = "custodiado_id, ativo"),
                 @Index(name = "idx_historico_endereco_cep", columnList = "cep"),
                 @Index(name = "idx_historico_endereco_cidade", columnList = "cidade"),
                 @Index(name = "idx_historico_endereco_estado", columnList = "estado")
@@ -37,14 +37,13 @@ public class HistoricoEndereco {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @NotNull(message = "Pessoa é obrigatória")
+    @NotNull(message = "Custodiado é obrigatório")
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "pessoa_id", nullable = false,
-            foreignKey = @ForeignKey(name = "fk_historico_endereco_pessoa"))
-    private Pessoa pessoa;
+    @JoinColumn(name = "custodiado_id", nullable = false,
+            foreignKey = @ForeignKey(name = "fk_historico_endereco_custodiado"))
+    private Custodiado custodiado;
 
-    // === DADOS DO ENDEREÇO ===
-
+    // Dados do endereço
     @NotBlank(message = "CEP é obrigatório")
     @Pattern(regexp = "\\d{5}-?\\d{3}", message = "CEP deve ter o formato 00000-000")
     @Column(name = "cep", nullable = false, length = 9)
@@ -79,14 +78,18 @@ public class HistoricoEndereco {
     @Column(name = "estado", nullable = false, length = 2)
     private String estado;
 
-    // === CONTROLE TEMPORAL ===
-
+    // Controle temporal
     @NotNull(message = "Data de início é obrigatória")
     @Column(name = "data_inicio", nullable = false)
     private LocalDate dataInicio;
 
     @Column(name = "data_fim")
     private LocalDate dataFim;
+
+    // Flag para indicar endereço ativo (substitui tabela enderecos separada)
+    @Column(name = "ativo", nullable = false)
+    @Builder.Default
+    private Boolean ativo = Boolean.TRUE;
 
     @Size(max = 500, message = "Motivo da alteração deve ter no máximo 500 caracteres")
     @Column(name = "motivo_alteracao", length = 500)
@@ -96,15 +99,13 @@ public class HistoricoEndereco {
     @Column(name = "validado_por", length = 100)
     private String validadoPor;
 
-    // === REFERÊNCIA AO COMPARECIMENTO ===
-
+    // Referência ao comparecimento quando houve mudança
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "historico_comparecimento_id",
             foreignKey = @ForeignKey(name = "fk_historico_endereco_comparecimento"))
     private HistoricoComparecimento historicoComparecimento;
 
-    // === AUDITORIA ===
-
+    // Auditoria
     @Column(name = "criado_em", nullable = false)
     @Builder.Default
     private LocalDateTime criadoEm = LocalDateTime.now();
@@ -117,8 +118,6 @@ public class HistoricoEndereco {
     @Builder.Default
     private Long version = 0L;
 
-    // === MÉTODOS DE CICLO DE VIDA ===
-
     @PrePersist
     public void prePersist() {
         if (this.criadoEm == null) {
@@ -126,6 +125,9 @@ public class HistoricoEndereco {
         }
         if (this.version == null) {
             this.version = 0L;
+        }
+        if (this.ativo == null) {
+            this.ativo = Boolean.TRUE;
         }
         validarEstado();
         formatarCep();
@@ -138,8 +140,7 @@ public class HistoricoEndereco {
         formatarCep();
     }
 
-    // === MÉTODOS DE FORMATAÇÃO ===
-
+    // Métodos de formatação
     public void setCep(String cep) {
         if (cep != null) {
             String digits = cep.replaceAll("[^\\d]", "");
@@ -185,8 +186,7 @@ public class HistoricoEndereco {
         }
     }
 
-    // === MÉTODOS UTILITÁRIOS ===
-
+    // Métodos utilitários
     public EstadoBrasil getEstadoBrasil() {
         return this.estado != null ? EstadoBrasil.fromString(this.estado) : null;
     }
@@ -234,11 +234,11 @@ public class HistoricoEndereco {
     }
 
     public boolean isEnderecoAtivo() {
-        return dataFim == null;
+        return Boolean.TRUE.equals(ativo);
     }
 
     public boolean isEnderecoHistorico() {
-        return dataFim != null;
+        return !isEnderecoAtivo();
     }
 
     public long getDiasResidencia() {
@@ -248,7 +248,7 @@ public class HistoricoEndereco {
 
     public String getPeriodoResidencia() {
         String inicio = dataInicio.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"));
-        if (dataFim == null) {
+        if (isEnderecoAtivo()) {
             return "Desde " + inicio + " (atual)";
         } else {
             String fim = dataFim.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"));
@@ -264,36 +264,10 @@ public class HistoricoEndereco {
                 estado != null && !estado.trim().isEmpty();
     }
 
-    /**
-     * Cria uma cópia deste endereço histórico para um novo endereço atual
-     */
-    public Endereco toEnderecoAtual() {
-        return Endereco.builder()
-                .cep(this.cep)
-                .logradouro(this.logradouro)
-                .numero(this.numero)
-                .complemento(this.complemento)
-                .bairro(this.bairro)
-                .cidade(this.cidade)
-                .estado(this.estado)
-                .build();
-    }
-
-    /**
-     * Cria um histórico a partir de um endereço atual
-     */
-    public static HistoricoEndereco fromEnderecoAtual(Endereco endereco, Pessoa pessoa, LocalDate dataInicio) {
-        return HistoricoEndereco.builder()
-                .pessoa(pessoa)
-                .cep(endereco.getCep())
-                .logradouro(endereco.getLogradouro())
-                .numero(endereco.getNumero())
-                .complemento(endereco.getComplemento())
-                .bairro(endereco.getBairro())
-                .cidade(endereco.getCidade())
-                .estado(endereco.getEstado())
-                .dataInicio(dataInicio)
-                .build();
+    // Método para finalizar endereço quando houver mudança
+    public void finalizarEndereco(LocalDate dataFim) {
+        this.dataFim = dataFim;
+        this.ativo = Boolean.FALSE;
     }
 
     @Override
@@ -301,7 +275,7 @@ public class HistoricoEndereco {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         HistoricoEndereco that = (HistoricoEndereco) o;
-        return Objects.equals(pessoa, that.pessoa) &&
+        return Objects.equals(custodiado, that.custodiado) &&
                 Objects.equals(cep, that.cep) &&
                 Objects.equals(logradouro, that.logradouro) &&
                 Objects.equals(numero, that.numero) &&
@@ -313,6 +287,6 @@ public class HistoricoEndereco {
 
     @Override
     public int hashCode() {
-        return Objects.hash(pessoa, cep, logradouro, numero, bairro, cidade, estado, dataInicio);
+        return Objects.hash(custodiado, cep, logradouro, numero, bairro, cidade, estado, dataInicio);
     }
 }

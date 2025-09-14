@@ -1,11 +1,15 @@
 package br.jus.tjba.aclp.service;
 
-import br.jus.tjba.aclp.dto.PessoaDTO;
-import br.jus.tjba.aclp.model.Endereco;
-import br.jus.tjba.aclp.model.Pessoa;
+import br.jus.tjba.aclp.dto.CustodiadoDTO;
+import br.jus.tjba.aclp.model.Custodiado;
+import br.jus.tjba.aclp.model.HistoricoComparecimento;
+import br.jus.tjba.aclp.model.HistoricoEndereco;
 import br.jus.tjba.aclp.model.enums.EstadoBrasil;
 import br.jus.tjba.aclp.model.enums.StatusComparecimento;
-import br.jus.tjba.aclp.repository.PessoaRepository;
+import br.jus.tjba.aclp.model.enums.TipoValidacao;
+import br.jus.tjba.aclp.repository.CustodiadoRepository;
+import br.jus.tjba.aclp.repository.HistoricoComparecimentoRepository;
+import br.jus.tjba.aclp.repository.HistoricoEnderecoRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,63 +17,64 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class PessoaService {
+public class CustodiadoService {
 
-    private final PessoaRepository pessoaRepository;
+    private final CustodiadoRepository custodiadoRepository;
+    private final HistoricoComparecimentoRepository historicoComparecimentoRepository;
+    private final HistoricoEnderecoRepository historicoEnderecoRepository;
 
     @Transactional(readOnly = true)
-    public List<Pessoa> findAll() {
-        log.info("Buscando todas as pessoas cadastradas");
-        return pessoaRepository.findAll();
+    public List<Custodiado> findAll() {
+        log.info("Buscando todos os custodiados cadastrados");
+        return custodiadoRepository.findAll();
     }
 
     @Transactional(readOnly = true)
-    public Optional<Pessoa> findById(Long id) {
-        log.info("Buscando pessoa por ID: {}", id);
+    public Optional<Custodiado> findById(Long id) {
+        log.info("Buscando custodiado por ID: {}", id);
 
         if (id == null || id <= 0) {
             throw new IllegalArgumentException("ID deve ser um número positivo");
         }
 
-        return pessoaRepository.findById(id);
+        return custodiadoRepository.findById(id);
     }
 
     @Transactional(readOnly = true)
-    public Optional<Pessoa> findByProcesso(String processo) {
-        log.info("Buscando pessoa por processo: {}", processo);
+    public List<Custodiado> findByProcesso(String processo) {
+        log.info("Buscando custodiados por processo: {}", processo);
 
         if (processo == null || processo.trim().isEmpty()) {
             throw new IllegalArgumentException("Número do processo é obrigatório");
         }
 
-        return pessoaRepository.findByProcesso(processo.trim());
+        return custodiadoRepository.findByProcesso(processo.trim());
     }
 
     @Transactional
-    public Pessoa save(PessoaDTO dto) {
-        log.info("Iniciando cadastro de nova pessoa - Processo: {}", dto.getProcesso());
+    public Custodiado save(CustodiadoDTO dto) {
+        log.info("Iniciando cadastro de novo custodiado - Processo: {}, Nome: {}",
+                dto.getProcesso(), dto.getNome());
 
         // Limpar e formatar dados antes das validações
         dto.limparEFormatarDados();
 
-        // Validações usando IllegalArgumentException - o GlobalExceptionHandler vai capturar
+        // Validações
         validarDadosObrigatorios(dto);
         validarFormatos(dto);
-        validarDuplicidades(dto);
+        validarDuplicidadesDocumentos(dto); // Não valida duplicidade de processo
         validarDatasLogicas(dto);
-        validarEnderecoCompleto(dto); // Nova validação para endereço obrigatório
+        validarEnderecoCompleto(dto);
 
-        // Criar endereço (agora obrigatório)
-        Endereco endereco = criarEndereco(dto);
-
-        // Criar pessoa
-        Pessoa pessoa = Pessoa.builder()
+        // Criar custodiado
+        Custodiado custodiado = Custodiado.builder()
                 .nome(dto.getNome().trim())
                 .cpf(dto.getCpf())
                 .rg(dto.getRg())
@@ -81,32 +86,38 @@ public class PessoaService {
                 .periodicidade(dto.getPeriodicidade())
                 .dataComparecimentoInicial(dto.getDataComparecimentoInicial())
                 .status(StatusComparecimento.EM_CONFORMIDADE)
-                .primeiroComparecimento(dto.getDataComparecimentoInicial())
                 .ultimoComparecimento(dto.getDataComparecimentoInicial())
                 .observacoes(dto.getObservacoes() != null ? dto.getObservacoes().trim() : null)
-                .endereco(endereco)
                 .build();
 
         // Calcular próximo comparecimento
-        pessoa.calcularProximoComparecimento();
+        custodiado.calcularProximoComparecimento();
 
-        Pessoa pessoaSalva = pessoaRepository.save(pessoa);
-        log.info("Pessoa cadastrada com sucesso - ID: {}, Nome: {}, Endereço: {}",
-                pessoaSalva.getId(), pessoaSalva.getNome(), pessoaSalva.getEndereco().getEnderecoResumido());
+        // Salvar custodiado
+        Custodiado custodiadoSalvo = custodiadoRepository.save(custodiado);
 
-        return pessoaSalva;
+        // Criar histórico de endereço inicial
+        criarHistoricoEnderecoInicial(custodiadoSalvo, dto);
+
+        // Criar primeiro comparecimento no histórico (CADASTRO_INICIAL)
+        criarPrimeiroComparecimento(custodiadoSalvo);
+
+        log.info("Custodiado cadastrado com sucesso - ID: {}, Nome: {}, Processo: {}",
+                custodiadoSalvo.getId(), custodiadoSalvo.getNome(), custodiadoSalvo.getProcesso());
+
+        return custodiadoSalvo;
     }
 
     @Transactional
-    public Pessoa update(Long id, PessoaDTO dto) {
-        log.info("Atualizando pessoa ID: {}", id);
+    public Custodiado update(Long id, CustodiadoDTO dto) {
+        log.info("Atualizando custodiado ID: {}", id);
 
         if (id == null || id <= 0) {
             throw new IllegalArgumentException("ID deve ser um número positivo");
         }
 
-        Pessoa pessoa = pessoaRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Pessoa não encontrada com ID: " + id));
+        Custodiado custodiado = custodiadoRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Custodiado não encontrado com ID: " + id));
 
         // Limpar e formatar dados antes das validações
         dto.limparEFormatarDados();
@@ -114,87 +125,78 @@ public class PessoaService {
         // Validações (excluindo duplicidades do próprio registro)
         validarDadosObrigatorios(dto);
         validarFormatos(dto);
-        validarDuplicidadesParaUpdate(dto, id);
+        validarDuplicidadesDocumentosParaUpdate(dto, id);
         validarDatasLogicas(dto);
-        validarEnderecoCompleto(dto); // Endereço agora é obrigatório também na atualização
 
         // Atualizar dados básicos
-        pessoa.setNome(dto.getNome().trim());
-        pessoa.setCpf(dto.getCpf());
-        pessoa.setRg(dto.getRg());
-        pessoa.setContato(dto.getContato());
-        pessoa.setProcesso(dto.getProcesso().trim());
-        pessoa.setVara(dto.getVara().trim());
-        pessoa.setComarca(dto.getComarca().trim());
-        pessoa.setDataDecisao(dto.getDataDecisao());
-        pessoa.setPeriodicidade(dto.getPeriodicidade());
-        pessoa.setDataComparecimentoInicial(dto.getDataComparecimentoInicial());
-        pessoa.setObservacoes(dto.getObservacoes() != null ? dto.getObservacoes().trim() : null);
-
-        // Atualizar endereço (agora sempre obrigatório)
-        if (pessoa.getEndereco() == null) {
-            pessoa.setEndereco(criarEndereco(dto));
-        } else {
-            atualizarEndereco(pessoa.getEndereco(), dto);
-        }
+        custodiado.setNome(dto.getNome().trim());
+        custodiado.setCpf(dto.getCpf());
+        custodiado.setRg(dto.getRg());
+        custodiado.setContato(dto.getContato());
+        custodiado.setProcesso(dto.getProcesso().trim());
+        custodiado.setVara(dto.getVara().trim());
+        custodiado.setComarca(dto.getComarca().trim());
+        custodiado.setDataDecisao(dto.getDataDecisao());
+        custodiado.setPeriodicidade(dto.getPeriodicidade());
+        custodiado.setDataComparecimentoInicial(dto.getDataComparecimentoInicial());
+        custodiado.setObservacoes(dto.getObservacoes() != null ? dto.getObservacoes().trim() : null);
 
         // Recalcular próximo comparecimento se necessário
-        pessoa.calcularProximoComparecimento();
+        custodiado.calcularProximoComparecimento();
 
-        Pessoa pessoaAtualizada = pessoaRepository.save(pessoa);
-        log.info("Pessoa atualizada com sucesso - ID: {}, Nome: {}, Endereço: {}",
-                pessoaAtualizada.getId(), pessoaAtualizada.getNome(),
-                pessoaAtualizada.getEndereco().getEnderecoResumido());
+        Custodiado custodiadoAtualizado = custodiadoRepository.save(custodiado);
+        log.info("Custodiado atualizado com sucesso - ID: {}, Nome: {}",
+                custodiadoAtualizado.getId(), custodiadoAtualizado.getNome());
 
-        return pessoaAtualizada;
+        return custodiadoAtualizado;
     }
 
     @Transactional
     public void delete(Long id) {
-        log.info("Excluindo pessoa ID: {}", id);
+        log.info("Excluindo custodiado ID: {}", id);
 
         if (id == null || id <= 0) {
             throw new IllegalArgumentException("ID deve ser um número positivo");
         }
 
-        Pessoa pessoa = pessoaRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Pessoa não encontrada com ID: " + id));
+        Custodiado custodiado = custodiadoRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Custodiado não encontrado com ID: " + id));
 
         // Verificar se há dependências que impedem a exclusão
-        if (pessoa.getHistoricoComparecimentos() != null && !pessoa.getHistoricoComparecimentos().isEmpty()) {
-            throw new IllegalArgumentException("Não é possível excluir pessoa que possui histórico de comparecimentos");
+        if (custodiado.getHistoricoComparecimentos() != null && !custodiado.getHistoricoComparecimentos().isEmpty()) {
+            throw new IllegalArgumentException("Não é possível excluir custodiado que possui histórico de comparecimentos");
         }
 
-        pessoaRepository.delete(pessoa);
-        log.info("Pessoa excluída com sucesso - ID: {}", id);
+        custodiadoRepository.delete(custodiado);
+        log.info("Custodiado excluído com sucesso - ID: {}", id);
     }
 
     @Transactional(readOnly = true)
-    public List<Pessoa> findByStatus(StatusComparecimento status) {
-        log.info("Buscando pessoas por status: {}", status);
+    public List<Custodiado> findByStatus(StatusComparecimento status) {
+        log.info("Buscando custodiados por status: {}", status);
 
         if (status == null) {
             throw new IllegalArgumentException("Status é obrigatório. Use: EM_CONFORMIDADE ou INADIMPLENTE");
         }
 
-        return pessoaRepository.findByStatus(status);
+        return custodiadoRepository.findByStatus(status);
     }
 
     @Transactional(readOnly = true)
-    public List<Pessoa> findComparecimentosHoje() {
-        log.info("Buscando pessoas com comparecimento hoje");
-        return pessoaRepository.findByProximoComparecimento(LocalDate.now());
+    public List<Custodiado> findComparecimentosHoje() {
+        log.info("Buscando custodiados com comparecimento hoje");
+        return custodiadoRepository.findComparecimentosHoje();
     }
 
     @Transactional(readOnly = true)
-    public List<Pessoa> findAtrasados() {
-        log.info("Buscando pessoas em atraso");
-        return pessoaRepository.findByProximoComparecimentoBefore(LocalDate.now());
+    public List<Custodiado> findInadimplentes() {
+        log.info("Buscando custodiados inadimplentes");
+        return custodiadoRepository.findInadimplentes();
     }
 
     @Transactional(readOnly = true)
-    public List<Pessoa> buscarPorNomeOuProcesso(String termo) {
-        log.info("Buscando pessoas por termo: {}", termo);
+    public List<Custodiado> buscarPorNomeOuProcesso(String termo) {
+        log.info("Buscando custodiados por termo: {}", termo);
 
         if (termo == null || termo.trim().isEmpty()) {
             throw new IllegalArgumentException("Termo de busca é obrigatório");
@@ -205,12 +207,55 @@ public class PessoaService {
             throw new IllegalArgumentException("Termo de busca deve ter pelo menos 2 caracteres");
         }
 
-        return pessoaRepository.buscarPorNomeOuProcesso(termoLimpo, termoLimpo);
+        return custodiadoRepository.buscarPorNomeOuProcesso(termoLimpo, termoLimpo);
+    }
+
+    // Método para criar histórico de endereço inicial
+    private void criarHistoricoEnderecoInicial(Custodiado custodiado, CustodiadoDTO dto) {
+        HistoricoEndereco enderecoInicial = HistoricoEndereco.builder()
+                .custodiado(custodiado)
+                .cep(dto.getCep().trim())
+                .logradouro(dto.getLogradouro().trim())
+                .numero(dto.getNumero() != null ? dto.getNumero().trim() : null)
+                .complemento(dto.getComplemento() != null ? dto.getComplemento().trim() : null)
+                .bairro(dto.getBairro().trim())
+                .cidade(dto.getCidade().trim())
+                .estado(dto.getEstado().trim().toUpperCase())
+                .dataInicio(custodiado.getDataComparecimentoInicial())
+                .ativo(Boolean.TRUE)
+                .motivoAlteracao("Endereço inicial no cadastro")
+                .validadoPor("Sistema ACLP")
+                .build();
+
+        historicoEnderecoRepository.save(enderecoInicial);
+        custodiado.adicionarHistoricoEndereco(enderecoInicial);
+
+        log.info("Histórico de endereço inicial criado - Custodiado: {}, Endereço: {}",
+                custodiado.getNome(), enderecoInicial.getEnderecoResumido());
+    }
+
+    // Método para criar primeiro comparecimento (CADASTRO_INICIAL)
+    private void criarPrimeiroComparecimento(Custodiado custodiado) {
+        HistoricoComparecimento primeiroComparecimento = HistoricoComparecimento.builder()
+                .custodiado(custodiado)
+                .dataComparecimento(custodiado.getDataComparecimentoInicial())
+                .horaComparecimento(LocalTime.now())
+                .tipoValidacao(TipoValidacao.CADASTRO_INICIAL)
+                .validadoPor("Sistema ACLP")
+                .observacoes("Cadastro inicial no sistema")
+                .mudancaEndereco(Boolean.FALSE)
+                .build();
+
+        historicoComparecimentoRepository.save(primeiroComparecimento);
+        custodiado.adicionarHistorico(primeiroComparecimento);
+
+        log.info("Primeiro comparecimento registrado - Custodiado: {}, Data: {}",
+                custodiado.getNome(), custodiado.getDataComparecimentoInicial());
     }
 
     // ========== MÉTODOS PRIVADOS DE VALIDAÇÃO ==========
 
-    private void validarDadosObrigatorios(PessoaDTO dto) {
+    private void validarDadosObrigatorios(CustodiadoDTO dto) {
         if (dto.getNome() == null || dto.getNome().trim().isEmpty()) {
             throw new IllegalArgumentException("Nome é obrigatório");
         }
@@ -250,10 +295,7 @@ public class PessoaService {
         }
     }
 
-    /**
-     * Nova validação para endereço completo obrigatório
-     */
-    private void validarEnderecoCompleto(PessoaDTO dto) {
+    private void validarEnderecoCompleto(CustodiadoDTO dto) {
         if (dto.getCep() == null || dto.getCep().trim().isEmpty()) {
             throw new IllegalArgumentException("CEP é obrigatório");
         }
@@ -274,13 +316,12 @@ public class PessoaService {
             throw new IllegalArgumentException("Estado é obrigatório");
         }
 
-        // Validar se todos os campos obrigatórios de endereço estão preenchidos
         if (!dto.hasEnderecoCompleto()) {
             throw new IllegalArgumentException("Endereço completo é obrigatório. Preencha: CEP, logradouro, bairro, cidade e estado");
         }
     }
 
-    private void validarFormatos(PessoaDTO dto) {
+    private void validarFormatos(CustodiadoDTO dto) {
         // Validar nome
         if (dto.getNome() != null && dto.getNome().trim().length() > 150) {
             throw new IllegalArgumentException("Nome deve ter no máximo 150 caracteres");
@@ -309,36 +350,10 @@ public class PessoaService {
             throw new IllegalArgumentException("Contato deve ter formato válido de telefone (ex: (11) 99999-9999)");
         }
 
-        // === VALIDAÇÕES DE ENDEREÇO ===
-
         // Validar CEP
         if (dto.getCep() != null && !dto.getCep().trim().isEmpty()) {
             if (!validarFormatoCep(dto.getCep().trim())) {
                 throw new IllegalArgumentException("CEP deve ter formato válido (00000-000 ou apenas números)");
-            }
-        }
-
-        // Validar logradouro
-        if (dto.getLogradouro() != null && !dto.getLogradouro().trim().isEmpty()) {
-            String logradouro = dto.getLogradouro().trim();
-            if (logradouro.length() < 5 || logradouro.length() > 200) {
-                throw new IllegalArgumentException("Logradouro deve ter entre 5 e 200 caracteres");
-            }
-        }
-
-        // Validar bairro
-        if (dto.getBairro() != null && !dto.getBairro().trim().isEmpty()) {
-            String bairro = dto.getBairro().trim();
-            if (bairro.length() < 2 || bairro.length() > 100) {
-                throw new IllegalArgumentException("Bairro deve ter entre 2 e 100 caracteres");
-            }
-        }
-
-        // Validar cidade
-        if (dto.getCidade() != null && !dto.getCidade().trim().isEmpty()) {
-            String cidade = dto.getCidade().trim();
-            if (cidade.length() < 2 || cidade.length() > 100) {
-                throw new IllegalArgumentException("Cidade deve ter entre 2 e 100 caracteres");
             }
         }
 
@@ -350,79 +365,52 @@ public class PessoaService {
                 throw new IllegalArgumentException("Estado inválido: " + dto.getEstado() + ". " + e.getMessage());
             }
         }
-
-        // Validar número (se fornecido)
-        if (dto.getNumero() != null && !dto.getNumero().trim().isEmpty()) {
-            if (dto.getNumero().trim().length() > 20) {
-                throw new IllegalArgumentException("Número deve ter no máximo 20 caracteres");
-            }
-        }
-
-        // Validar complemento (se fornecido)
-        if (dto.getComplemento() != null && !dto.getComplemento().trim().isEmpty()) {
-            if (dto.getComplemento().trim().length() > 100) {
-                throw new IllegalArgumentException("Complemento deve ter no máximo 100 caracteres");
-            }
-        }
     }
 
-    private void validarDuplicidades(PessoaDTO dto) {
+    private void validarDuplicidadesDocumentos(CustodiadoDTO dto) {
         // Verificar CPF duplicado (se fornecido)
         if (dto.getCpf() != null && !dto.getCpf().trim().isEmpty()) {
             String cpf = limparCpf(dto.getCpf().trim());
             String cpfFormatado = formatarCpf(cpf);
-            Optional<Pessoa> pessoaComCpf = pessoaRepository.findByCpf(cpfFormatado);
-            if (pessoaComCpf.isPresent()) {
+            Optional<Custodiado> custodiadoComCpf = custodiadoRepository.findByCpf(cpfFormatado);
+            if (custodiadoComCpf.isPresent()) {
                 throw new IllegalArgumentException("CPF já está cadastrado no sistema");
             }
         }
 
         // Verificar RG duplicado (se fornecido)
         if (dto.getRg() != null && !dto.getRg().trim().isEmpty()) {
-            Optional<Pessoa> pessoaComRg = pessoaRepository.findByRg(dto.getRg().trim());
-            if (pessoaComRg.isPresent()) {
+            Optional<Custodiado> custodiadoComRg = custodiadoRepository.findByRg(dto.getRg().trim());
+            if (custodiadoComRg.isPresent()) {
                 throw new IllegalArgumentException("RG já está cadastrado no sistema");
             }
         }
 
-        // Verificar processo duplicado
-        if (dto.getProcesso() != null && !dto.getProcesso().trim().isEmpty()) {
-            Optional<Pessoa> pessoaComProcesso = pessoaRepository.findByProcesso(dto.getProcesso().trim());
-            if (pessoaComProcesso.isPresent()) {
-                throw new IllegalArgumentException("Processo já está cadastrado no sistema");
-            }
-        }
+        // NÃO validar duplicidade de processo - permitir múltiplos custodiados no mesmo processo
     }
 
-    private void validarDuplicidadesParaUpdate(PessoaDTO dto, Long idAtual) {
+    private void validarDuplicidadesDocumentosParaUpdate(CustodiadoDTO dto, Long idAtual) {
         // Verificar CPF duplicado em outro registro
         if (dto.getCpf() != null && !dto.getCpf().trim().isEmpty()) {
             String cpf = limparCpf(dto.getCpf().trim());
             String cpfFormatado = formatarCpf(cpf);
-            Optional<Pessoa> pessoaComCpf = pessoaRepository.findByCpf(cpfFormatado);
-            if (pessoaComCpf.isPresent() && !pessoaComCpf.get().getId().equals(idAtual)) {
+            Optional<Custodiado> custodiadoComCpf = custodiadoRepository.findByCpf(cpfFormatado);
+            if (custodiadoComCpf.isPresent() && !custodiadoComCpf.get().getId().equals(idAtual)) {
                 throw new IllegalArgumentException("CPF já está cadastrado no sistema");
             }
         }
 
         // Verificar RG duplicado em outro registro
         if (dto.getRg() != null && !dto.getRg().trim().isEmpty()) {
-            Optional<Pessoa> pessoaComRg = pessoaRepository.findByRg(dto.getRg().trim());
-            if (pessoaComRg.isPresent() && !pessoaComRg.get().getId().equals(idAtual)) {
+            Optional<Custodiado> custodiadoComRg = custodiadoRepository.findByRg(dto.getRg().trim());
+            if (custodiadoComRg.isPresent() && !custodiadoComRg.get().getId().equals(idAtual)) {
                 throw new IllegalArgumentException("RG já está cadastrado no sistema");
             }
         }
 
-        // Verificar processo duplicado em outro registro
-        if (dto.getProcesso() != null && !dto.getProcesso().trim().isEmpty()) {
-            Optional<Pessoa> pessoaComProcesso = pessoaRepository.findByProcesso(dto.getProcesso().trim());
-            if (pessoaComProcesso.isPresent() && !pessoaComProcesso.get().getId().equals(idAtual)) {
-                throw new IllegalArgumentException("Processo já está cadastrado no sistema");
-            }
-        }
     }
 
-    private void validarDatasLogicas(PessoaDTO dto) {
+    private void validarDatasLogicas(CustodiadoDTO dto) {
         LocalDate hoje = LocalDate.now();
 
         if (dto.getDataDecisao() != null && dto.getDataDecisao().isAfter(hoje)) {
@@ -442,33 +430,6 @@ public class PessoaService {
         }
     }
 
-    // ========== MÉTODOS DE CRIAÇÃO/ATUALIZAÇÃO DE ENDEREÇO ==========
-
-    /**
-     * Cria um endereço completo (agora obrigatório)
-     */
-    private Endereco criarEndereco(PessoaDTO dto) {
-        return Endereco.builder()
-                .cep(dto.getCep().trim())
-                .logradouro(dto.getLogradouro().trim())
-                .numero(dto.getNumero() != null ? dto.getNumero().trim() : null)
-                .complemento(dto.getComplemento() != null ? dto.getComplemento().trim() : null)
-                .bairro(dto.getBairro().trim())
-                .cidade(dto.getCidade().trim())
-                .estado(dto.getEstado().trim().toUpperCase())
-                .build();
-    }
-
-    private void atualizarEndereco(Endereco endereco, PessoaDTO dto) {
-        endereco.setCep(dto.getCep().trim());
-        endereco.setLogradouro(dto.getLogradouro().trim());
-        endereco.setNumero(dto.getNumero() != null ? dto.getNumero().trim() : null);
-        endereco.setComplemento(dto.getComplemento() != null ? dto.getComplemento().trim() : null);
-        endereco.setBairro(dto.getBairro().trim());
-        endereco.setCidade(dto.getCidade().trim());
-        endereco.setEstado(dto.getEstado().trim().toUpperCase());
-    }
-
     // ========== MÉTODOS UTILITÁRIOS ==========
 
     private boolean validarFormatoCpf(String cpf) {
@@ -484,9 +445,6 @@ public class PessoaService {
         return contato.matches("\\(?\\d{2}\\)?\\s?\\d{4,5}-?\\d{4}");
     }
 
-    /**
-     * Valida formato do CEP
-     */
     private boolean validarFormatoCep(String cep) {
         String cepLimpo = cep.replaceAll("[^\\d]", "");
         return cepLimpo.matches("\\d{8}");

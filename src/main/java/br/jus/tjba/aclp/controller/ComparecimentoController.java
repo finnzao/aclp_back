@@ -41,13 +41,13 @@ public class ComparecimentoController {
     @ApiResponses(value = {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Comparecimento registrado com sucesso"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Dados inválidos"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Pessoa não encontrada"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Custodiado não encontrado"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Conflito - comparecimento já registrado na data")
     })
     public ResponseEntity<Map<String, Object>> registrarComparecimento(
             @Valid @RequestBody ComparecimentoDTO dto) {
-        log.info("Registrando comparecimento - Pessoa ID: {}, Tipo: {}, Mudança endereço: {}",
-                dto.getPessoaId(), dto.getTipoValidacao(), dto.houveMudancaEndereco());
+        log.info("Registrando comparecimento - Custodiado ID: {}, Tipo: {}, Mudança endereço: {}",
+                dto.getCustodiadoId(), dto.getTipoValidacao(), dto.houveMudancaEndereco());
 
         try {
             HistoricoComparecimento historico = comparecimentoService.registrarComparecimento(dto);
@@ -59,20 +59,20 @@ public class ComparecimentoController {
         }
     }
 
-    @GetMapping("/pessoa/{pessoaId}")
+    @GetMapping("/custodiado/{custodiadoId}")
     @Operation(summary = "Buscar histórico de comparecimentos",
-            description = "Retorna o histórico completo de comparecimentos de uma pessoa")
+            description = "Retorna o histórico completo de comparecimentos de um custodiado")
     @ApiResponses(value = {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Histórico retornado com sucesso"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "ID da pessoa inválido"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Pessoa não encontrada")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "ID do custodiado inválido"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Custodiado não encontrado")
     })
-    public ResponseEntity<Map<String, Object>> buscarHistoricoPorPessoa(
-            @Parameter(description = "ID da pessoa") @PathVariable Long pessoaId) {
-        log.info("Buscando histórico de comparecimentos - Pessoa ID: {}", pessoaId);
+    public ResponseEntity<Map<String, Object>> buscarHistoricoPorCustodiado(
+            @Parameter(description = "ID do custodiado") @PathVariable Long custodiadoId) {
+        log.info("Buscando histórico de comparecimentos - Custodiado ID: {}", custodiadoId);
 
         try {
-            List<HistoricoComparecimento> historico = comparecimentoService.buscarHistoricoPorPessoa(pessoaId);
+            List<HistoricoComparecimento> historico = comparecimentoService.buscarHistoricoPorCustodiado(custodiadoId);
             return ApiResponseUtil.success(historico, "Histórico de comparecimentos encontrado");
         } catch (IllegalArgumentException e) {
             return ApiResponseUtil.badRequest(e.getMessage());
@@ -113,20 +113,20 @@ public class ComparecimentoController {
         return ApiResponseUtil.success(comparecimentos, "Comparecimentos de hoje encontrados");
     }
 
-    @GetMapping("/pessoa/{pessoaId}/mudancas-endereco")
+    @GetMapping("/custodiado/{custodiadoId}/mudancas-endereco")
     @Operation(summary = "Comparecimentos com mudança de endereço",
-            description = "Retorna comparecimentos de uma pessoa que incluíram mudança de endereço")
+            description = "Retorna comparecimentos de um custodiado que incluíram mudança de endereço")
     @ApiResponses(value = {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Comparecimentos retornados com sucesso"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "ID da pessoa inválido")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "ID do custodiado inválido")
     })
     public ResponseEntity<Map<String, Object>> buscarComparecimentosComMudancaEndereco(
-            @Parameter(description = "ID da pessoa") @PathVariable Long pessoaId) {
-        log.info("Buscando comparecimentos com mudança de endereço - Pessoa ID: {}", pessoaId);
+            @Parameter(description = "ID do custodiado") @PathVariable Long custodiadoId) {
+        log.info("Buscando comparecimentos com mudança de endereço - Custodiado ID: {}", custodiadoId);
 
         try {
             List<HistoricoComparecimento> comparecimentos =
-                    comparecimentoService.buscarComparecimentosComMudancaEndereco(pessoaId);
+                    comparecimentoService.buscarComparecimentosComMudancaEndereco(custodiadoId);
             return ApiResponseUtil.success(comparecimentos, "Comparecimentos com mudança de endereço encontrados");
         } catch (IllegalArgumentException e) {
             return ApiResponseUtil.badRequest(e.getMessage());
@@ -156,20 +156,20 @@ public class ComparecimentoController {
 
     @PostMapping("/verificar-inadimplentes")
     @Operation(summary = "Verificar inadimplentes",
-            description = "Executa verificação automática de pessoas inadimplentes")
+            description = "Executa verificação automática de custodiados inadimplentes")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Verificação executada com sucesso")
     public ResponseEntity<Map<String, Object>> verificarStatusInadimplentes() {
         log.info("Executando verificação de status inadimplentes");
 
         try {
-            long pessoasMarcadas = statusSchedulerService.verificarStatusManual();
+            long custodiadosMarcados = statusSchedulerService.verificarStatusManual();
 
-            String mensagem = pessoasMarcadas == 0
-                    ? "Nenhuma pessoa foi marcada como inadimplente"
-                    : String.format("%d pessoa(s) foram marcadas como inadimplentes", pessoasMarcadas);
+            String mensagem = custodiadosMarcados == 0
+                    ? "Nenhum custodiado foi marcado como inadimplente"
+                    : String.format("%d custodiado(s) foram marcados como inadimplentes", custodiadosMarcados);
 
             Map<String, Object> dados = new HashMap<>();
-            dados.put("pessoasMarcadas", pessoasMarcadas);
+            dados.put("custodiadosMarcados", custodiadosMarcados);
             dados.put("executadoEm", LocalDateTime.now().toString());
 
             return ApiResponseUtil.success(dados, mensagem);
@@ -221,7 +221,7 @@ public class ComparecimentoController {
 
     @GetMapping("/resumo/sistema")
     @Operation(summary = "Resumo completo do sistema",
-            description = "Retorna resumo com pessoas cadastradas, comparecimentos e estatísticas gerais")
+            description = "Retorna resumo com custodiados cadastrados, comparecimentos e estatísticas gerais")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Resumo do sistema retornado com sucesso")
     public ResponseEntity<Map<String, Object>> buscarResumoSistema() {
         log.info("Buscando resumo completo do sistema");
@@ -238,7 +238,7 @@ public class ComparecimentoController {
 
     @PostMapping("/migrar/cadastros-iniciais")
     @Operation(summary = "Migrar cadastros iniciais",
-            description = "Cria comparecimentos iniciais para pessoas que não possuem histórico")
+            description = "Cria comparecimentos iniciais para custodiados que não possuem histórico")
     @ApiResponses(value = {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Migração executada com sucesso"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Erro na migração")

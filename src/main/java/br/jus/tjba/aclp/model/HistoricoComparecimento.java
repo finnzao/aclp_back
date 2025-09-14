@@ -17,12 +17,12 @@ import java.util.Objects;
 @Entity
 @Table(name = "historico_comparecimentos",
         indexes = {
-                @Index(name = "idx_historico_pessoa", columnList = "pessoa_id"),
+                @Index(name = "idx_historico_custodiado", columnList = "custodiado_id"),
                 @Index(name = "idx_historico_data", columnList = "data_comparecimento"),
                 @Index(name = "idx_historico_tipo", columnList = "tipo_validacao"),
-                @Index(name = "idx_historico_pessoa_data", columnList = "pessoa_id, data_comparecimento DESC"),
+                @Index(name = "idx_historico_custodiado_data", columnList = "custodiado_id, data_comparecimento DESC"),
                 @Index(name = "idx_historico_mudanca_endereco", columnList = "mudanca_endereco"),
-                @Index(name = "idx_historico_pessoa_mudanca", columnList = "pessoa_id, mudanca_endereco")
+                @Index(name = "idx_historico_custodiado_mudanca", columnList = "custodiado_id, mudanca_endereco")
         }
 )
 @Data
@@ -35,11 +35,11 @@ public class HistoricoComparecimento {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @NotNull(message = "Pessoa é obrigatória")
+    @NotNull(message = "Custodiado é obrigatório")
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "pessoa_id", nullable = false,
-            foreignKey = @ForeignKey(name = "fk_historico_pessoa"))
-    private Pessoa pessoa;
+    @JoinColumn(name = "custodiado_id", nullable = false,
+            foreignKey = @ForeignKey(name = "fk_historico_custodiado"))
+    private Custodiado custodiado;
 
     @NotNull(message = "Data do comparecimento é obrigatória")
     @Column(name = "data_comparecimento", nullable = false)
@@ -65,8 +65,7 @@ public class HistoricoComparecimento {
     @Column(name = "anexos", columnDefinition = "TEXT")
     private String anexos;
 
-    // === NOVA FUNCIONALIDADE: CONTROLE DE MUDANÇA DE ENDEREÇO ===
-
+    // Controle de mudança de endereço
     @Column(name = "mudanca_endereco", nullable = false)
     @Builder.Default
     private Boolean mudancaEndereco = Boolean.FALSE;
@@ -75,14 +74,12 @@ public class HistoricoComparecimento {
     @Column(name = "motivo_mudanca_endereco", length = 500)
     private String motivoMudancaEndereco;
 
-    // === RELACIONAMENTOS ===
-
+    // Relacionamentos
     @OneToMany(mappedBy = "historicoComparecimento", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @Builder.Default
     private List<HistoricoEndereco> enderecosAlterados = new ArrayList<>();
 
-    // === AUDITORIA ===
-
+    // Auditoria
     @Column(name = "criado_em", nullable = false)
     @Builder.Default
     private LocalDateTime criadoEm = LocalDateTime.now();
@@ -94,8 +91,6 @@ public class HistoricoComparecimento {
     @Column(name = "version")
     @Builder.Default
     private Long version = 0L;
-
-    // === MÉTODOS DE CICLO DE VIDA ===
 
     @PrePersist
     public void prePersist() {
@@ -115,8 +110,7 @@ public class HistoricoComparecimento {
         this.atualizadoEm = LocalDateTime.now();
     }
 
-    // === MÉTODOS UTILITÁRIOS ===
-
+    // Métodos utilitários
     public LocalDateTime getDataHoraComparecimento() {
         if (dataComparecimento == null) return null;
         if (horaComparecimento == null) return dataComparecimento.atStartOfDay();
@@ -160,26 +154,23 @@ public class HistoricoComparecimento {
     }
 
     public boolean isComparecimentoAtrasado() {
-        if (pessoa == null || dataComparecimento == null) return false;
+        if (custodiado == null || dataComparecimento == null) return false;
 
         // Se é cadastro inicial, não pode estar atrasado
         if (isCadastroInicial()) return false;
 
         // Verifica se a data do comparecimento é posterior ao próximo comparecimento esperado
-        LocalDate proximoEsperado = pessoa.getProximoComparecimento();
+        LocalDate proximoEsperado = custodiado.getProximoComparecimento();
         return proximoEsperado != null && dataComparecimento.isAfter(proximoEsperado);
     }
 
     public long getDiasAtraso() {
         if (!isComparecimentoAtrasado()) return 0;
 
-        LocalDate proximoEsperado = pessoa.getProximoComparecimento();
+        LocalDate proximoEsperado = custodiado.getProximoComparecimento();
         return java.time.temporal.ChronoUnit.DAYS.between(proximoEsperado, dataComparecimento);
     }
 
-    /**
-     * Adiciona um histórico de endereço relacionado a este comparecimento
-     */
     public void adicionarEnderecoAlterado(HistoricoEndereco historicoEndereco) {
         if (enderecosAlterados == null) {
             enderecosAlterados = new ArrayList<>();
@@ -189,15 +180,11 @@ public class HistoricoComparecimento {
         this.mudancaEndereco = Boolean.TRUE;
     }
 
-    /**
-     * Remove um histórico de endereço relacionado a este comparecimento
-     */
     public void removerEnderecoAlterado(HistoricoEndereco historicoEndereco) {
         if (enderecosAlterados != null) {
             enderecosAlterados.remove(historicoEndereco);
             historicoEndereco.setHistoricoComparecimento(null);
 
-            // Se não há mais endereços alterados, marca como false
             if (enderecosAlterados.isEmpty()) {
                 this.mudancaEndereco = Boolean.FALSE;
                 this.motivoMudancaEndereco = null;
@@ -205,23 +192,14 @@ public class HistoricoComparecimento {
         }
     }
 
-    /**
-     * Retorna o total de endereços alterados neste comparecimento
-     */
     public int getTotalEnderecosAlterados() {
         return enderecosAlterados != null ? enderecosAlterados.size() : 0;
     }
 
-    /**
-     * Verifica se este comparecimento teve mudanças de endereço
-     */
     public boolean temEnderecosAlterados() {
         return enderecosAlterados != null && !enderecosAlterados.isEmpty();
     }
 
-    /**
-     * Retorna uma descrição detalhada do comparecimento
-     */
     public String getDescricaoCompleta() {
         StringBuilder desc = new StringBuilder();
         desc.append("Comparecimento ").append(tipoValidacao.getLabel().toLowerCase());
@@ -250,7 +228,7 @@ public class HistoricoComparecimento {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         HistoricoComparecimento that = (HistoricoComparecimento) o;
-        return Objects.equals(pessoa, that.pessoa) &&
+        return Objects.equals(custodiado, that.custodiado) &&
                 Objects.equals(dataComparecimento, that.dataComparecimento) &&
                 Objects.equals(horaComparecimento, that.horaComparecimento) &&
                 Objects.equals(tipoValidacao, that.tipoValidacao);
@@ -258,6 +236,6 @@ public class HistoricoComparecimento {
 
     @Override
     public int hashCode() {
-        return Objects.hash(pessoa, dataComparecimento, horaComparecimento, tipoValidacao);
+        return Objects.hash(custodiado, dataComparecimento, horaComparecimento, tipoValidacao);
     }
 }

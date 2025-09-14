@@ -2,7 +2,7 @@ package br.jus.tjba.aclp.controller;
 
 import br.jus.tjba.aclp.dto.ApiResponse;
 import br.jus.tjba.aclp.dto.HistoricoEnderecoDTO;
-import br.jus.tjba.aclp.model.Pessoa;
+import br.jus.tjba.aclp.model.Custodiado;
 import br.jus.tjba.aclp.service.HistoricoEnderecoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -37,14 +37,14 @@ public class HistoricoEnderecoController {
     @ApiResponses(value = {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Histórico retornado com sucesso"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "ID da pessoa inválido"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Pessoa não encontrada")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Custodiado não encontrada")
     })
-    public ResponseEntity<ApiResponse<List<HistoricoEnderecoDTO>>> buscarHistoricoPorPessoa(
+    public ResponseEntity<ApiResponse<List<HistoricoEnderecoDTO>>> buscarHistoricoPorCustodiado(
             @Parameter(description = "ID da pessoa") @PathVariable Long pessoaId) {
-        log.info("Buscando histórico de endereços - Pessoa ID: {}", pessoaId);
+        log.info("Buscando histórico de endereços - Custodiado ID: {}", pessoaId);
 
         try {
-            List<HistoricoEnderecoDTO> historico = historicoEnderecoService.buscarHistoricoPorPessoa(pessoaId);
+            List<HistoricoEnderecoDTO> historico = historicoEnderecoService.buscarHistoricoPorCustodiado(pessoaId);
             return ResponseEntity.ok(
                     ApiResponse.success("Histórico de endereços encontrado", historico)
             );
@@ -60,19 +60,19 @@ public class HistoricoEnderecoController {
             description = "Retorna o endereço ativo atual de uma pessoa")
     @ApiResponses(value = {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Endereço ativo encontrado"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204", description = "Pessoa não possui endereço ativo"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204", description = "Custodiado não possui endereço ativo"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "ID da pessoa inválido")
     })
     public ResponseEntity<ApiResponse<HistoricoEnderecoDTO>> buscarEnderecoAtivo(
             @Parameter(description = "ID da pessoa") @PathVariable Long pessoaId) {
-        log.info("Buscando endereço ativo - Pessoa ID: {}", pessoaId);
+        log.info("Buscando endereço ativo - Custodiado ID: {}", pessoaId);
 
         try {
             Optional<HistoricoEnderecoDTO> endereco = historicoEnderecoService.buscarEnderecoAtivo(pessoaId);
             return endereco.map(dto -> ResponseEntity.ok(
                     ApiResponse.success("Endereço ativo encontrado", dto)
             )).orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).body(
-                    ApiResponse.error("Pessoa não possui endereço ativo")
+                    ApiResponse.error("Custodiado não possui endereço ativo")
             ));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(
@@ -90,7 +90,7 @@ public class HistoricoEnderecoController {
     })
     public ResponseEntity<ApiResponse<List<HistoricoEnderecoDTO>>> buscarEnderecosHistoricos(
             @Parameter(description = "ID da pessoa") @PathVariable Long pessoaId) {
-        log.info("Buscando endereços históricos - Pessoa ID: {}", pessoaId);
+        log.info("Buscando endereços históricos - Custodiado ID: {}", pessoaId);
 
         try {
             List<HistoricoEnderecoDTO> enderecos = historicoEnderecoService.buscarEnderecosHistoricos(pessoaId);
@@ -117,7 +117,7 @@ public class HistoricoEnderecoController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inicio,
             @Parameter(description = "Data de fim do período")
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fim) {
-        log.info("Buscando endereços por período - Pessoa ID: {}, Período: {} a {}", pessoaId, inicio, fim);
+        log.info("Buscando endereços por período - Custodiado ID: {}, Período: {} a {}", pessoaId, inicio, fim);
 
         try {
             List<HistoricoEnderecoDTO> enderecos = historicoEnderecoService.buscarEnderecosPorPeriodo(pessoaId, inicio, fim);
@@ -132,17 +132,17 @@ public class HistoricoEnderecoController {
     }
 
     @GetMapping("/cidade/{cidade}/pessoas")
-    @Operation(summary = "Pessoas por cidade",
+    @Operation(summary = "Custodiados por cidade",
             description = "Retorna pessoas que moram ou já moraram em uma cidade específica")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Pessoas retornadas com sucesso")
-    public ResponseEntity<ApiResponse<List<Pessoa>>> buscarPessoasPorCidade(
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Custodiados retornadas com sucesso")
+    public ResponseEntity<ApiResponse<List<Custodiado>>> buscarCustodiadosPorCidade(
             @Parameter(description = "Nome da cidade") @PathVariable String cidade) {
         log.info("Buscando pessoas por cidade: {}", cidade);
 
         try {
-            List<Pessoa> pessoas = historicoEnderecoService.buscarPessoasPorCidade(cidade);
+            List<Custodiado> pessoas = historicoEnderecoService.buscarCustodiadosPorCidade(cidade);
             return ResponseEntity.ok(
-                    ApiResponse.success("Pessoas encontradas na cidade", pessoas)
+                    ApiResponse.success("Custodiados encontradas na cidade", pessoas)
             );
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(
@@ -152,17 +152,17 @@ public class HistoricoEnderecoController {
     }
 
     @GetMapping("/estado/{estado}/pessoas")
-    @Operation(summary = "Pessoas por estado",
+    @Operation(summary = "Custodiados por estado",
             description = "Retorna pessoas que moram ou já moraram em um estado específico")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Pessoas retornadas com sucesso")
-    public ResponseEntity<ApiResponse<List<Pessoa>>> buscarPessoasPorEstado(
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Custodiados retornadas com sucesso")
+    public ResponseEntity<ApiResponse<List<Custodiado>>> buscarCustodiadosPorEstado(
             @Parameter(description = "Sigla do estado (ex: BA, SP)") @PathVariable String estado) {
         log.info("Buscando pessoas por estado: {}", estado);
 
         try {
-            List<Pessoa> pessoas = historicoEnderecoService.buscarPessoasPorEstado(estado);
+            List<Custodiado> pessoas = historicoEnderecoService.buscarCustodiadosPorEstado(estado);
             return ResponseEntity.ok(
-                    ApiResponse.success("Pessoas encontradas no estado", pessoas)
+                    ApiResponse.success("Custodiados encontradas no estado", pessoas)
             );
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(
@@ -204,12 +204,12 @@ public class HistoricoEnderecoController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Total retornado com sucesso"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "ID da pessoa inválido")
     })
-    public ResponseEntity<ApiResponse<Long>> contarEnderecosPorPessoa(
+    public ResponseEntity<ApiResponse<Long>> contarEnderecosPorCustodiado(
             @Parameter(description = "ID da pessoa") @PathVariable Long pessoaId) {
-        log.info("Contando endereços - Pessoa ID: {}", pessoaId);
+        log.info("Contando endereços - Custodiado ID: {}", pessoaId);
 
         try {
-            long total = historicoEnderecoService.contarEnderecosPorPessoa(pessoaId);
+            long total = historicoEnderecoService.contarEnderecosPorCustodiado(pessoaId);
             return ResponseEntity.ok(
                     ApiResponse.success("Total de endereços calculado", total)
             );
@@ -273,7 +273,7 @@ public class HistoricoEnderecoController {
             @Parameter(description = "ID da pessoa") @PathVariable Long pessoaId,
             @Parameter(description = "Data de referência")
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate data) {
-        log.info("Buscando último endereço anterior - Pessoa ID: {}, Data: {}", pessoaId, data);
+        log.info("Buscando último endereço anterior - Custodiado ID: {}, Data: {}", pessoaId, data);
 
         try {
             Optional<HistoricoEnderecoDTO> endereco = historicoEnderecoService.buscarUltimoEnderecoAnterior(pessoaId, data);

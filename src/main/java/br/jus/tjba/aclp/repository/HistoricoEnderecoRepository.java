@@ -1,7 +1,7 @@
 package br.jus.tjba.aclp.repository;
 
+import br.jus.tjba.aclp.model.Custodiado;
 import br.jus.tjba.aclp.model.HistoricoEndereco;
-import br.jus.tjba.aclp.model.Pessoa;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -15,36 +15,36 @@ import java.util.Optional;
 public interface HistoricoEnderecoRepository extends JpaRepository<HistoricoEndereco, Long> {
 
     /**
-     * Busca histórico de endereços de uma pessoa ordenado por data de início (mais recente primeiro)
+     * Busca histórico de endereços de um custodiado ordenado por data de início (mais recente primeiro)
      */
-    List<HistoricoEndereco> findByPessoaOrderByDataInicioDesc(Pessoa pessoa);
+    List<HistoricoEndereco> findByCustodiadoOrderByDataInicioDesc(Custodiado custodiado);
 
     /**
-     * Busca histórico de endereços de uma pessoa por ID ordenado por data de início
+     * Busca histórico de endereços de um custodiado por ID ordenado por data de início
      */
-    @Query("SELECT h FROM HistoricoEndereco h WHERE h.pessoa.id = :pessoaId ORDER BY h.dataInicio DESC")
-    List<HistoricoEndereco> findByPessoaIdOrderByDataInicioDesc(@Param("pessoaId") Long pessoaId);
+    @Query("SELECT h FROM HistoricoEndereco h WHERE h.custodiado.id = :custodiadoId ORDER BY h.dataInicio DESC")
+    List<HistoricoEndereco> findByCustodiadoIdOrderByDataInicioDesc(@Param("custodiadoId") Long custodiadoId);
 
     /**
-     * Busca o endereço ativo atual de uma pessoa (sem data de fim)
+     * Busca o endereço ativo atual de um custodiado
      */
-    @Query("SELECT h FROM HistoricoEndereco h WHERE h.pessoa.id = :pessoaId AND h.dataFim IS NULL")
-    Optional<HistoricoEndereco> findEnderecoAtivoPorPessoa(@Param("pessoaId") Long pessoaId);
+    @Query("SELECT h FROM HistoricoEndereco h WHERE h.custodiado.id = :custodiadoId AND h.ativo = true")
+    Optional<HistoricoEndereco> findEnderecoAtivoPorCustodiado(@Param("custodiadoId") Long custodiadoId);
 
     /**
-     * Busca endereços históricos de uma pessoa (com data de fim)
+     * Busca endereços históricos de um custodiado (inativos)
      */
-    @Query("SELECT h FROM HistoricoEndereco h WHERE h.pessoa.id = :pessoaId AND h.dataFim IS NOT NULL ORDER BY h.dataFim DESC")
-    List<HistoricoEndereco> findEnderecosHistoricosPorPessoa(@Param("pessoaId") Long pessoaId);
+    @Query("SELECT h FROM HistoricoEndereco h WHERE h.custodiado.id = :custodiadoId AND h.ativo = false ORDER BY h.dataFim DESC")
+    List<HistoricoEndereco> findEnderecosHistoricosPorCustodiado(@Param("custodiadoId") Long custodiadoId);
 
     /**
      * Busca endereços por período específico
      */
-    @Query("SELECT h FROM HistoricoEndereco h WHERE h.pessoa.id = :pessoaId " +
+    @Query("SELECT h FROM HistoricoEndereco h WHERE h.custodiado.id = :custodiadoId " +
             "AND h.dataInicio <= :dataFim " +
             "AND (h.dataFim IS NULL OR h.dataFim >= :dataInicio) " +
             "ORDER BY h.dataInicio DESC")
-    List<HistoricoEndereco> findEnderecosPorPeriodo(@Param("pessoaId") Long pessoaId,
+    List<HistoricoEndereco> findEnderecosPorPeriodo(@Param("custodiadoId") Long custodiadoId,
                                                     @Param("dataInicio") LocalDate dataInicio,
                                                     @Param("dataFim") LocalDate dataFim);
 
@@ -64,15 +64,15 @@ public interface HistoricoEnderecoRepository extends JpaRepository<HistoricoEnde
     List<HistoricoEndereco> findByEstado(String estado);
 
     /**
-     * Conta quantos endereços uma pessoa já teve
+     * Conta quantos endereços um custodiado já teve
      */
-    long countByPessoa(Pessoa pessoa);
+    long countByCustodiado(Custodiado custodiado);
 
     /**
      * Busca endereços que estavam ativos em uma data específica
      */
     @Query("SELECT h FROM HistoricoEndereco h WHERE h.dataInicio <= :data " +
-            "AND (h.dataFim IS NULL OR h.dataFim > :data)")
+            "AND (h.dataFim IS NULL OR h.dataFim > :data) AND h.ativo = true")
     List<HistoricoEndereco> findEnderecosAtivosPorData(@Param("data") LocalDate data);
 
     /**
@@ -90,16 +90,16 @@ public interface HistoricoEnderecoRepository extends JpaRepository<HistoricoEnde
     List<HistoricoEndereco> findByHistoricoComparecimentoId(@Param("comparecimentoId") Long comparecimentoId);
 
     /**
-     * Busca pessoas que moram/moraram em uma cidade específica
+     * Busca custodiados que moram/moraram em uma cidade específica
      */
-    @Query("SELECT DISTINCT h.pessoa FROM HistoricoEndereco h WHERE h.cidade = :cidade")
-    List<Pessoa> findPessoasPorCidade(@Param("cidade") String cidade);
+    @Query("SELECT DISTINCT h.custodiado FROM HistoricoEndereco h WHERE h.cidade = :cidade")
+    List<Custodiado> findCustodiadosPorCidade(@Param("cidade") String cidade);
 
     /**
-     * Busca pessoas que moram/moraram em um estado específico
+     * Busca custodiados que moram/moraram em um estado específico
      */
-    @Query("SELECT DISTINCT h.pessoa FROM HistoricoEndereco h WHERE h.estado = :estado")
-    List<Pessoa> findPessoasPorEstado(@Param("estado") String estado);
+    @Query("SELECT DISTINCT h.custodiado FROM HistoricoEndereco h WHERE h.estado = :estado")
+    List<Custodiado> findCustodiadosPorEstado(@Param("estado") String estado);
 
     /**
      * Busca endereços com motivação específica
@@ -108,27 +108,27 @@ public interface HistoricoEnderecoRepository extends JpaRepository<HistoricoEnde
     List<HistoricoEndereco> findByMotivoAlteracaoContaining(@Param("motivo") String motivo);
 
     /**
-     * Busca estatísticas de mudanças por pessoa
+     * Busca estatísticas de mudanças por custodiado
      */
-    @Query("SELECT h.pessoa.id, COUNT(h) as totalMudancas FROM HistoricoEndereco h " +
-            "WHERE h.dataFim IS NOT NULL GROUP BY h.pessoa.id ORDER BY totalMudancas DESC")
-    List<Object[]> findEstatisticasMudancasPorPessoa();
+    @Query("SELECT h.custodiado.id, COUNT(h) as totalMudancas FROM HistoricoEndereco h " +
+            "WHERE h.ativo = false GROUP BY h.custodiado.id ORDER BY totalMudancas DESC")
+    List<Object[]> findEstatisticasMudancasPorCustodiado();
 
     /**
      * Busca endereços que duraram menos que X dias
      */
     @Query("SELECT h FROM HistoricoEndereco h WHERE h.dataFim IS NOT NULL " +
             "AND FUNCTION('DATE_PART', 'day', h.dataFim - h.dataInicio) < :dias")
-    List<HistoricoEndereco> findEnderecosComPoucasDuracao(@Param("dias") long dias);
+    List<HistoricoEndereco> findEnderecosComPoucaDuracao(@Param("dias") long dias);
 
     /**
-     * Verifica se existe sobreposição de endereços para uma pessoa
+     * Verifica se existe sobreposição de endereços para um custodiado
      */
-    @Query("SELECT COUNT(h) > 0 FROM HistoricoEndereco h WHERE h.pessoa.id = :pessoaId " +
+    @Query("SELECT COUNT(h) > 0 FROM HistoricoEndereco h WHERE h.custodiado.id = :custodiadoId " +
             "AND h.id != :enderecoId " +
             "AND h.dataInicio <= :dataFim " +
             "AND (h.dataFim IS NULL OR h.dataFim >= :dataInicio)")
-    boolean existeSobreposicaoEndereco(@Param("pessoaId") Long pessoaId,
+    boolean existeSobreposicaoEndereco(@Param("custodiadoId") Long custodiadoId,
                                        @Param("enderecoId") Long enderecoId,
                                        @Param("dataInicio") LocalDate dataInicio,
                                        @Param("dataFim") LocalDate dataFim);
@@ -136,8 +136,21 @@ public interface HistoricoEnderecoRepository extends JpaRepository<HistoricoEnde
     /**
      * Busca o último endereço anterior a uma data específica
      */
-    @Query("SELECT h FROM HistoricoEndereco h WHERE h.pessoa.id = :pessoaId " +
+    @Query("SELECT h FROM HistoricoEndereco h WHERE h.custodiado.id = :custodiadoId " +
             "AND h.dataInicio <= :data ORDER BY h.dataInicio DESC LIMIT 1")
-    Optional<HistoricoEndereco> findUltimoEnderecoAnteriorData(@Param("pessoaId") Long pessoaId,
+    Optional<HistoricoEndereco> findUltimoEnderecoAnteriorData(@Param("custodiadoId") Long custodiadoId,
                                                                @Param("data") LocalDate data);
+
+    /**
+     * Busca todos os endereços ativos
+     */
+    @Query("SELECT h FROM HistoricoEndereco h WHERE h.ativo = true")
+    List<HistoricoEndereco> findAllEnderecosAtivos();
+
+    /**
+     * Conta custodiados sem endereço ativo
+     */
+    @Query("SELECT COUNT(DISTINCT c) FROM Custodiado c WHERE c.id NOT IN " +
+            "(SELECT h.custodiado.id FROM HistoricoEndereco h WHERE h.ativo = true)")
+    long countCustodiadosSemEnderecoAtivo();
 }

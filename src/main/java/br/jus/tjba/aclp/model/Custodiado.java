@@ -3,7 +3,6 @@ package br.jus.tjba.aclp.model;
 import br.jus.tjba.aclp.model.enums.StatusComparecimento;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import lombok.*;
 
@@ -15,20 +14,15 @@ import java.util.List;
 import java.util.Objects;
 
 @Entity
-@Table(name = "pessoas",
+@Table(name = "custodiados",
         indexes = {
-                @Index(name = "idx_pessoa_cpf", columnList = "cpf"),
-                @Index(name = "idx_pessoa_rg", columnList = "rg"),
-                @Index(name = "idx_pessoa_processo", columnList = "processo"),
-                @Index(name = "idx_pessoa_status", columnList = "status"),
-                @Index(name = "idx_pessoa_proximo_comparecimento", columnList = "proximo_comparecimento"),
-                @Index(name = "idx_pessoa_status_proximo", columnList = "status, proximo_comparecimento"),
-                @Index(name = "idx_pessoa_comarca_status", columnList = "comarca, status")
-        },
-        uniqueConstraints = {
-                @UniqueConstraint(name = "uk_pessoa_cpf", columnNames = "cpf"),
-                @UniqueConstraint(name = "uk_pessoa_rg", columnNames = "rg"),
-                @UniqueConstraint(name = "uk_pessoa_processo", columnNames = "processo")
+                @Index(name = "idx_custodiado_cpf", columnList = "cpf"),
+                @Index(name = "idx_custodiado_rg", columnList = "rg"),
+                @Index(name = "idx_custodiado_processo", columnList = "processo"),
+                @Index(name = "idx_custodiado_status", columnList = "status"),
+                @Index(name = "idx_custodiado_proximo_comparecimento", columnList = "proximo_comparecimento"),
+                @Index(name = "idx_custodiado_status_proximo", columnList = "status, proximo_comparecimento"),
+                @Index(name = "idx_custodiado_comarca_status", columnList = "comarca, status")
         }
 )
 @Data
@@ -36,7 +30,7 @@ import java.util.Objects;
 @AllArgsConstructor
 @Builder
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
-public class Pessoa {
+public class Custodiado {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -49,11 +43,11 @@ public class Pessoa {
     private String nome;
 
     @Pattern(regexp = "\\d{3}\\.?\\d{3}\\.?\\d{3}-?\\d{2}", message = "CPF deve ter o formato 000.000.000-00")
-    @Column(name = "cpf", unique = true, length = 14)
+    @Column(name = "cpf", length = 14)
     private String cpf;
 
     @Size(max = 20, message = "RG deve ter no máximo 20 caracteres")
-    @Column(name = "rg", unique = true, length = 20)
+    @Column(name = "rg", length = 20)
     private String rg;
 
     @NotBlank(message = "Contato é obrigatório")
@@ -61,10 +55,11 @@ public class Pessoa {
     @Column(name = "contato", nullable = false, length = 20)
     private String contato;
 
+    // Processo não é mais único - vários custodiados podem ter o mesmo processo
     @NotBlank(message = "Processo é obrigatório")
     @Pattern(regexp = "\\d{7}-\\d{2}\\.\\d{4}\\.\\d{1}\\.\\d{2}\\.\\d{4}",
             message = "Processo deve ter o formato 0000000-00.0000.0.00.0000")
-    @Column(name = "processo", nullable = false, unique = true, length = 25)
+    @Column(name = "processo", nullable = false, length = 25)
     private String processo;
 
     @NotBlank(message = "Vara é obrigatória")
@@ -92,29 +87,17 @@ public class Pessoa {
     @Column(name = "data_comparecimento_inicial", nullable = false)
     private LocalDate dataComparecimentoInicial;
 
+    // Campos mantidos para performance (atualizados ao registrar comparecimento)
     @NotNull(message = "Status é obrigatório")
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private StatusComparecimento status;
 
-    @NotNull(message = "Primeiro comparecimento é obrigatório")
-    @Column(name = "primeiro_comparecimento", nullable = false)
-    private LocalDate primeiroComparecimento;
-
-    @NotNull(message = "Último comparecimento é obrigatório")
-    @Column(name = "ultimo_comparecimento", nullable = false)
+    @Column(name = "ultimo_comparecimento")
     private LocalDate ultimoComparecimento;
 
-    @NotNull(message = "Próximo comparecimento é obrigatório")
-    @Column(name = "proximo_comparecimento", nullable = false)
+    @Column(name = "proximo_comparecimento")
     private LocalDate proximoComparecimento;
-
-    // === ENDEREÇO AGORA É OBRIGATÓRIO ===
-    @NotNull(message = "Endereço é obrigatório")
-    @Valid
-    @ManyToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
-    @JoinColumn(name = "endereco_id", nullable = false, foreignKey = @ForeignKey(name = "fk_pessoa_endereco"))
-    private Endereco endereco;
 
     @Size(max = 500, message = "Observações deve ter no máximo 500 caracteres")
     @Column(name = "observacoes", length = 500)
@@ -132,21 +115,22 @@ public class Pessoa {
     @Builder.Default
     private Long version = 0L;
 
-    @OneToMany(mappedBy = "pessoa", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    // Relacionamentos
+    @OneToMany(mappedBy = "custodiado", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @OrderBy("dataComparecimento DESC")
     @Builder.Default
     private List<HistoricoComparecimento> historicoComparecimentos = new ArrayList<>();
 
+    @OneToMany(mappedBy = "custodiado", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OrderBy("dataInicio DESC")
+    @Builder.Default
+    private List<HistoricoEndereco> historicoEnderecos = new ArrayList<>();
+
+    // Validações
     @AssertTrue(message = "Pelo menos CPF ou RG deve ser informado")
     public boolean isDocumentosValidos() {
         return (cpf != null && !cpf.trim().isEmpty()) ||
                 (rg != null && !rg.trim().isEmpty());
-    }
-
-    @AssertTrue(message = "Endereço deve estar completo quando fornecido")
-    public boolean isEnderecoValido() {
-        // Se endereço for fornecido, deve estar completo
-        return endereco == null || endereco.isCompleto();
     }
 
     @PrePersist
@@ -157,23 +141,25 @@ public class Pessoa {
         if (this.version == null) {
             this.version = 0L;
         }
+        if (this.status == null) {
+            this.status = StatusComparecimento.EM_CONFORMIDADE;
+        }
 
-        // Validar se o endereço está presente (agora obrigatório)
-        if (this.endereco == null) {
-            throw new IllegalStateException("Endereço é obrigatório para cadastrar uma pessoa");
+        // Inicializar datas se for o primeiro cadastro
+        if (this.ultimoComparecimento == null) {
+            this.ultimoComparecimento = this.dataComparecimentoInicial;
+        }
+        if (this.proximoComparecimento == null) {
+            calcularProximoComparecimento();
         }
     }
 
     @PreUpdate
     public void preUpdate() {
         this.atualizadoEm = LocalDateTime.now();
-
-        // Validar se o endereço está presente (agora obrigatório)
-        if (this.endereco == null) {
-            throw new IllegalStateException("Endereço é obrigatório para uma pessoa");
-        }
     }
 
+    // Métodos de formatação
     public void setCpf(String cpf) {
         if (cpf != null) {
             String digits = cpf.replaceAll("[^\\d]", "");
@@ -194,9 +180,18 @@ public class Pessoa {
         this.nome = nome != null ? nome.trim() : null;
     }
 
+    // Métodos de cálculo
     public void calcularProximoComparecimento() {
         if (ultimoComparecimento != null && periodicidade != null) {
             this.proximoComparecimento = ultimoComparecimento.plusDays(periodicidade);
+        }
+    }
+
+    public void atualizarStatusBaseadoEmData() {
+        if (proximoComparecimento != null && proximoComparecimento.isBefore(LocalDate.now())) {
+            this.status = StatusComparecimento.INADIMPLENTE;
+        } else {
+            this.status = StatusComparecimento.EM_CONFORMIDADE;
         }
     }
 
@@ -207,14 +202,14 @@ public class Pessoa {
                 ChronoUnit.DAYS.between(proximoComparecimento, hoje) : 0;
     }
 
+    public boolean isInadimplente() {
+        return status == StatusComparecimento.INADIMPLENTE ||
+                (proximoComparecimento != null && proximoComparecimento.isBefore(LocalDate.now()));
+    }
+
     public boolean isComparecimentoHoje() {
         return proximoComparecimento != null &&
                 proximoComparecimento.equals(LocalDate.now());
-    }
-
-    public boolean isAtrasado() {
-        return proximoComparecimento != null &&
-                proximoComparecimento.isBefore(LocalDate.now());
     }
 
     public boolean isProximoComparecimento(int dias) {
@@ -224,6 +219,33 @@ public class Pessoa {
                 !proximoComparecimento.isAfter(limite);
     }
 
+    // Métodos para endereço
+    public HistoricoEndereco getEnderecoAtual() {
+        return historicoEnderecos.stream()
+                .filter(HistoricoEndereco::isEnderecoAtivo)
+                .findFirst()
+                .orElse(null);
+    }
+
+    public String getEnderecoCompleto() {
+        HistoricoEndereco enderecoAtual = getEnderecoAtual();
+        return enderecoAtual != null ? enderecoAtual.getEnderecoCompleto() : "Endereço não informado";
+    }
+
+    public String getEnderecoResumido() {
+        HistoricoEndereco enderecoAtual = getEnderecoAtual();
+        return enderecoAtual != null ? enderecoAtual.getEnderecoResumido() : "Sem endereço";
+    }
+
+    public String getCidadeEstado() {
+        HistoricoEndereco enderecoAtual = getEnderecoAtual();
+        if (enderecoAtual != null) {
+            return enderecoAtual.getCidade() + " - " + enderecoAtual.getEstado();
+        }
+        return "Não informado";
+    }
+
+    // Métodos auxiliares
     public String getIdentificacao() {
         if (cpf != null && !cpf.trim().isEmpty()) {
             return "CPF: " + cpf;
@@ -244,69 +266,22 @@ public class Pessoa {
         return periodicidade + " dias";
     }
 
-    /**
-     * Retorna endereço completo formatado
-     */
-    public String getEnderecoCompleto() {
-        return endereco != null ? endereco.getEnderecoCompleto() : "Endereço não informado";
-    }
-
-    /**
-     * Retorna endereço resumido
-     */
-    public String getEnderecoResumido() {
-        return endereco != null ? endereco.getEnderecoResumido() : "Sem endereço";
-    }
-
-    /**
-     * Retorna cidade e estado
-     */
-    public String getCidadeEstado() {
-        if (endereco != null) {
-            return endereco.getCidade() + " - " + endereco.getEstado();
-        }
-        return "Não informado";
-    }
-
-    /**
-     * Retorna CEP formatado
-     */
-    public String getCep() {
-        return endereco != null ? endereco.getCep() : null;
-    }
-
-    /**
-     * Retorna nome do estado por extenso
-     */
-    public String getNomeEstado() {
-        return endereco != null ? endereco.getNomeEstado() : "Não informado";
-    }
-
-    /**
-     * Retorna região do estado
-     */
-    public String getRegiaoEstado() {
-        return endereco != null ? endereco.getRegiaoEstado() : "Não informada";
-    }
-
     public void adicionarHistorico(HistoricoComparecimento historico) {
         if (historicoComparecimentos == null) {
             historicoComparecimentos = new ArrayList<>();
         }
         historicoComparecimentos.add(historico);
-        historico.setPessoa(this);
+        historico.setCustodiado(this);
     }
 
-    /**
-     * Verifica se a pessoa possui endereço completo
-     */
-    public boolean hasEnderecoCompleto() {
-        return endereco != null && endereco.isCompleto();
+    public void adicionarHistoricoEndereco(HistoricoEndereco historicoEndereco) {
+        if (historicoEnderecos == null) {
+            historicoEnderecos = new ArrayList<>();
+        }
+        historicoEnderecos.add(historicoEndereco);
+        historicoEndereco.setCustodiado(this);
     }
 
-    /**
-     * Resumo da pessoa para logs e relatórios
-     */
     public String getResumo() {
         return String.format("%s - %s - %s",
                 nome,
@@ -318,12 +293,12 @@ public class Pessoa {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        Pessoa pessoa = (Pessoa) o;
-        return Objects.equals(processo, pessoa.processo);
+        Custodiado custodiado = (Custodiado) o;
+        return Objects.equals(id, custodiado.id);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(processo);
+        return Objects.hash(id);
     }
 }

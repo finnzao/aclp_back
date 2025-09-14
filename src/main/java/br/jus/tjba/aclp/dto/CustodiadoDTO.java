@@ -16,7 +16,7 @@ import java.time.LocalDate;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class PessoaDTO {
+public class CustodiadoDTO {
 
     private Long id;
 
@@ -59,14 +59,13 @@ public class PessoaDTO {
     private LocalDate dataComparecimentoInicial;
 
     private StatusComparecimento status;
-    private LocalDate primeiroComparecimento;
     private LocalDate ultimoComparecimento;
     private LocalDate proximoComparecimento;
 
     @Size(max = 500, message = "Observações deve ter no máximo 500 caracteres")
     private String observacoes;
 
-    // === CAMPOS DE ENDEREÇO - AGORA OBRIGATÓRIOS ===
+    // === CAMPOS DE ENDEREÇO - OBRIGATÓRIOS ===
 
     @NotBlank(message = "CEP é obrigatório")
     @Pattern(regexp = "\\d{5}-?\\d{3}", message = "CEP deve ter o formato 00000-000")

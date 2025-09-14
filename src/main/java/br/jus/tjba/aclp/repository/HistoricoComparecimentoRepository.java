@@ -1,7 +1,7 @@
 package br.jus.tjba.aclp.repository;
 
+import br.jus.tjba.aclp.model.Custodiado;
 import br.jus.tjba.aclp.model.HistoricoComparecimento;
-import br.jus.tjba.aclp.model.Pessoa;
 import br.jus.tjba.aclp.model.enums.TipoValidacao;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -15,15 +15,15 @@ import java.util.List;
 public interface HistoricoComparecimentoRepository extends JpaRepository<HistoricoComparecimento, Long> {
 
     /**
-     * Busca histórico de comparecimentos de uma pessoa ordenado por data (mais recente primeiro)
+     * Busca histórico de comparecimentos de um custodiado ordenado por data (mais recente primeiro)
      */
-    List<HistoricoComparecimento> findByPessoaOrderByDataComparecimentoDesc(Pessoa pessoa);
+    List<HistoricoComparecimento> findByCustodiadoOrderByDataComparecimentoDesc(Custodiado custodiado);
 
     /**
-     * Busca histórico de comparecimentos por ID da pessoa
+     * Busca histórico de comparecimentos por ID do custodiado
      */
-    @Query("SELECT h FROM HistoricoComparecimento h WHERE h.pessoa.id = :pessoaId ORDER BY h.dataComparecimento DESC")
-    List<HistoricoComparecimento> findByPessoaIdOrderByDataComparecimentoDesc(@Param("pessoaId") Long pessoaId);
+    @Query("SELECT h FROM HistoricoComparecimento h WHERE h.custodiado.id = :custodiadoId ORDER BY h.dataComparecimento DESC")
+    List<HistoricoComparecimento> findByCustodiadoIdOrderByDataComparecimentoDesc(@Param("custodiadoId") Long custodiadoId);
 
     /**
      * Busca comparecimentos de uma data específica
@@ -42,17 +42,15 @@ public interface HistoricoComparecimentoRepository extends JpaRepository<Histori
     List<HistoricoComparecimento> findByDataComparecimentoBetween(@Param("inicio") LocalDate inicio, @Param("fim") LocalDate fim);
 
     /**
-     * Conta total de comparecimentos de uma pessoa
+     * Conta total de comparecimentos de um custodiado
      */
-    long countByPessoa(Pessoa pessoa);
+    long countByCustodiado(Custodiado custodiado);
 
     /**
-     * Busca comparecimentos de uma pessoa por ID e data específica
+     * Busca comparecimentos de um custodiado por ID e data específica
      */
-    @Query("SELECT h FROM HistoricoComparecimento h WHERE h.pessoa.id = :pessoaId AND h.dataComparecimento = :data")
-    List<HistoricoComparecimento> findByPessoaIdAndDataComparecimento(@Param("pessoaId") Long pessoaId, @Param("data") LocalDate data);
-
-    // === NOVAS CONSULTAS PARA MUDANÇA DE ENDEREÇO ===
+    @Query("SELECT h FROM HistoricoComparecimento h WHERE h.custodiado.id = :custodiadoId AND h.dataComparecimento = :data")
+    List<HistoricoComparecimento> findByCustodiadoIdAndDataComparecimento(@Param("custodiadoId") Long custodiadoId, @Param("data") LocalDate data);
 
     /**
      * Busca comparecimentos com mudança de endereço
@@ -60,10 +58,10 @@ public interface HistoricoComparecimentoRepository extends JpaRepository<Histori
     List<HistoricoComparecimento> findByMudancaEnderecoTrue();
 
     /**
-     * Busca comparecimentos com mudança de endereço de uma pessoa específica
+     * Busca comparecimentos com mudança de endereço de um custodiado específico
      */
-    @Query("SELECT h FROM HistoricoComparecimento h WHERE h.pessoa.id = :pessoaId AND h.mudancaEndereco = true ORDER BY h.dataComparecimento DESC")
-    List<HistoricoComparecimento> findByPessoaIdAndMudancaEnderecoTrue(@Param("pessoaId") Long pessoaId);
+    @Query("SELECT h FROM HistoricoComparecimento h WHERE h.custodiado.id = :custodiadoId AND h.mudancaEndereco = true ORDER BY h.dataComparecimento DESC")
+    List<HistoricoComparecimento> findByCustodiadoIdAndMudancaEnderecoTrue(@Param("custodiadoId") Long custodiadoId);
 
     /**
      * Busca comparecimentos sem mudança de endereço
@@ -71,34 +69,34 @@ public interface HistoricoComparecimentoRepository extends JpaRepository<Histori
     List<HistoricoComparecimento> findByMudancaEnderecoFalse();
 
     /**
-     * Conta comparecimentos com mudança de endereço por pessoa
+     * Conta comparecimentos com mudança de endereço por custodiado
      */
-    @Query("SELECT COUNT(h) FROM HistoricoComparecimento h WHERE h.pessoa.id = :pessoaId AND h.mudancaEndereco = true")
-    long countMudancasEnderecoPorPessoa(@Param("pessoaId") Long pessoaId);
+    @Query("SELECT COUNT(h) FROM HistoricoComparecimento h WHERE h.custodiado.id = :custodiadoId AND h.mudancaEndereco = true")
+    long countMudancasEnderecoPorCustodiado(@Param("custodiadoId") Long custodiadoId);
 
     /**
-     * Busca último comparecimento de uma pessoa
+     * Busca último comparecimento de um custodiado
      */
-    @Query("SELECT h FROM HistoricoComparecimento h WHERE h.pessoa.id = :pessoaId ORDER BY h.dataComparecimento DESC, h.horaComparecimento DESC LIMIT 1")
-    HistoricoComparecimento findUltimoComparecimentoPorPessoa(@Param("pessoaId") Long pessoaId);
+    @Query("SELECT h FROM HistoricoComparecimento h WHERE h.custodiado.id = :custodiadoId ORDER BY h.dataComparecimento DESC, h.horaComparecimento DESC LIMIT 1")
+    HistoricoComparecimento findUltimoComparecimentoPorCustodiado(@Param("custodiadoId") Long custodiadoId);
 
     /**
-     * Busca primeiro comparecimento (cadastro inicial) de uma pessoa
+     * Busca primeiro comparecimento (cadastro inicial) de um custodiado
      */
-    @Query("SELECT h FROM HistoricoComparecimento h WHERE h.pessoa.id = :pessoaId AND h.tipoValidacao = 'CADASTRO_INICIAL'")
-    HistoricoComparecimento findCadastroInicialPorPessoa(@Param("pessoaId") Long pessoaId);
+    @Query("SELECT h FROM HistoricoComparecimento h WHERE h.custodiado.id = :custodiadoId AND h.tipoValidacao = 'CADASTRO_INICIAL'")
+    HistoricoComparecimento findCadastroInicialPorCustodiado(@Param("custodiadoId") Long custodiadoId);
 
     /**
-     * Busca comparecimentos regulares de uma pessoa (excluindo cadastro inicial)
+     * Busca comparecimentos regulares de um custodiado (excluindo cadastro inicial)
      */
-    @Query("SELECT h FROM HistoricoComparecimento h WHERE h.pessoa.id = :pessoaId AND h.tipoValidacao != 'CADASTRO_INICIAL' ORDER BY h.dataComparecimento DESC")
-    List<HistoricoComparecimento> findComparecimentosRegularesPorPessoa(@Param("pessoaId") Long pessoaId);
+    @Query("SELECT h FROM HistoricoComparecimento h WHERE h.custodiado.id = :custodiadoId AND h.tipoValidacao != 'CADASTRO_INICIAL' ORDER BY h.dataComparecimento DESC")
+    List<HistoricoComparecimento> findComparecimentosRegularesPorCustodiado(@Param("custodiadoId") Long custodiadoId);
 
     /**
      * Busca comparecimentos atrasados (posteriores ao prazo esperado)
      */
-    @Query("SELECT h FROM HistoricoComparecimento h JOIN h.pessoa p " +
-            "WHERE h.dataComparecimento > p.proximoComparecimento " +
+    @Query("SELECT h FROM HistoricoComparecimento h JOIN h.custodiado c " +
+            "WHERE h.dataComparecimento > c.proximoComparecimento " +
             "AND h.tipoValidacao != 'CADASTRO_INICIAL' " +
             "ORDER BY h.dataComparecimento DESC")
     List<HistoricoComparecimento> findComparecimentosAtrasados();
@@ -137,19 +135,19 @@ public interface HistoricoComparecimentoRepository extends JpaRepository<Histori
     List<Object[]> findEstatisticasMudancasEnderecoPorPeriodo(@Param("inicio") LocalDate inicio, @Param("fim") LocalDate fim);
 
     /**
-     * Busca pessoas com mais mudanças de endereço
+     * Busca custodiados com mais mudanças de endereço
      */
-    @Query("SELECT h.pessoa, COUNT(h) as totalMudancas FROM HistoricoComparecimento h " +
+    @Query("SELECT h.custodiado, COUNT(h) as totalMudancas FROM HistoricoComparecimento h " +
             "WHERE h.mudancaEndereco = true " +
-            "GROUP BY h.pessoa " +
+            "GROUP BY h.custodiado " +
             "ORDER BY totalMudancas DESC")
-    List<Object[]> findPessoasComMaisMudancasEndereco();
+    List<Object[]> findCustodiadosComMaisMudancasEndereco();
 
     /**
-     * Verifica se pessoa já tem cadastro inicial
+     * Verifica se custodiado já tem cadastro inicial
      */
-    @Query("SELECT COUNT(h) > 0 FROM HistoricoComparecimento h WHERE h.pessoa.id = :pessoaId AND h.tipoValidacao = 'CADASTRO_INICIAL'")
-    boolean existsCadastroInicialPorPessoa(@Param("pessoaId") Long pessoaId);
+    @Query("SELECT COUNT(h) > 0 FROM HistoricoComparecimento h WHERE h.custodiado.id = :custodiadoId AND h.tipoValidacao = 'CADASTRO_INICIAL'")
+    boolean existsCadastroInicialPorCustodiado(@Param("custodiadoId") Long custodiadoId);
 
     /**
      * Busca comparecimentos com observações
@@ -164,11 +162,23 @@ public interface HistoricoComparecimentoRepository extends JpaRepository<Histori
     List<HistoricoComparecimento> findComparecimentosComAnexos();
 
     /**
-     * Média de dias entre comparecimentos de uma pessoa (CORRIGIDA)
-     * Removida a query problemática - será implementada no service usando código Java
+     * Busca comparecimentos para cálculo de média
      */
-    @Query("SELECT h FROM HistoricoComparecimento h WHERE h.pessoa.id = :pessoaId " +
+    @Query("SELECT h FROM HistoricoComparecimento h WHERE h.custodiado.id = :custodiadoId " +
             "AND h.tipoValidacao != 'CADASTRO_INICIAL' " +
             "ORDER BY h.dataComparecimento ASC")
-    List<HistoricoComparecimento> findComparecimentosParaCalculoMedia(@Param("pessoaId") Long pessoaId);
+    List<HistoricoComparecimento> findComparecimentosParaCalculoMedia(@Param("custodiadoId") Long custodiadoId);
+
+    /**
+     * Busca todos os primeiros comparecimentos (cadastros iniciais)
+     */
+    @Query("SELECT h FROM HistoricoComparecimento h WHERE h.tipoValidacao = 'CADASTRO_INICIAL' ORDER BY h.dataComparecimento DESC")
+    List<HistoricoComparecimento> findAllCadastrosIniciais();
+
+    /**
+     * Conta custodiados sem cadastro inicial
+     */
+    @Query("SELECT COUNT(DISTINCT c) FROM Custodiado c WHERE c.id NOT IN " +
+            "(SELECT h.custodiado.id FROM HistoricoComparecimento h WHERE h.tipoValidacao = 'CADASTRO_INICIAL')")
+    long countCustodiadosSemCadastroInicial();
 }
