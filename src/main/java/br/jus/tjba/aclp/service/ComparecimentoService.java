@@ -15,6 +15,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -262,7 +263,7 @@ public class ComparecimentoService {
 
         // Mudanças de endereço
         long totalMudancasEndereco = historicoComparecimentoRepository
-                .findByMudancaEnderecoTrue().size();
+                .count();
 
         // Endereços ativos
         long enderecosAtivos = historicoEnderecoRepository.findAllEnderecosAtivos().size();
@@ -293,6 +294,9 @@ public class ComparecimentoService {
         // 4. Análises adicionais
         AnaliseComparecimentos analiseComparecimentos = calcularAnaliseComparecimentos();
 
+        // 5. NOVO: Análise de atrasos superiores a 30 dias
+        AnaliseAtrasos analiseAtrasos = calcularAnaliseAtrasos();
+
         return ResumoSistema.builder()
                 // Dados básicos
                 .totalCustodiados(totalCustodiados)
@@ -313,6 +317,7 @@ public class ComparecimentoService {
                 .tendenciaConformidade(tendenciaConformidade)
                 .proximosComparecimentos(proximosComparecimentos)
                 .analiseComparecimentos(analiseComparecimentos)
+                .analiseAtrasos(analiseAtrasos) // NOVO campo adicionado
                 .build();
     }
 
@@ -510,6 +515,138 @@ public class ComparecimentoService {
                         (double) online30 / comparecimentos30Dias.size() * 100 : 0.0)
                 .comparecimentosPorDiaSemana(comparecimentosPorDiaSemana)
                 .comparecimentosPorHora(comparecimentosPorHora)
+                .build();
+    }
+
+    /**
+     * NOVO MÉTODO: Calcula análise de atrasos superiores a 30 dias
+     */
+    private AnaliseAtrasos calcularAnaliseAtrasos() {
+        LocalDate hoje = LocalDate.now();
+        LocalDate limite30Dias = hoje.minusDays(30);
+        LocalDate limite60Dias = hoje.minusDays(60);
+        LocalDate limite90Dias = hoje.minusDays(90);
+
+        // Buscar todos os custodiados inadimplentes
+        List<Custodiado> custodiadosInadimplentes = custodiadoRepository.findInadimplentes();
+
+        // Categorizar por período de atraso
+        List<DetalheCustodiadoAtrasado> atrasados30Dias = new ArrayList<>();
+        List<DetalheCustodiadoAtrasado> atrasados60Dias = new ArrayList<>();
+        List<DetalheCustodiadoAtrasado> atrasados90Dias = new ArrayList<>();
+        List<DetalheCustodiadoAtrasado> atrasadosMais90Dias = new ArrayList<>();
+
+        long totalAtrasados30Dias = 0;
+        long totalAtrasados60Dias = 0;
+        long totalAtrasados90Dias = 0;
+        long totalAtrasadosMais90Dias = 0;
+
+        // Estatísticas por faixa de atraso
+        Map<String, Long> distribuicaoAtrasos = new HashMap<>();
+        distribuicaoAtrasos.put("1-7 dias", 0L);
+        distribuicaoAtrasos.put("8-15 dias", 0L);
+        distribuicaoAtrasos.put("16-30 dias", 0L);
+        distribuicaoAtrasos.put("31-60 dias", 0L);
+        distribuicaoAtrasos.put("61-90 dias", 0L);
+        distribuicaoAtrasos.put("Mais de 90 dias", 0L);
+
+        for (Custodiado custodiado : custodiadosInadimplentes) {
+            if (custodiado.getProximoComparecimento() != null &&
+                    custodiado.getProximoComparecimento().isBefore(hoje)) {
+
+                long diasAtraso = ChronoUnit.DAYS.between(custodiado.getProximoComparecimento(), hoje);
+
+                DetalheCustodiadoAtrasado detalhe = DetalheCustodiadoAtrasado.builder()
+                        .id(custodiado.getId())
+                        .nome(custodiado.getNome())
+                        .processo(custodiado.getProcesso())
+                        .periodicidade(custodiado.getPeriodicidadeDescricao())
+                        .diasAtraso(diasAtraso)
+                        .dataUltimoComparecimento(custodiado.getUltimoComparecimento())
+                        .dataProximoComparecimento(custodiado.getProximoComparecimento())
+                        .vara(custodiado.getVara())
+                        .comarca(custodiado.getComarca())
+                        .contato(custodiado.getContato())
+                        .enderecoAtual(custodiado.getEnderecoResumido())
+                        .build();
+
+                // Categorizar por período
+                if (diasAtraso <= 7) {
+                    distribuicaoAtrasos.merge("1-7 dias", 1L, Long::sum);
+                } else if (diasAtraso <= 15) {
+                    distribuicaoAtrasos.merge("8-15 dias", 1L, Long::sum);
+                } else if (diasAtraso <= 30) {
+                    distribuicaoAtrasos.merge("16-30 dias", 1L, Long::sum);
+                } else if (diasAtraso <= 60) {
+                    distribuicaoAtrasos.merge("31-60 dias", 1L, Long::sum);
+                    totalAtrasados30Dias++;
+                    if (atrasados30Dias.size() < 20) { // Limitar lista para não ficar muito grande
+                        atrasados30Dias.add(detalhe);
+                    }
+                } else if (diasAtraso <= 90) {
+                    distribuicaoAtrasos.merge("61-90 dias", 1L, Long::sum);
+                    totalAtrasados60Dias++;
+                    if (atrasados60Dias.size() < 20) {
+                        atrasados60Dias.add(detalhe);
+                    }
+                } else {
+                    distribuicaoAtrasos.merge("Mais de 90 dias", 1L, Long::sum);
+                    totalAtrasadosMais90Dias++;
+                    if (atrasadosMais90Dias.size() < 20) {
+                        atrasadosMais90Dias.add(detalhe);
+                    }
+                }
+
+                // Adicionar aos atrasados > 30 dias
+                if (diasAtraso > 30) {
+                    if (diasAtraso > 90) {
+                        totalAtrasados90Dias++;
+                        if (atrasados90Dias.size() < 20) {
+                            atrasados90Dias.add(detalhe);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Calcular custodiado com maior atraso
+        DetalheCustodiadoAtrasado maiorAtraso = custodiadosInadimplentes.stream()
+                .filter(c -> c.getProximoComparecimento() != null && c.getProximoComparecimento().isBefore(hoje))
+                .map(c -> {
+                    long diasAtraso = ChronoUnit.DAYS.between(c.getProximoComparecimento(), hoje);
+                    return DetalheCustodiadoAtrasado.builder()
+                            .id(c.getId())
+                            .nome(c.getNome())
+                            .processo(c.getProcesso())
+                            .diasAtraso(diasAtraso)
+                            .dataUltimoComparecimento(c.getUltimoComparecimento())
+                            .dataProximoComparecimento(c.getProximoComparecimento())
+                            .build();
+                })
+                .max(Comparator.comparingLong(DetalheCustodiadoAtrasado::getDiasAtraso))
+                .orElse(null);
+
+        // Calcular média de dias de atraso
+        double mediaDiasAtraso = custodiadosInadimplentes.stream()
+                .filter(c -> c.getProximoComparecimento() != null && c.getProximoComparecimento().isBefore(hoje))
+                .mapToLong(c -> ChronoUnit.DAYS.between(c.getProximoComparecimento(), hoje))
+                .average()
+                .orElse(0.0);
+
+        return AnaliseAtrasos.builder()
+                .totalCustodiadosAtrasados(custodiadosInadimplentes.size())
+                .totalAtrasados30Dias(totalAtrasados30Dias)
+                .totalAtrasados60Dias(totalAtrasados60Dias)
+                .totalAtrasados90Dias(totalAtrasados90Dias)
+                .totalAtrasadosMais90Dias(totalAtrasadosMais90Dias)
+                .mediaDiasAtraso(mediaDiasAtraso)
+                .distribuicaoAtrasos(distribuicaoAtrasos)
+                .custodiadosAtrasados30Dias(atrasados30Dias)
+                .custodiadosAtrasados60Dias(atrasados60Dias)
+                .custodiadosAtrasados90Dias(atrasados90Dias)
+                .custodiadosAtrasadosMais90Dias(atrasadosMais90Dias)
+                .custodiadoMaiorAtraso(maiorAtraso)
+                .dataAnalise(hoje)
                 .build();
     }
 
@@ -792,6 +929,7 @@ public class ComparecimentoService {
         private List<TendenciaMensal> tendenciaConformidade;
         private ProximosComparecimentos proximosComparecimentos;
         private AnaliseComparecimentos analiseComparecimentos;
+        private AnaliseAtrasos analiseAtrasos; // NOVO campo
     }
 
     /**
@@ -880,5 +1018,45 @@ public class ComparecimentoService {
         private double taxaOnlineUltimos30Dias;
         private Map<String, Long> comparecimentosPorDiaSemana;
         private Map<Integer, Long> comparecimentosPorHora;
+    }
+
+    /**
+     * NOVO DTO para análise de atrasos
+     */
+    @lombok.Data
+    @lombok.Builder
+    public static class AnaliseAtrasos {
+        private long totalCustodiadosAtrasados;
+        private long totalAtrasados30Dias; // Atrasados entre 31-60 dias
+        private long totalAtrasados60Dias; // Atrasados entre 61-90 dias
+        private long totalAtrasados90Dias; // Atrasados há mais de 90 dias
+        private long totalAtrasadosMais90Dias; // Atrasados há mais de 90 dias
+        private double mediaDiasAtraso;
+        private Map<String, Long> distribuicaoAtrasos; // Distribuição por faixas
+        private List<DetalheCustodiadoAtrasado> custodiadosAtrasados30Dias;
+        private List<DetalheCustodiadoAtrasado> custodiadosAtrasados60Dias;
+        private List<DetalheCustodiadoAtrasado> custodiadosAtrasados90Dias;
+        private List<DetalheCustodiadoAtrasado> custodiadosAtrasadosMais90Dias;
+        private DetalheCustodiadoAtrasado custodiadoMaiorAtraso;
+        private LocalDate dataAnalise;
+    }
+
+    /**
+     * NOVO DTO para detalhe de custodiado atrasado
+     */
+    @lombok.Data
+    @lombok.Builder
+    public static class DetalheCustodiadoAtrasado {
+        private Long id;
+        private String nome;
+        private String processo;
+        private String periodicidade;
+        private long diasAtraso;
+        private LocalDate dataUltimoComparecimento;
+        private LocalDate dataProximoComparecimento;
+        private String vara;
+        private String comarca;
+        private String contato;
+        private String enderecoAtual;
     }
 }
