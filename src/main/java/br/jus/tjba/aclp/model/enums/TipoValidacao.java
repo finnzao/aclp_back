@@ -1,5 +1,6 @@
 package br.jus.tjba.aclp.model.enums;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 public enum TipoValidacao {
@@ -30,15 +31,30 @@ public enum TipoValidacao {
         return description;
     }
 
+    /**
+     * Aceita tanto o código quanto o nome do enum
+     */
+    @JsonCreator
     public static TipoValidacao fromString(String value) {
         if (value == null) return null;
 
+        // Primeiro tenta pelo código (minúsculas)
         for (TipoValidacao tipo : TipoValidacao.values()) {
-            if (tipo.code.equalsIgnoreCase(value) || tipo.name().equalsIgnoreCase(value)) {
+            if (tipo.code.equalsIgnoreCase(value)) {
                 return tipo;
             }
         }
-        throw new IllegalArgumentException("Tipo de validação inválido: " + value);
+
+        // Depois tenta pelo nome do enum (maiúsculas)
+        for (TipoValidacao tipo : TipoValidacao.values()) {
+            if (tipo.name().equalsIgnoreCase(value)) {
+                return tipo;
+            }
+        }
+
+        throw new IllegalArgumentException(
+                String.format("Tipo de validação inválido: '%s'. Use: presencial, online ou cadastro_inicial", value)
+        );
     }
 
     public boolean requerPresencaFisica() {
