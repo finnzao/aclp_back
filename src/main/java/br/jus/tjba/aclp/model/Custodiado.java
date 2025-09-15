@@ -1,6 +1,7 @@
 package br.jus.tjba.aclp.model;
 
 import br.jus.tjba.aclp.model.enums.StatusComparecimento;
+import br.jus.tjba.aclp.model.enums.StatusCustodiado;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
@@ -21,6 +22,9 @@ import java.util.Objects;
                 @Index(name = "idx_custodiado_rg", columnList = "rg"),
                 @Index(name = "idx_custodiado_processo", columnList = "processo"),
                 @Index(name = "idx_custodiado_status", columnList = "status"),
+                @Index(name = "idx_custodiado_status_custodiado", columnList = "status_custodiado"),
+                @Index(name = "idx_custodiado_cpf_status", columnList = "cpf, status_custodiado"),
+                @Index(name = "idx_custodiado_rg_status", columnList = "rg, status_custodiado"),
                 @Index(name = "idx_custodiado_proximo_comparecimento", columnList = "proximo_comparecimento"),
                 @Index(name = "idx_custodiado_status_proximo", columnList = "status, proximo_comparecimento"),
                 @Index(name = "idx_custodiado_comarca_status", columnList = "comarca, status")
@@ -56,7 +60,6 @@ public class Custodiado {
     @Column(name = "contato", nullable = false, length = 20)
     private String contato;
 
-    // Processo não é mais único - vários custodiados podem ter o mesmo processo
     @NotBlank(message = "Processo é obrigatório")
     @Pattern(regexp = "\\d{7}-\\d{2}\\.\\d{4}\\.\\d{1}\\.\\d{2}\\.\\d{4}",
             message = "Processo deve ter o formato 0000000-00.0000.0.00.0000")
@@ -88,11 +91,17 @@ public class Custodiado {
     @Column(name = "data_comparecimento_inicial", nullable = false)
     private LocalDate dataComparecimentoInicial;
 
-    // Campos mantidos para performance (atualizados ao registrar comparecimento)
     @NotNull(message = "Status é obrigatório")
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private StatusComparecimento status;
+
+    // NOVO CAMPO: Status do Custodiado (ATIVO ou ARQUIVADO)
+    @NotNull(message = "Status do custodiado é obrigatório")
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status_custodiado", nullable = false, length = 20)
+    @Builder.Default
+    private StatusCustodiado statusCustodiado = StatusCustodiado.ATIVO;
 
     @Column(name = "ultimo_comparecimento")
     private LocalDate ultimoComparecimento;
@@ -116,17 +125,17 @@ public class Custodiado {
     @Builder.Default
     private Long version = 0L;
 
-    // Relacionamentos - IGNORAR na serialização JSON para evitar referências circulares
+    // Relacionamentos
     @OneToMany(mappedBy = "custodiado", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @OrderBy("dataComparecimento DESC")
     @Builder.Default
-    @JsonIgnore // IMPORTANTE: Ignora na serialização JSON
+    @JsonIgnore
     private List<HistoricoComparecimento> historicoComparecimentos = new ArrayList<>();
 
     @OneToMany(mappedBy = "custodiado", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @OrderBy("dataInicio DESC")
     @Builder.Default
-    @JsonIgnore // IMPORTANTE: Ignora na serialização JSON
+    @JsonIgnore
     private List<HistoricoEndereco> historicoEnderecos = new ArrayList<>();
 
     // Validações
@@ -147,19 +156,50 @@ public class Custodiado {
         if (this.status == null) {
             this.status = StatusComparecimento.EM_CONFORMIDADE;
         }
-
-        // Inicializar datas se for o primeiro cadastro
-        if (this.ultimoComparecimento == null) {
-            this.ultimoComparecimento = this.dataComparecimentoInicial;
+        if (this.statusCustodiado == null) {
+            this.statusCustodiado = StatusCustodiado.ATIVO;
         }
-        if (this.proximoComparecimento == null) {
-            calcularProximoComparecimento();
+
+        // Inicializar datas apenas se estiver ATIVO
+        if (this.statusCustodiado.isAtivo()) {
+            if (this.ultimoComparecimento == null) {
+                this.ultimoComparecimento = this.dataComparecimentoInicial;
+            }
+            if (this.proximoComparecimento == null) {
+                calcularProximoComparecimento();
+            }
         }
     }
 
     @PreUpdate
     public void preUpdate() {
         this.atualizadoEm = LocalDateTime.now();
+
+        // Se está ARQUIVADO, limpar próximo comparecimento
+        if (this.statusCustodiado.isArquivado()) {
+            this.proximoComparecimento = null;
+        }
+    }
+
+    // Métodos auxiliares para status do custodiado
+    public boolean isAtivo() {
+        return statusCustodiado != null && statusCustodiado.isAtivo();
+    }
+
+    public boolean isArquivado() {
+        return statusCustodiado != null && statusCustodiado.isArquivado();
+    }
+
+    public void arquivar() {
+        this.statusCustodiado = StatusCustodiado.ARQUIVADO;
+        this.proximoComparecimento = null;
+        this.status = StatusComparecimento.EM_CONFORMIDADE; // Reset status de comparecimento
+    }
+
+    public void reativar() {
+        this.statusCustodiado = StatusCustodiado.ATIVO;
+        calcularProximoComparecimento();
+        atualizarStatusBaseadoEmData();
     }
 
     // Métodos de formatação
@@ -185,129 +225,95 @@ public class Custodiado {
 
     // Métodos de cálculo
     public void calcularProximoComparecimento() {
-        if (ultimoComparecimento != null && periodicidade != null) {
+        // Só calcula se estiver ATIVO
+        if (isAtivo() && ultimoComparecimento != null && periodicidade != null) {
             this.proximoComparecimento = ultimoComparecimento.plusDays(periodicidade);
         }
     }
 
     public void atualizarStatusBaseadoEmData() {
-        if (proximoComparecimento != null && proximoComparecimento.isBefore(LocalDate.now())) {
+        // Só atualiza status se estiver ATIVO
+        if (isAtivo() && proximoComparecimento != null && proximoComparecimento.isBefore(LocalDate.now())) {
             this.status = StatusComparecimento.INADIMPLENTE;
-        } else {
+        } else if (isAtivo()) {
             this.status = StatusComparecimento.EM_CONFORMIDADE;
         }
     }
 
     public long getDiasAtraso() {
-        if (proximoComparecimento == null) return 0;
+        if (!isAtivo() || proximoComparecimento == null) return 0;
         LocalDate hoje = LocalDate.now();
         return hoje.isAfter(proximoComparecimento) ?
                 ChronoUnit.DAYS.between(proximoComparecimento, hoje) : 0;
     }
 
     public boolean isInadimplente() {
-        return status == StatusComparecimento.INADIMPLENTE ||
-                (proximoComparecimento != null && proximoComparecimento.isBefore(LocalDate.now()));
+        return isAtivo() && (status == StatusComparecimento.INADIMPLENTE ||
+                (proximoComparecimento != null && proximoComparecimento.isBefore(LocalDate.now())));
     }
 
     public boolean isComparecimentoHoje() {
-        return proximoComparecimento != null &&
+        return isAtivo() && proximoComparecimento != null &&
                 proximoComparecimento.equals(LocalDate.now());
     }
 
     public boolean isProximoComparecimento(int dias) {
-        if (proximoComparecimento == null) return false;
+        if (!isAtivo() || proximoComparecimento == null) return false;
         LocalDate limite = LocalDate.now().plusDays(dias);
         return !proximoComparecimento.isBefore(LocalDate.now()) &&
                 !proximoComparecimento.isAfter(limite);
     }
 
-    // Métodos para endereço - SEM carregar relacionamentos automaticamente
+    // Métodos para endereço
     public HistoricoEndereco getEnderecoAtual() {
-        // Não acessa a lista diretamente para evitar lazy loading
-        // Este método deve ser usado apenas quando a lista já foi carregada
         return historicoEnderecos.stream()
                 .filter(HistoricoEndereco::isEnderecoAtivo)
                 .findFirst()
                 .orElse(null);
     }
 
-    /**
-     * Retorna o endereço atual em formato resumido.
-     * Evita lazy loading ao verificar se a lista já foi inicializada.
-     *
-     * @return String com endereço resumido ou mensagem padrão
-     */
     public String getEnderecoResumido() {
-        // Verificar se a lista de endereços foi inicializada para evitar lazy loading
         if (historicoEnderecos == null || historicoEnderecos.isEmpty()) {
             return "Endereço não carregado";
         }
-
-        // Buscar endereço ativo
         HistoricoEndereco enderecoAtivo = historicoEnderecos.stream()
                 .filter(HistoricoEndereco::isEnderecoAtivo)
                 .findFirst()
                 .orElse(null);
-
         if (enderecoAtivo != null) {
             return enderecoAtivo.getEnderecoResumido();
         }
-
         return "Sem endereço ativo";
     }
 
-    /**
-     * Retorna o endereço completo atual.
-     * Evita lazy loading ao verificar se a lista já foi inicializada.
-     *
-     * @return String com endereço completo ou mensagem padrão
-     */
     public String getEnderecoCompleto() {
-        // Verificar se a lista de endereços foi inicializada para evitar lazy loading
         if (historicoEnderecos == null || historicoEnderecos.isEmpty()) {
             return "Endereço não informado";
         }
-
-        // Buscar endereço ativo
         HistoricoEndereco enderecoAtivo = historicoEnderecos.stream()
                 .filter(HistoricoEndereco::isEnderecoAtivo)
                 .findFirst()
                 .orElse(null);
-
         if (enderecoAtivo != null) {
             return enderecoAtivo.getEnderecoCompleto();
         }
-
         return "Endereço não informado";
     }
 
-    /**
-     * Retorna cidade e estado do endereço atual.
-     * Evita lazy loading ao verificar se a lista já foi inicializada.
-     *
-     * @return String no formato "Cidade - Estado" ou mensagem padrão
-     */
     public String getCidadeEstado() {
-        // Verificar se a lista de endereços foi inicializada para evitar lazy loading
         if (historicoEnderecos == null || historicoEnderecos.isEmpty()) {
             return "Não informado";
         }
-
-        // Buscar endereço ativo
         HistoricoEndereco enderecoAtivo = historicoEnderecos.stream()
                 .filter(HistoricoEndereco::isEnderecoAtivo)
                 .findFirst()
                 .orElse(null);
-
         if (enderecoAtivo != null) {
             return enderecoAtivo.getCidade() + " - " + enderecoAtivo.getEstado();
         }
-
         return "Não informado";
     }
 
-    // Métodos auxiliares que NÃO dependem dos relacionamentos
     public String getIdentificacao() {
         if (cpf != null && !cpf.trim().isEmpty()) {
             return "CPF: " + cpf;
@@ -345,9 +351,10 @@ public class Custodiado {
     }
 
     public String getResumo() {
-        return String.format("%s - %s",
+        return String.format("%s - %s - Status: %s",
                 nome,
-                getIdentificacao());
+                getIdentificacao(),
+                statusCustodiado.getLabel());
     }
 
     @Override
