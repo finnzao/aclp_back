@@ -1,6 +1,7 @@
 package br.jus.tjba.aclp.model;
 
 import br.jus.tjba.aclp.model.enums.TipoValidacao;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
@@ -60,6 +61,8 @@ public class HistoricoComparecimento {
     @Column(name = "data_comparecimento", nullable = false)
     private LocalDate dataComparecimento;
 
+    //SERIALIZAR COMO STRING "HH:mm:ss"
+    @JsonFormat(pattern = "HH:mm:ss")
     @Column(name = "hora_comparecimento")
     private LocalTime horaComparecimento;
 
@@ -126,13 +129,20 @@ public class HistoricoComparecimento {
         this.atualizadoEm = LocalDateTime.now();
     }
 
-    // Métodos utilitários
+    //MÉTODOS UTILITÁRIOS
+
+    /**
+     * Combina data e hora em um LocalDateTime
+     */
     public LocalDateTime getDataHoraComparecimento() {
         if (dataComparecimento == null) return null;
         if (horaComparecimento == null) return dataComparecimento.atStartOfDay();
         return dataComparecimento.atTime(horaComparecimento);
     }
 
+    /**
+     * Retorna resumo do comparecimento formatado
+     */
     public String getResumo() {
         StringBuilder resumo = new StringBuilder();
         resumo.append(dataComparecimento.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")));
@@ -161,82 +171,8 @@ public class HistoricoComparecimento {
         return tipoValidacao != null && tipoValidacao.isCadastroInicial();
     }
 
-    public boolean isComparecimentoRegular() {
-        return tipoValidacao != null && tipoValidacao.isComparecimentoRegular();
-    }
-
     public boolean houveMudancaEndereco() {
         return Boolean.TRUE.equals(mudancaEndereco);
-    }
-
-    public boolean isComparecimentoAtrasado() {
-        if (custodiado == null || dataComparecimento == null) return false;
-
-        // Se é cadastro inicial, não pode estar atrasado
-        if (isCadastroInicial()) return false;
-
-        // Verifica se a data do comparecimento é posterior ao próximo comparecimento esperado
-        LocalDate proximoEsperado = custodiado.getProximoComparecimento();
-        return proximoEsperado != null && dataComparecimento.isAfter(proximoEsperado);
-    }
-
-    public long getDiasAtraso() {
-        if (!isComparecimentoAtrasado()) return 0;
-
-        LocalDate proximoEsperado = custodiado.getProximoComparecimento();
-        return java.time.temporal.ChronoUnit.DAYS.between(proximoEsperado, dataComparecimento);
-    }
-
-    public void adicionarEnderecoAlterado(HistoricoEndereco historicoEndereco) {
-        if (enderecosAlterados == null) {
-            enderecosAlterados = new ArrayList<>();
-        }
-        enderecosAlterados.add(historicoEndereco);
-        historicoEndereco.setHistoricoComparecimento(this);
-        this.mudancaEndereco = Boolean.TRUE;
-    }
-
-    public void removerEnderecoAlterado(HistoricoEndereco historicoEndereco) {
-        if (enderecosAlterados != null) {
-            enderecosAlterados.remove(historicoEndereco);
-            historicoEndereco.setHistoricoComparecimento(null);
-
-            if (enderecosAlterados.isEmpty()) {
-                this.mudancaEndereco = Boolean.FALSE;
-                this.motivoMudancaEndereco = null;
-            }
-        }
-    }
-
-    public int getTotalEnderecosAlterados() {
-        return enderecosAlterados != null ? enderecosAlterados.size() : 0;
-    }
-
-    public boolean temEnderecosAlterados() {
-        return enderecosAlterados != null && !enderecosAlterados.isEmpty();
-    }
-
-    public String getDescricaoCompleta() {
-        StringBuilder desc = new StringBuilder();
-        desc.append("Comparecimento ").append(tipoValidacao.getLabel().toLowerCase());
-        desc.append(" em ").append(dataComparecimento.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")));
-
-        if (horaComparecimento != null) {
-            desc.append(" às ").append(horaComparecimento.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")));
-        }
-
-        if (houveMudancaEndereco()) {
-            desc.append(". Houve mudança de endereço");
-            if (motivoMudancaEndereco != null && !motivoMudancaEndereco.trim().isEmpty()) {
-                desc.append(" (").append(motivoMudancaEndereco).append(")");
-            }
-        }
-
-        if (observacoes != null && !observacoes.trim().isEmpty()) {
-            desc.append(". Obs: ").append(observacoes);
-        }
-
-        return desc.toString();
     }
 
     @Override

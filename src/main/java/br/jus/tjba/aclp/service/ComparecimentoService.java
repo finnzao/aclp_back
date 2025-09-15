@@ -1,10 +1,14 @@
 package br.jus.tjba.aclp.service;
 
 import br.jus.tjba.aclp.dto.ComparecimentoDTO;
-import br.jus.tjba.aclp.model.*;
+import br.jus.tjba.aclp.model.Custodiado;
+import br.jus.tjba.aclp.model.HistoricoComparecimento;
+import br.jus.tjba.aclp.model.HistoricoEndereco;
 import br.jus.tjba.aclp.model.enums.StatusComparecimento;
 import br.jus.tjba.aclp.model.enums.TipoValidacao;
-import br.jus.tjba.aclp.repository.*;
+import br.jus.tjba.aclp.repository.CustodiadoRepository;
+import br.jus.tjba.aclp.repository.HistoricoComparecimentoRepository;
+import br.jus.tjba.aclp.repository.HistoricoEnderecoRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +34,7 @@ public class ComparecimentoService {
 
     /**
      * Registra um novo comparecimento (presencial ou online)
+     * SOLUÇÃO 1: Ordem correta - salvar histórico ANTES de referenciar
      */
     @Transactional
     public HistoricoComparecimento registrarComparecimento(ComparecimentoDTO dto) {
@@ -37,25 +42,28 @@ public class ComparecimentoService {
                 dto.getCustodiadoId(), dto.getTipoValidacao());
 
         // Limpar e validar dados
-        dto.limparEFormatarDados();
+        limparEFormatarDadosDTO(dto);
         validarComparecimento(dto);
 
         // Buscar custodiado
         Custodiado custodiado = custodiadoRepository.findById(dto.getCustodiadoId())
                 .orElseThrow(() -> new EntityNotFoundException("Custodiado não encontrado com ID: " + dto.getCustodiadoId()));
 
-        // Criar histórico de comparecimento
+        // 1. Criar histórico de comparecimento
         HistoricoComparecimento historico = criarHistoricoComparecimento(dto, custodiado);
 
-        // Processar mudança de endereço se necessário
-        if (dto.houveMudancaEndereco()) {
-            processarMudancaEndereco(dto, custodiado, historico);
-        }
-
-        // Salvar histórico
+        // 2. ✅ SALVAR HISTÓRICO PRIMEIRO (antes de referenciar em outros objetos)
         HistoricoComparecimento historicoSalvo = historicoComparecimentoRepository.save(historico);
 
-        // Atualizar dados do custodiado
+        // 3. Processar mudança de endereço DEPOIS (agora historico já existe no banco)
+        if (dto.houveMudancaEndereco()) {
+            processarMudancaEndereco(dto, custodiado, historicoSalvo);
+
+            // 4. Atualizar histórico com endereços (se necessário)
+            historicoSalvo = historicoComparecimentoRepository.save(historicoSalvo);
+        }
+
+        // 5. Atualizar dados do custodiado
         atualizarDadosCustodiado(custodiado, dto);
 
         log.info("Comparecimento registrado com sucesso - ID: {}, Custodiado: {}, Mudança endereço: {}",
@@ -523,9 +531,6 @@ public class ComparecimentoService {
      */
     private AnaliseAtrasos calcularAnaliseAtrasos() {
         LocalDate hoje = LocalDate.now();
-        LocalDate limite30Dias = hoje.minusDays(30);
-        LocalDate limite60Dias = hoje.minusDays(60);
-        LocalDate limite90Dias = hoje.minusDays(90);
 
         // Buscar todos os custodiados inadimplentes
         List<Custodiado> custodiadosInadimplentes = custodiadoRepository.findInadimplentes();
@@ -725,6 +730,53 @@ public class ComparecimentoService {
 
     // ========== MÉTODOS PRIVADOS ==========
 
+    /**
+     * ✅ MÉTODO CRIADO: Limpa e formata dados do DTO
+     */
+    private void limparEFormatarDadosDTO(ComparecimentoDTO dto) {
+        // Limpar strings básicas
+        if (dto.getValidadoPor() != null) {
+            dto.setValidadoPor(dto.getValidadoPor().trim());
+        }
+
+        if (dto.getObservacoes() != null) {
+            dto.setObservacoes(dto.getObservacoes().trim());
+            if (dto.getObservacoes().isEmpty()) {
+                dto.setObservacoes(null);
+            }
+        }
+
+        if (dto.getMotivoMudancaEndereco() != null) {
+            dto.setMotivoMudancaEndereco(dto.getMotivoMudancaEndereco().trim());
+            if (dto.getMotivoMudancaEndereco().isEmpty()) {
+                dto.setMotivoMudancaEndereco(null);
+            }
+        }
+
+        // Validar e converter datas se necessário
+        if (dto.getDataComparecimento() != null && dto.getDataComparecimento().isAfter(LocalDate.now())) {
+            log.warn("Data de comparecimento futura ajustada para hoje: {}", dto.getDataComparecimento());
+            dto.setDataComparecimento(LocalDate.now());
+        }
+
+        // Limpar dados do novo endereço se houver
+        if (dto.houveMudancaEndereco() && dto.getNovoEndereco() != null) {
+            var endereco = dto.getNovoEndereco();
+
+            if (endereco.getCep() != null) {
+                endereco.setCep(endereco.getCep().replaceAll("[^\\d]", ""));
+                if (endereco.getCep().length() == 8) {
+                    endereco.setCep(endereco.getCep().substring(0, 5) + "-" + endereco.getCep().substring(5));
+                }
+            }
+
+            if (endereco.getLogradouro() != null) endereco.setLogradouro(endereco.getLogradouro().trim());
+            if (endereco.getBairro() != null) endereco.setBairro(endereco.getBairro().trim());
+            if (endereco.getCidade() != null) endereco.setCidade(endereco.getCidade().trim());
+            if (endereco.getEstado() != null) endereco.setEstado(endereco.getEstado().trim().toUpperCase());
+        }
+    }
+
     private void validarComparecimento(ComparecimentoDTO dto) {
         // Validar dados básicos
         if (dto.getCustodiadoId() == null || dto.getCustodiadoId() <= 0) {
@@ -804,7 +856,7 @@ public class ComparecimentoService {
         // 1. Finalizar endereço anterior no histórico
         finalizarEnderecoAnterior(custodiado, dto.getDataComparecimento());
 
-        // 2. Criar novo registro no histórico de endereços
+        // 2. Criar novo registro no histórico de endereços (historico já foi salvo)
         criarNovoHistoricoEndereco(custodiado, dto, historico);
     }
 
@@ -833,16 +885,40 @@ public class ComparecimentoService {
                 .ativo(Boolean.TRUE)
                 .motivoAlteracao(dto.getMotivoMudancaEndereco())
                 .validadoPor(dto.getValidadoPor())
-                .historicoComparecimento(historico)
+                .historicoComparecimento(historico) // ✅ Agora historico já existe no banco
                 .build();
 
-        historicoEnderecoRepository.save(novoHistorico);
+        // Salvar endereço
+        HistoricoEndereco enderecoSalvo = historicoEnderecoRepository.save(novoHistorico);
 
-        // Adicionar ao histórico de comparecimento
-        historico.adicionarEnderecoAlterado(novoHistorico);
+        // ✅ USAR MÉTODO AUXILIAR para adicionar endereço
+        adicionarEnderecoAoHistorico(historico, enderecoSalvo);
 
         log.info("Novo histórico de endereço criado - ID: {}, Endereço: {}",
-                novoHistorico.getId(), novoHistorico.getEnderecoResumido());
+                enderecoSalvo.getId(), enderecoSalvo.getEnderecoResumido());
+    }
+
+    /**
+     * ✅ MÉTODO CRIADO: Adiciona endereço alterado ao histórico
+     * Substitui o método que estava faltando na entidade
+     */
+    private void adicionarEnderecoAoHistorico(HistoricoComparecimento historico, HistoricoEndereco endereco) {
+        // Inicializar lista se necessário
+        if (historico.getEnderecosAlterados() == null) {
+            historico.setEnderecosAlterados(new ArrayList<>());
+        }
+
+        // Adicionar endereço à lista
+        historico.getEnderecosAlterados().add(endereco);
+
+        // Configurar relacionamento bidirecional
+        endereco.setHistoricoComparecimento(historico);
+
+        // Marcar que houve mudança de endereço
+        historico.setMudancaEndereco(Boolean.TRUE);
+
+        log.debug("Endereço adicionado ao histórico - Histórico ID: {}, Endereço ID: {}",
+                historico.getId(), endereco.getId());
     }
 
     private void atualizarDadosCustodiado(Custodiado custodiado, ComparecimentoDTO dto) {
@@ -1042,7 +1118,7 @@ public class ComparecimentoService {
     }
 
     /**
-     * NOVO DTO para detalhe de custodiado atrasado
+     *  DTO para detalhe de custodiado atrasado
      */
     @lombok.Data
     @lombok.Builder
