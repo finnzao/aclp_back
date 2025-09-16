@@ -1,5 +1,6 @@
 package br.jus.tjba.aclp.model;
 
+import br.jus.tjba.aclp.model.enums.SituacaoCustodiado;
 import br.jus.tjba.aclp.model.enums.StatusComparecimento;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -21,8 +22,10 @@ import java.util.Objects;
                 @Index(name = "idx_custodiado_rg", columnList = "rg"),
                 @Index(name = "idx_custodiado_processo", columnList = "processo"),
                 @Index(name = "idx_custodiado_status", columnList = "status"),
+                @Index(name = "idx_custodiado_situacao", columnList = "situacao"), // Novo índice
                 @Index(name = "idx_custodiado_proximo_comparecimento", columnList = "proximo_comparecimento"),
                 @Index(name = "idx_custodiado_status_proximo", columnList = "status, proximo_comparecimento"),
+                @Index(name = "idx_custodiado_situacao_status", columnList = "situacao, status"), // Novo índice composto
                 @Index(name = "idx_custodiado_comarca_status", columnList = "comarca, status")
         }
 )
@@ -88,11 +91,18 @@ public class Custodiado {
     @Column(name = "data_comparecimento_inicial", nullable = false)
     private LocalDate dataComparecimentoInicial;
 
-    // Campos mantidos para performance (atualizados ao registrar comparecimento)
+    // Status de comparecimento (EM_CONFORMIDADE/INADIMPLENTE)
     @NotNull(message = "Status é obrigatório")
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private StatusComparecimento status;
+
+    // NOVA COLUNA: Situação do custodiado no sistema (ATIVO/ARQUIVADO)
+    @NotNull(message = "Situação é obrigatória")
+    @Enumerated(EnumType.STRING)
+    @Column(name = "situacao", nullable = false, length = 20)
+    @Builder.Default
+    private SituacaoCustodiado situacao = SituacaoCustodiado.ATIVO;
 
     @Column(name = "ultimo_comparecimento")
     private LocalDate ultimoComparecimento;
@@ -147,12 +157,15 @@ public class Custodiado {
         if (this.status == null) {
             this.status = StatusComparecimento.EM_CONFORMIDADE;
         }
+        if (this.situacao == null) {
+            this.situacao = SituacaoCustodiado.ATIVO;
+        }
 
         // Inicializar datas se for o primeiro cadastro
         if (this.ultimoComparecimento == null) {
             this.ultimoComparecimento = this.dataComparecimentoInicial;
         }
-        if (this.proximoComparecimento == null) {
+        if (this.proximoComparecimento == null && situacao.isAtivo()) {
             calcularProximoComparecimento();
         }
     }
@@ -160,6 +173,11 @@ public class Custodiado {
     @PreUpdate
     public void preUpdate() {
         this.atualizadoEm = LocalDateTime.now();
+
+        // Se foi arquivado, limpar próximo comparecimento
+        if (situacao.isArquivado()) {
+            this.proximoComparecimento = null;
+        }
     }
 
     // Métodos de formatação
@@ -185,41 +203,86 @@ public class Custodiado {
 
     // Métodos de cálculo
     public void calcularProximoComparecimento() {
-        if (ultimoComparecimento != null && periodicidade != null) {
+        if (ultimoComparecimento != null && periodicidade != null && situacao.isAtivo()) {
             this.proximoComparecimento = ultimoComparecimento.plusDays(periodicidade);
         }
     }
 
     public void atualizarStatusBaseadoEmData() {
-        if (proximoComparecimento != null && proximoComparecimento.isBefore(LocalDate.now())) {
+        // Só atualizar status se estiver ativo
+        if (situacao.isAtivo() && proximoComparecimento != null && proximoComparecimento.isBefore(LocalDate.now())) {
             this.status = StatusComparecimento.INADIMPLENTE;
-        } else {
+        } else if (situacao.isAtivo()) {
             this.status = StatusComparecimento.EM_CONFORMIDADE;
         }
+        // Se arquivado, manter status atual
     }
 
     public long getDiasAtraso() {
-        if (proximoComparecimento == null) return 0;
+        if (proximoComparecimento == null || situacao.isArquivado()) return 0;
         LocalDate hoje = LocalDate.now();
         return hoje.isAfter(proximoComparecimento) ?
                 ChronoUnit.DAYS.between(proximoComparecimento, hoje) : 0;
     }
 
     public boolean isInadimplente() {
-        return status == StatusComparecimento.INADIMPLENTE ||
-                (proximoComparecimento != null && proximoComparecimento.isBefore(LocalDate.now()));
+        return situacao.isAtivo() && (status == StatusComparecimento.INADIMPLENTE ||
+                (proximoComparecimento != null && proximoComparecimento.isBefore(LocalDate.now())));
     }
 
     public boolean isComparecimentoHoje() {
-        return proximoComparecimento != null &&
+        return situacao.isAtivo() && proximoComparecimento != null &&
                 proximoComparecimento.equals(LocalDate.now());
     }
 
     public boolean isProximoComparecimento(int dias) {
-        if (proximoComparecimento == null) return false;
+        if (proximoComparecimento == null || situacao.isArquivado()) return false;
         LocalDate limite = LocalDate.now().plusDays(dias);
         return !proximoComparecimento.isBefore(LocalDate.now()) &&
                 !proximoComparecimento.isAfter(limite);
+    }
+
+    // ========== NOVOS MÉTODOS PARA CONTROLE DE SITUAÇÃO ==========
+
+    /**
+     * Verifica se o custodiado está ativo
+     */
+    public boolean isAtivo() {
+        return situacao != null && situacao.isAtivo();
+    }
+
+    /**
+     * Verifica se o custodiado está arquivado
+     */
+    public boolean isArquivado() {
+        return situacao != null && situacao.isArquivado();
+    }
+
+    /**
+     * Arquiva o custodiado (equivale ao "delete")
+     */
+    public void arquivar() {
+        this.situacao = SituacaoCustodiado.ARQUIVADO;
+        this.proximoComparecimento = null; // Remove da agenda de comparecimentos
+        this.atualizadoEm = LocalDateTime.now();
+    }
+
+    /**
+     * Reativa o custodiado arquivado
+     */
+    public void reativar() {
+        this.situacao = SituacaoCustodiado.ATIVO;
+        calcularProximoComparecimento(); // Recalcular próximo comparecimento
+        atualizarStatusBaseadoEmData(); // Recalcular status
+        this.atualizadoEm = LocalDateTime.now();
+    }
+
+    /**
+     * Verifica se pode ser excluído fisicamente (apenas se não tem histórico)
+     */
+    public boolean podeSerExcluidoFisicamente() {
+        return (historicoComparecimentos == null || historicoComparecimentos.isEmpty()) &&
+                (historicoEnderecos == null || historicoEnderecos.isEmpty());
     }
 
     // Métodos para endereço - SEM carregar relacionamentos automaticamente
@@ -235,16 +298,12 @@ public class Custodiado {
     /**
      * Retorna o endereço atual em formato resumido.
      * Evita lazy loading ao verificar se a lista já foi inicializada.
-     *
-     * @return String com endereço resumido ou mensagem padrão
      */
     public String getEnderecoResumido() {
-        // Verificar se a lista de endereços foi inicializada para evitar lazy loading
         if (historicoEnderecos == null || historicoEnderecos.isEmpty()) {
             return "Endereço não carregado";
         }
 
-        // Buscar endereço ativo
         HistoricoEndereco enderecoAtivo = historicoEnderecos.stream()
                 .filter(HistoricoEndereco::isEnderecoAtivo)
                 .findFirst()
@@ -260,16 +319,12 @@ public class Custodiado {
     /**
      * Retorna o endereço completo atual.
      * Evita lazy loading ao verificar se a lista já foi inicializada.
-     *
-     * @return String com endereço completo ou mensagem padrão
      */
     public String getEnderecoCompleto() {
-        // Verificar se a lista de endereços foi inicializada para evitar lazy loading
         if (historicoEnderecos == null || historicoEnderecos.isEmpty()) {
             return "Endereço não informado";
         }
 
-        // Buscar endereço ativo
         HistoricoEndereco enderecoAtivo = historicoEnderecos.stream()
                 .filter(HistoricoEndereco::isEnderecoAtivo)
                 .findFirst()
@@ -285,16 +340,12 @@ public class Custodiado {
     /**
      * Retorna cidade e estado do endereço atual.
      * Evita lazy loading ao verificar se a lista já foi inicializada.
-     *
-     * @return String no formato "Cidade - Estado" ou mensagem padrão
      */
     public String getCidadeEstado() {
-        // Verificar se a lista de endereços foi inicializada para evitar lazy loading
         if (historicoEnderecos == null || historicoEnderecos.isEmpty()) {
             return "Não informado";
         }
 
-        // Buscar endereço ativo
         HistoricoEndereco enderecoAtivo = historicoEnderecos.stream()
                 .filter(HistoricoEndereco::isEnderecoAtivo)
                 .findFirst()
@@ -345,9 +396,14 @@ public class Custodiado {
     }
 
     public String getResumo() {
-        return String.format("%s - %s",
+        return String.format("%s - %s - %s",
                 nome,
-                getIdentificacao());
+                getIdentificacao(),
+                situacao.getLabel());
+    }
+
+    public String getSituacaoDescricao() {
+        return situacao != null ? situacao.getLabel() : "Não definida";
     }
 
     @Override
