@@ -5,6 +5,7 @@ import br.jus.tjba.aclp.model.Custodiado;
 import br.jus.tjba.aclp.model.HistoricoComparecimento;
 import br.jus.tjba.aclp.model.HistoricoEndereco;
 import br.jus.tjba.aclp.model.enums.EstadoBrasil;
+import br.jus.tjba.aclp.model.enums.SituacaoCustodiado;
 import br.jus.tjba.aclp.model.enums.StatusComparecimento;
 import br.jus.tjba.aclp.model.enums.TipoValidacao;
 import br.jus.tjba.aclp.repository.CustodiadoRepository;
@@ -30,12 +31,29 @@ public class CustodiadoService {
     private final HistoricoComparecimentoRepository historicoComparecimentoRepository;
     private final HistoricoEnderecoRepository historicoEnderecoRepository;
 
+    // ========== MÉTODOS PRINCIPAIS (COMPORTAMENTO ALTERADO) ==========
+
+    /**
+     * Lista APENAS custodiados ATIVOS (comportamento do endpoint GET /api/custodiados)
+     */
     @Transactional(readOnly = true)
     public List<Custodiado> findAll() {
-        log.info("Buscando todos os custodiados cadastrados");
-        return custodiadoRepository.findAll();
+        log.info("Buscando todos os custodiados ATIVOS");
+        return custodiadoRepository.findAll(); // Repository já retorna apenas ATIVOS
     }
 
+    /**
+     * Lista TODOS os custodiados (ATIVOS + ARQUIVADOS) para novo endpoint
+     */
+    @Transactional(readOnly = true)
+    public List<Custodiado> findAllIncludingArchived() {
+        log.info("Buscando todos os custodiados (ATIVOS + ARQUIVADOS)");
+        return custodiadoRepository.findAllIncludingArchived();
+    }
+
+    /**
+     * Busca por ID - funciona para ATIVOS e ARQUIVADOS
+     */
     @Transactional(readOnly = true)
     public Optional<Custodiado> findById(Long id) {
         log.info("Buscando custodiado por ID: {}", id);
@@ -44,18 +62,93 @@ public class CustodiadoService {
             throw new IllegalArgumentException("ID deve ser um número positivo");
         }
 
+        // Busca em todos (ATIVOS + ARQUIVADOS) para permitir visualização de arquivados
         return custodiadoRepository.findById(id);
     }
 
+    /**
+     * DELETE - ARQUIVA o custodiado (não exclui fisicamente)
+     */
+    @Transactional
+    public void delete(Long id) {
+        log.info("Arquivando custodiado ID: {}", id);
+
+        if (id == null || id <= 0) {
+            throw new IllegalArgumentException("ID deve ser um número positivo");
+        }
+
+        Custodiado custodiado = custodiadoRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Custodiado não encontrado com ID: " + id));
+
+        // Verificar se já está arquivado
+        if (custodiado.isArquivado()) {
+            throw new IllegalArgumentException("Custodiado já está arquivado");
+        }
+
+        // Arquivar (método da entidade)
+        custodiado.arquivar();
+        custodiadoRepository.save(custodiado);
+
+        log.info("Custodiado arquivado com sucesso - ID: {}, Nome: {}", id, custodiado.getNome());
+    }
+
+    /**
+     * NOVO MÉTODO - Reativa custodiado arquivado
+     */
+    @Transactional
+    public Custodiado reativar(Long id) {
+        log.info("Reativando custodiado ID: {}", id);
+
+        if (id == null || id <= 0) {
+            throw new IllegalArgumentException("ID deve ser um número positivo");
+        }
+
+        Custodiado custodiado = custodiadoRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Custodiado não encontrado com ID: " + id));
+
+        // Verificar se está arquivado
+        if (!custodiado.isArquivado()) {
+            throw new IllegalArgumentException("Custodiado já está ativo");
+        }
+
+        // Verificar duplicidade de documentos antes de reativar
+        validarDuplicidadesDocumentosParaReativacao(custodiado);
+
+        // Reativar (método da entidade)
+        custodiado.reativar();
+        Custodiado custodiadoReativado = custodiadoRepository.save(custodiado);
+
+        log.info("Custodiado reativado com sucesso - ID: {}, Nome: {}",
+                id, custodiadoReativado.getNome());
+
+        return custodiadoReativado;
+    }
+
+    // ========== MÉTODOS EXISTENTES (COMPORTAMENTO MANTIDO) ==========
+
     @Transactional(readOnly = true)
     public List<Custodiado> findByProcesso(String processo) {
-        log.info("Buscando custodiados por processo: {}", processo);
+        log.info("Buscando custodiados ATIVOS por processo: {}", processo);
 
         if (processo == null || processo.trim().isEmpty()) {
             throw new IllegalArgumentException("Número do processo é obrigatório");
         }
 
         return custodiadoRepository.findByProcesso(processo.trim());
+    }
+
+    /**
+     * Busca por processo incluindo ARQUIVADOS (para relatórios completos)
+     */
+    @Transactional(readOnly = true)
+    public List<Custodiado> findByProcessoIncludingArchived(String processo) {
+        log.info("Buscando todos os custodiados por processo (incluindo arquivados): {}", processo);
+
+        if (processo == null || processo.trim().isEmpty()) {
+            throw new IllegalArgumentException("Número do processo é obrigatório");
+        }
+
+        return custodiadoRepository.findByProcessoIncludingArchived(processo.trim());
     }
 
     @Transactional
@@ -69,11 +162,11 @@ public class CustodiadoService {
         // Validações
         validarDadosObrigatorios(dto);
         validarFormatos(dto);
-        validarDuplicidadesDocumentos(dto); // Não valida duplicidade de processo
+        validarDuplicidadesDocumentos(dto); // Agora valida apenas entre ATIVOS
         validarDatasLogicas(dto);
         validarEnderecoCompleto(dto);
 
-        // Criar custodiado
+        // Criar custodiado SEMPRE com situacao = ATIVO
         Custodiado custodiado = Custodiado.builder()
                 .nome(dto.getNome().trim())
                 .cpf(dto.getCpf())
@@ -86,6 +179,7 @@ public class CustodiadoService {
                 .periodicidade(dto.getPeriodicidade())
                 .dataComparecimentoInicial(dto.getDataComparecimentoInicial())
                 .status(StatusComparecimento.EM_CONFORMIDADE)
+                .situacao(SituacaoCustodiado.ATIVO) // ✅ SEMPRE ATIVO ao criar
                 .ultimoComparecimento(dto.getDataComparecimentoInicial())
                 .observacoes(dto.getObservacoes() != null ? dto.getObservacoes().trim() : null)
                 .build();
@@ -119,10 +213,15 @@ public class CustodiadoService {
         Custodiado custodiado = custodiadoRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Custodiado não encontrado com ID: " + id));
 
+        // Verificar se está arquivado
+        if (custodiado.isArquivado()) {
+            throw new IllegalArgumentException("Não é possível atualizar custodiado arquivado. Reative-o primeiro.");
+        }
+
         // Limpar e formatar dados antes das validações
         dto.limparEFormatarDados();
 
-        // Validações (excluindo duplicidades do próprio registro)
+        // Validações (excluindo duplicidades do próprio registro e considerando apenas ATIVOS)
         validarDadosObrigatorios(dto);
         validarFormatos(dto);
         validarDuplicidadesDocumentosParaUpdate(dto, id);
@@ -151,29 +250,11 @@ public class CustodiadoService {
         return custodiadoAtualizado;
     }
 
-    @Transactional
-    public void delete(Long id) {
-        log.info("Excluindo custodiado ID: {}", id);
-
-        if (id == null || id <= 0) {
-            throw new IllegalArgumentException("ID deve ser um número positivo");
-        }
-
-        Custodiado custodiado = custodiadoRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Custodiado não encontrado com ID: " + id));
-
-        // Verificar se há dependências que impedem a exclusão
-        if (custodiado.getHistoricoComparecimentos() != null && !custodiado.getHistoricoComparecimentos().isEmpty()) {
-            throw new IllegalArgumentException("Não é possível excluir custodiado que possui histórico de comparecimentos");
-        }
-
-        custodiadoRepository.delete(custodiado);
-        log.info("Custodiado excluído com sucesso - ID: {}", id);
-    }
+    // ========== MÉTODOS DE BUSCA (APENAS ATIVOS) ==========
 
     @Transactional(readOnly = true)
     public List<Custodiado> findByStatus(StatusComparecimento status) {
-        log.info("Buscando custodiados por status: {}", status);
+        log.info("Buscando custodiados ATIVOS por status: {}", status);
 
         if (status == null) {
             throw new IllegalArgumentException("Status é obrigatório. Use: EM_CONFORMIDADE ou INADIMPLENTE");
@@ -184,19 +265,19 @@ public class CustodiadoService {
 
     @Transactional(readOnly = true)
     public List<Custodiado> findComparecimentosHoje() {
-        log.info("Buscando custodiados com comparecimento hoje");
+        log.info("Buscando custodiados ATIVOS com comparecimento hoje");
         return custodiadoRepository.findComparecimentosHoje();
     }
 
     @Transactional(readOnly = true)
     public List<Custodiado> findInadimplentes() {
-        log.info("Buscando custodiados inadimplentes");
+        log.info("Buscando custodiados ATIVOS inadimplentes");
         return custodiadoRepository.findInadimplentes();
     }
 
     @Transactional(readOnly = true)
     public List<Custodiado> buscarPorNomeOuProcesso(String termo) {
-        log.info("Buscando custodiados por termo: {}", termo);
+        log.info("Buscando custodiados ATIVOS por termo: {}", termo);
 
         if (termo == null || termo.trim().isEmpty()) {
             throw new IllegalArgumentException("Termo de busca é obrigatório");
@@ -209,6 +290,45 @@ public class CustodiadoService {
 
         return custodiadoRepository.buscarPorNomeOuProcesso(termoLimpo, termoLimpo);
     }
+
+    // ========== NOVOS MÉTODOS PARA CONTROLE DE SITUAÇÃO ==========
+
+    /**
+     * Lista custodiados por situação
+     */
+    @Transactional(readOnly = true)
+    public List<Custodiado> findBySituacao(SituacaoCustodiado situacao) {
+        log.info("Buscando custodiados por situação: {}", situacao);
+        return custodiadoRepository.findBySituacao(situacao);
+    }
+
+    /**
+     * Lista apenas custodiados ARQUIVADOS
+     */
+    @Transactional(readOnly = true)
+    public List<Custodiado> findAllArchived() {
+        log.info("Buscando todos os custodiados ARQUIVADOS");
+        return custodiadoRepository.findAllArchived();
+    }
+
+    /**
+     * Conta custodiados por situação
+     */
+    @Transactional(readOnly = true)
+    public long countBySituacao(SituacaoCustodiado situacao) {
+        return custodiadoRepository.countBySituacao(situacao);
+    }
+
+    /**
+     * Busca custodiados que podem ser reativados
+     */
+    @Transactional(readOnly = true)
+    public List<Custodiado> findReactivatable() {
+        log.info("Buscando custodiados que podem ser reativados");
+        return custodiadoRepository.findReactivatable();
+    }
+
+    // ========== MÉTODOS DE ENDEREÇO (SEM LAZY LOADING) ==========
 
     /**
      * Busca endereço atual de um custodiado usando repository específico
@@ -247,7 +367,11 @@ public class CustodiadoService {
         return "Não informado";
     }
 
-    // Método para criar histórico de endereço inicial
+    // ========== MÉTODOS PRIVADOS ==========
+
+    /**
+     * Método para criar histórico de endereço inicial
+     */
     private void criarHistoricoEnderecoInicial(Custodiado custodiado, CustodiadoDTO dto) {
         HistoricoEndereco enderecoInicial = HistoricoEndereco.builder()
                 .custodiado(custodiado)
@@ -271,7 +395,9 @@ public class CustodiadoService {
                 custodiado.getNome(), enderecoInicial.getEnderecoResumido());
     }
 
-    // Método para criar primeiro comparecimento (CADASTRO_INICIAL)
+    /**
+     * Método para criar primeiro comparecimento (CADASTRO_INICIAL)
+     */
     private void criarPrimeiroComparecimento(Custodiado custodiado) {
         HistoricoComparecimento primeiroComparecimento = HistoricoComparecimento.builder()
                 .custodiado(custodiado)
@@ -290,7 +416,7 @@ public class CustodiadoService {
                 custodiado.getNome(), custodiado.getDataComparecimentoInicial());
     }
 
-    // ========== MÉTODOS PRIVADOS DE VALIDAÇÃO ==========
+    // ========== MÉTODOS DE VALIDAÇÃO (ATUALIZADOS) ==========
 
     private void validarDadosObrigatorios(CustodiadoDTO dto) {
         if (dto.getNome() == null || dto.getNome().trim().isEmpty()) {
@@ -404,47 +530,73 @@ public class CustodiadoService {
         }
     }
 
+    /**
+     * ✅ ATUALIZADO - Validar duplicidade apenas entre custodiados ATIVOS
+     */
     private void validarDuplicidadesDocumentos(CustodiadoDTO dto) {
-        // Verificar CPF duplicado (se fornecido)
+        // Verificar CPF duplicado entre ATIVOS (se fornecido)
         if (dto.getCpf() != null && !dto.getCpf().trim().isEmpty()) {
             String cpf = limparCpf(dto.getCpf().trim());
             String cpfFormatado = formatarCpf(cpf);
-            Optional<Custodiado> custodiadoComCpf = custodiadoRepository.findByCpf(cpfFormatado);
-            if (custodiadoComCpf.isPresent()) {
-                throw new IllegalArgumentException("CPF já está cadastrado no sistema");
+
+            if (custodiadoRepository.existsByCpfAndSituacaoAtivo(cpfFormatado)) {
+                throw new IllegalArgumentException("CPF já está cadastrado para um custodiado ativo no sistema");
             }
         }
 
-        // Verificar RG duplicado (se fornecido)
+        // Verificar RG duplicado entre ATIVOS (se fornecido)
         if (dto.getRg() != null && !dto.getRg().trim().isEmpty()) {
-            Optional<Custodiado> custodiadoComRg = custodiadoRepository.findByRg(dto.getRg().trim());
-            if (custodiadoComRg.isPresent()) {
-                throw new IllegalArgumentException("RG já está cadastrado no sistema");
+            if (custodiadoRepository.existsByRgAndSituacaoAtivo(dto.getRg().trim())) {
+                throw new IllegalArgumentException("RG já está cadastrado para um custodiado ativo no sistema");
             }
         }
 
         // NÃO validar duplicidade de processo - permitir múltiplos custodiados no mesmo processo
     }
 
+    /**
+     * ✅ ATUALIZADO - Validar duplicidade para update apenas entre custodiados ATIVOS
+     */
     private void validarDuplicidadesDocumentosParaUpdate(CustodiadoDTO dto, Long idAtual) {
-        // Verificar CPF duplicado em outro registro
+        // Verificar CPF duplicado em outro registro ATIVO
         if (dto.getCpf() != null && !dto.getCpf().trim().isEmpty()) {
             String cpf = limparCpf(dto.getCpf().trim());
             String cpfFormatado = formatarCpf(cpf);
-            Optional<Custodiado> custodiadoComCpf = custodiadoRepository.findByCpf(cpfFormatado);
-            if (custodiadoComCpf.isPresent() && !custodiadoComCpf.get().getId().equals(idAtual)) {
-                throw new IllegalArgumentException("CPF já está cadastrado no sistema");
+
+            if (custodiadoRepository.existsByCpfAndSituacaoAtivoAndIdNot(cpfFormatado, idAtual)) {
+                throw new IllegalArgumentException("CPF já está cadastrado para outro custodiado ativo no sistema");
             }
         }
 
-        // Verificar RG duplicado em outro registro
+        // Verificar RG duplicado em outro registro ATIVO
         if (dto.getRg() != null && !dto.getRg().trim().isEmpty()) {
-            Optional<Custodiado> custodiadoComRg = custodiadoRepository.findByRg(dto.getRg().trim());
-            if (custodiadoComRg.isPresent() && !custodiadoComRg.get().getId().equals(idAtual)) {
-                throw new IllegalArgumentException("RG já está cadastrado no sistema");
+            if (custodiadoRepository.existsByRgAndSituacaoAtivoAndIdNot(dto.getRg().trim(), idAtual)) {
+                throw new IllegalArgumentException("RG já está cadastrado para outro custodiado ativo no sistema");
+            }
+        }
+    }
+
+    /**
+     * ✅ NOVO - Validar duplicidade antes de reativar custodiado
+     */
+    private void validarDuplicidadesDocumentosParaReativacao(Custodiado custodiado) {
+        // Verificar CPF duplicado entre ATIVOS
+        if (custodiado.getCpf() != null && !custodiado.getCpf().trim().isEmpty()) {
+            if (custodiadoRepository.existsByCpfAndSituacaoAtivoAndIdNot(
+                    custodiado.getCpf(), custodiado.getId())) {
+                throw new IllegalArgumentException(
+                        "Não é possível reativar: CPF já está em uso por outro custodiado ativo");
             }
         }
 
+        // Verificar RG duplicado entre ATIVOS
+        if (custodiado.getRg() != null && !custodiado.getRg().trim().isEmpty()) {
+            if (custodiadoRepository.existsByRgAndSituacaoAtivoAndIdNot(
+                    custodiado.getRg(), custodiado.getId())) {
+                throw new IllegalArgumentException(
+                        "Não é possível reativar: RG já está em uso por outro custodiado ativo");
+            }
+        }
     }
 
     private void validarDatasLogicas(CustodiadoDTO dto) {
