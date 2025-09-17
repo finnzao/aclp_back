@@ -12,45 +12,37 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 
+/**
+ * DTO específico para criação de novos custodiados
+ * Não inclui ID pois será gerado automaticamente
+ */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class CustodiadoDTO {
+public class CustodiadoCreateDTO {
 
-    @NotNull(message = "ID do custodiado é obrigatório")
-    private Long custodiadoId;
-
-    public Long getCustodiadoId() {
-        return custodiadoId;
-    }
-
-    public void setCustodiadoId(Long custodiadoId) {
-        this.custodiadoId = custodiadoId;
-    }
+    // ✅ SEM CAMPO ID - será gerado automaticamente
 
     @NotBlank(message = "Nome é obrigatório")
     @Size(min = 2, max = 150, message = "Nome deve ter entre 2 e 150 caracteres")
     private String nome;
 
-    //  CORREÇÃO: Validação mais flexível para CPF
-    @Pattern(regexp = "\\d{3}\\.?\\d{3}\\.?\\d{3}-?\\d{2}|\\d{11}",
-            message = "CPF deve ter o formato 000.000.000-00 ou apenas números")
+    @Pattern(regexp = "\\d{3}\\.?\\d{3}\\.?\\d{3}-?\\d{2}",
+            message = "CPF deve ter o formato 000.000.000-00")
     private String cpf;
 
     @Size(max = 20, message = "RG deve ter no máximo 20 caracteres")
     private String rg;
 
     @NotBlank(message = "Contato é obrigatório")
-    //  CORREÇÃO: Validação mais flexível para contato
-    @Pattern(regexp = "[\\d\\s().-]+",
-            message = "Contato deve conter apenas números e caracteres de formatação")
+    @Pattern(regexp = "\\(?\\d{2}\\)?\\s?\\d{4,5}-?\\d{4}",
+            message = "Contato deve ter formato válido de telefone")
     private String contato;
 
     @NotBlank(message = "Processo é obrigatório")
-    //  CORREÇÃO: Validação mais flexível para processo
-    @Pattern(regexp = "[\\d.-]+",
-            message = "Processo deve conter apenas números, pontos e hífens")
+    @Pattern(regexp = "\\d{7}-\\d{2}\\.\\d{4}\\.\\d{1}\\.\\d{2}\\.\\d{4}",
+            message = "Processo deve ter o formato 0000000-00.0000.0.00.0000")
     private String processo;
 
     @NotBlank(message = "Vara é obrigatória")
@@ -70,18 +62,13 @@ public class CustodiadoDTO {
     @NotNull(message = "Data do comparecimento inicial é obrigatória")
     private LocalDate dataComparecimentoInicial;
 
-    private StatusComparecimento status;
-    private LocalDate ultimoComparecimento;
-    private LocalDate proximoComparecimento;
-
     @Size(max = 500, message = "Observações deve ter no máximo 500 caracteres")
     private String observacoes;
 
     // === CAMPOS DE ENDEREÇO - OBRIGATÓRIOS ===
 
     @NotBlank(message = "CEP é obrigatório")
-    //  CORREÇÃO: Validação mais flexível para CEP
-    @Pattern(regexp = "\\d{5}-?\\d{3}|\\d{8}", message = "CEP deve ter o formato 00000-000 ou apenas números")
+    @Pattern(regexp = "\\d{5}-?\\d{3}", message = "CEP deve ter o formato 00000-000")
     private String cep;
 
     @NotBlank(message = "Logradouro é obrigatório")
@@ -107,9 +94,32 @@ public class CustodiadoDTO {
     @Pattern(regexp = "[A-Z]{2}", message = "Estado deve ser uma sigla válida com 2 letras maiúsculas")
     private String estado;
 
-    //  NOVOS CAMPOS: Para evitar conflitos com validações automáticas
-    private Boolean novoRegistro;
-    private Boolean atualizacao;
+    /**
+     * ✅ Converter para CustodiadoDTO para compatibilidade com service
+     */
+    public CustodiadoDTO toCustodiadoDTO() {
+        return CustodiadoDTO.builder()
+                .custodiadoId(null) // ID sempre null para novos registros
+                .nome(this.nome)
+                .cpf(this.cpf)
+                .rg(this.rg)
+                .contato(this.contato)
+                .processo(this.processo)
+                .vara(this.vara)
+                .comarca(this.comarca)
+                .dataDecisao(this.dataDecisao)
+                .periodicidade(this.periodicidade)
+                .dataComparecimentoInicial(this.dataComparecimentoInicial)
+                .observacoes(this.observacoes)
+                .cep(this.cep)
+                .logradouro(this.logradouro)
+                .numero(this.numero)
+                .complemento(this.complemento)
+                .bairro(this.bairro)
+                .cidade(this.cidade)
+                .estado(this.estado)
+                .build();
+    }
 
     /**
      * Valida se pelo menos um documento foi fornecido
@@ -134,53 +144,20 @@ public class CustodiadoDTO {
      * Limpa e formata os dados antes da validação
      */
     public void limparEFormatarDados() {
-        if (nome != null) {
-            nome = nome.trim().toUpperCase(); //  PADRONIZAR NOME EM MAIÚSCULAS
-        }
-        if (cpf != null) {
-            cpf = cpf.trim();
-            // Manter formatação original do CPF
-        }
-        if (rg != null) {
-            rg = rg.trim().toUpperCase();
-        }
-        if (contato != null) {
-            contato = contato.trim();
-        }
-        if (processo != null) {
-            processo = processo.trim();
-        }
-        if (vara != null) {
-            vara = vara.trim().toUpperCase();
-        }
-        if (comarca != null) {
-            comarca = comarca.trim().toUpperCase();
-        }
-        if (observacoes != null) {
-            observacoes = observacoes.trim();
-        }
-
-        // Limpar dados de endereço
-        if (cep != null) {
-            cep = cep.trim().replaceAll("[^\\d]", ""); //  MANTER APENAS NÚMEROS NO CEP
-        }
-        if (logradouro != null) {
-            logradouro = logradouro.trim();
-        }
-        if (numero != null) {
-            numero = numero.trim();
-        }
-        if (complemento != null) {
-            complemento = complemento.trim();
-        }
-        if (bairro != null) {
-            bairro = bairro.trim();
-        }
-        if (cidade != null) {
-            cidade = cidade.trim();
-        }
-        if (estado != null) {
-            estado = estado.trim().toUpperCase();
-        }
+        if (nome != null) nome = nome.trim();
+        if (cpf != null) cpf = cpf.trim();
+        if (rg != null) rg = rg.trim();
+        if (contato != null) contato = contato.trim();
+        if (processo != null) processo = processo.trim();
+        if (vara != null) vara = vara.trim();
+        if (comarca != null) comarca = comarca.trim();
+        if (observacoes != null) observacoes = observacoes.trim();
+        if (cep != null) cep = cep.trim();
+        if (logradouro != null) logradouro = logradouro.trim();
+        if (numero != null) numero = numero.trim();
+        if (complemento != null) complemento = complemento.trim();
+        if (bairro != null) bairro = bairro.trim();
+        if (cidade != null) cidade = cidade.trim();
+        if (estado != null) estado = estado.trim().toUpperCase();
     }
 }

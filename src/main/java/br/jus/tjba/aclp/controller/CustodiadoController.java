@@ -183,8 +183,14 @@ public class CustodiadoController {
         log.info("Cadastrando novo custodiado - Processo: {}, Nome: {}", dto.getProcesso(), dto.getNome());
 
         try {
+            if (dto.getCustodiadoId() != null) {
+                log.warn("ID {} ignorado para novo custodiado - será gerado automaticamente", dto.getCustodiadoId());
+                dto.setCustodiadoId(null); // Forçar ID null para novo registro
+            }
+
             Custodiado custodiado = custodiadoService.save(dto);
             log.info("Custodiado cadastrado com sucesso. ID: {}", custodiado.getId());
+
             return ResponseEntity.status(HttpStatus.CREATED).body(
                     ApiResponse.success("Custodiado cadastrado com sucesso",
                             CustodiadoResponseDTO.fromEntity(custodiado, custodiadoService))

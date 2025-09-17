@@ -15,8 +15,6 @@ import java.util.Optional;
 @Repository
 public interface CustodiadoRepository extends JpaRepository<Custodiado, Long> {
 
-    // ========== MÉTODOS EXISTENTES ATUALIZADOS ==========
-
     // Busca por processo - pode retornar múltiplos custodiados ATIVOS
     @Query("SELECT c FROM Custodiado c WHERE c.processo = :processo AND c.situacao = 'ATIVO'")
     List<Custodiado> findByProcesso(@Param("processo") String processo);
@@ -25,13 +23,13 @@ public interface CustodiadoRepository extends JpaRepository<Custodiado, Long> {
     @Query("SELECT c FROM Custodiado c WHERE c.processo = :processo AND c.nome LIKE %:nome% AND c.situacao = 'ATIVO'")
     Optional<Custodiado> findByProcessoAndNomeContainingIgnoreCase(@Param("processo") String processo, @Param("nome") String nome);
 
-    // Busca por CPF considerando apenas ATIVOS para validar duplicidade
+    //  Busca por CPF considerando apenas ATIVOS para validar duplicidade
     @Query("SELECT c FROM Custodiado c WHERE c.cpf = :cpf AND c.situacao = 'ATIVO'")
-    Optional<Custodiado> findByCpf(@Param("cpf") String cpf);
+    Optional<Custodiado> findByCpfAndSituacaoAtivo(@Param("cpf") String cpf);
 
-    // Busca por RG considerando apenas ATIVOS para validar duplicidade
+    //  Busca por RG considerando apenas ATIVOS para validar duplicidade
     @Query("SELECT c FROM Custodiado c WHERE c.rg = :rg AND c.situacao = 'ATIVO'")
-    Optional<Custodiado> findByRg(@Param("rg") String rg);
+    Optional<Custodiado> findByRgAndSituacaoAtivo(@Param("rg") String rg);
 
     // Busca por status considerando apenas ATIVOS
     @Query("SELECT c FROM Custodiado c WHERE c.status = :status AND c.situacao = 'ATIVO'")
@@ -87,8 +85,6 @@ public interface CustodiadoRepository extends JpaRepository<Custodiado, Long> {
     @Query("SELECT c FROM Custodiado c WHERE c.vara = :vara AND c.situacao = 'ATIVO'")
     List<Custodiado> findByVara(@Param("vara") String vara);
 
-    // ========== NOVOS MÉTODOS PARA CONTROLE DE SITUAÇÃO ==========
-
     /**
      * Busca TODOS os custodiados (ATIVOS + ARQUIVADOS)
      */
@@ -118,25 +114,25 @@ public interface CustodiadoRepository extends JpaRepository<Custodiado, Long> {
     long countBySituacao(SituacaoCustodiado situacao);
 
     /**
-     * Verifica duplicidade de CPF considerando apenas ATIVOS
+     *  Verifica duplicidade de CPF considerando apenas ATIVOS
      */
     @Query("SELECT COUNT(c) > 0 FROM Custodiado c WHERE c.cpf = :cpf AND c.situacao = 'ATIVO'")
     boolean existsByCpfAndSituacaoAtivo(@Param("cpf") String cpf);
 
     /**
-     * Verifica duplicidade de RG considerando apenas ATIVOS
+     *  Verifica duplicidade de RG considerando apenas ATIVOS
      */
     @Query("SELECT COUNT(c) > 0 FROM Custodiado c WHERE c.rg = :rg AND c.situacao = 'ATIVO'")
     boolean existsByRgAndSituacaoAtivo(@Param("rg") String rg);
 
     /**
-     * Verifica duplicidade de CPF excluindo um ID específico (para updates)
+     *  Verifica duplicidade de CPF excluindo um ID específico (para updates)
      */
     @Query("SELECT COUNT(c) > 0 FROM Custodiado c WHERE c.cpf = :cpf AND c.situacao = 'ATIVO' AND c.id != :id")
     boolean existsByCpfAndSituacaoAtivoAndIdNot(@Param("cpf") String cpf, @Param("id") Long id);
 
     /**
-     * Verifica duplicidade de RG excluindo um ID específico (para updates)
+     *  Verifica duplicidade de RG excluindo um ID específico (para updates)
      */
     @Query("SELECT COUNT(c) > 0 FROM Custodiado c WHERE c.rg = :rg AND c.situacao = 'ATIVO' AND c.id != :id")
     boolean existsByRgAndSituacaoAtivoAndIdNot(@Param("rg") String rg, @Param("id") Long id);
