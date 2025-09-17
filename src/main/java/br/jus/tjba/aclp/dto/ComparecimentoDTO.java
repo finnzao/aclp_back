@@ -22,6 +22,7 @@ import java.time.LocalTime;
 @Builder
 public class ComparecimentoDTO {
 
+    @NotNull(message = "ID do custodiado é obrigatório")
     @Schema(description = "ID do custodiado", example = "1", required = true)
     private Long custodiadoId;
 
@@ -29,7 +30,6 @@ public class ComparecimentoDTO {
     @Schema(description = "Data do comparecimento", example = "2025-09-15", required = true)
     private LocalDate dataComparecimento;
 
-    // Configurado para serializar/deserializar como string "HH:mm:ss"
     @JsonFormat(pattern = "HH:mm:ss")
     @Schema(description = "Hora do comparecimento no formato HH:mm:ss",
             example = "14:30:00",

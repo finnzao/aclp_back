@@ -18,22 +18,12 @@ import java.time.LocalDate;
 @Builder
 public class CustodiadoDTO {
 
-    @NotNull(message = "ID do custodiado é obrigatório")
-    private Long custodiadoId;
-
-    public Long getCustodiadoId() {
-        return custodiadoId;
-    }
-
-    public void setCustodiadoId(Long custodiadoId) {
-        this.custodiadoId = custodiadoId;
-    }
+    private Long id;
 
     @NotBlank(message = "Nome é obrigatório")
     @Size(min = 2, max = 150, message = "Nome deve ter entre 2 e 150 caracteres")
     private String nome;
 
-    //  CORREÇÃO: Validação mais flexível para CPF
     @Pattern(regexp = "\\d{3}\\.?\\d{3}\\.?\\d{3}-?\\d{2}|\\d{11}",
             message = "CPF deve ter o formato 000.000.000-00 ou apenas números")
     private String cpf;
@@ -42,13 +32,11 @@ public class CustodiadoDTO {
     private String rg;
 
     @NotBlank(message = "Contato é obrigatório")
-    //  CORREÇÃO: Validação mais flexível para contato
     @Pattern(regexp = "[\\d\\s().-]+",
             message = "Contato deve conter apenas números e caracteres de formatação")
     private String contato;
 
     @NotBlank(message = "Processo é obrigatório")
-    //  CORREÇÃO: Validação mais flexível para processo
     @Pattern(regexp = "[\\d.-]+",
             message = "Processo deve conter apenas números, pontos e hífens")
     private String processo;
@@ -67,7 +55,6 @@ public class CustodiadoDTO {
     @NotNull(message = "Periodicidade é obrigatória")
     private Integer periodicidade;
 
-    @NotNull(message = "Data do comparecimento inicial é obrigatória")
     private LocalDate dataComparecimentoInicial;
 
     private StatusComparecimento status;
@@ -80,7 +67,6 @@ public class CustodiadoDTO {
     // === CAMPOS DE ENDEREÇO - OBRIGATÓRIOS ===
 
     @NotBlank(message = "CEP é obrigatório")
-    //  CORREÇÃO: Validação mais flexível para CEP
     @Pattern(regexp = "\\d{5}-?\\d{3}|\\d{8}", message = "CEP deve ter o formato 00000-000 ou apenas números")
     private String cep;
 
@@ -107,21 +93,11 @@ public class CustodiadoDTO {
     @Pattern(regexp = "[A-Z]{2}", message = "Estado deve ser uma sigla válida com 2 letras maiúsculas")
     private String estado;
 
-    //  NOVOS CAMPOS: Para evitar conflitos com validações automáticas
-    private Boolean novoRegistro;
-    private Boolean atualizacao;
-
-    /**
-     * Valida se pelo menos um documento foi fornecido
-     */
     public boolean hasDocumento() {
         return (cpf != null && !cpf.trim().isEmpty()) ||
                 (rg != null && !rg.trim().isEmpty());
     }
 
-    /**
-     * Valida se todos os campos obrigatórios de endereço estão preenchidos
-     */
     public boolean hasEnderecoCompleto() {
         return cep != null && !cep.trim().isEmpty() &&
                 logradouro != null && !logradouro.trim().isEmpty() &&
@@ -130,57 +106,22 @@ public class CustodiadoDTO {
                 estado != null && !estado.trim().isEmpty();
     }
 
-    /**
-     * Limpa e formata os dados antes da validação
-     */
     public void limparEFormatarDados() {
-        if (nome != null) {
-            nome = nome.trim().toUpperCase(); //  PADRONIZAR NOME EM MAIÚSCULAS
-        }
-        if (cpf != null) {
-            cpf = cpf.trim();
-            // Manter formatação original do CPF
-        }
-        if (rg != null) {
-            rg = rg.trim().toUpperCase();
-        }
-        if (contato != null) {
-            contato = contato.trim();
-        }
-        if (processo != null) {
-            processo = processo.trim();
-        }
-        if (vara != null) {
-            vara = vara.trim().toUpperCase();
-        }
-        if (comarca != null) {
-            comarca = comarca.trim().toUpperCase();
-        }
-        if (observacoes != null) {
-            observacoes = observacoes.trim();
-        }
+        if (nome != null) nome = nome.trim().toUpperCase();
+        if (cpf != null) cpf = cpf.trim();
+        if (rg != null) rg = rg.trim().toUpperCase();
+        if (contato != null) contato = contato.trim();
+        if (processo != null) processo = processo.trim();
+        if (vara != null) vara = vara.trim().toUpperCase();
+        if (comarca != null) comarca = comarca.trim().toUpperCase();
+        if (observacoes != null) observacoes = observacoes.trim();
 
-        // Limpar dados de endereço
-        if (cep != null) {
-            cep = cep.trim().replaceAll("[^\\d]", ""); //  MANTER APENAS NÚMEROS NO CEP
-        }
-        if (logradouro != null) {
-            logradouro = logradouro.trim();
-        }
-        if (numero != null) {
-            numero = numero.trim();
-        }
-        if (complemento != null) {
-            complemento = complemento.trim();
-        }
-        if (bairro != null) {
-            bairro = bairro.trim();
-        }
-        if (cidade != null) {
-            cidade = cidade.trim();
-        }
-        if (estado != null) {
-            estado = estado.trim().toUpperCase();
-        }
+        if (cep != null) cep = cep.trim().replaceAll("[^\\d]", "");
+        if (logradouro != null) logradouro = logradouro.trim();
+        if (numero != null) numero = numero.trim();
+        if (complemento != null) complemento = complemento.trim();
+        if (bairro != null) bairro = bairro.trim();
+        if (cidade != null) cidade = cidade.trim();
+        if (estado != null) estado = estado.trim().toUpperCase();
     }
 }

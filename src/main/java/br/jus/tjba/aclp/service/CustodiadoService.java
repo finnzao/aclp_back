@@ -133,9 +133,16 @@ public class CustodiadoService {
                 dto.getProcesso(), dto.getNome());
 
         try {
-            // Limpar e formatar dados antes das validações
+            dto.setId(null); // Forçar null para garantir auto-increment
+
             dto.limparEFormatarDados();
             log.debug("Dados limpos e formatados");
+
+            if (dto.getDataComparecimentoInicial() == null) {
+                dto.setDataComparecimentoInicial(LocalDate.now());
+                log.info("Data de comparecimento inicial não fornecida - usando data atual: {}",
+                        LocalDate.now());
+            }
 
             // Validações
             validarDadosObrigatorios(dto);
@@ -153,7 +160,6 @@ public class CustodiadoService {
             validarEnderecoCompleto(dto);
             log.debug("Endereço validado");
 
-            // Criar custodiado SEMPRE com situacao = ATIVO
             Custodiado custodiado = Custodiado.builder()
                     .nome(dto.getNome().trim())
                     .cpf(dto.getCpf())
@@ -171,13 +177,11 @@ public class CustodiadoService {
                     .observacoes(dto.getObservacoes() != null ? dto.getObservacoes().trim() : null)
                     .build();
 
-            // Calcular próximo comparecimento
             custodiado.calcularProximoComparecimento();
             log.debug("Próximo comparecimento calculado: {}", custodiado.getProximoComparecimento());
 
-            // Salvar custodiado primeiro
             Custodiado custodiadoSalvo = custodiadoRepository.save(custodiado);
-            log.info("Custodiado salvo no banco - ID: {}", custodiadoSalvo.getId());
+            log.info("Custodiado salvo no banco - ID gerado: {}", custodiadoSalvo.getId());
 
             // Criar histórico de endereço inicial
             criarHistoricoEnderecoInicial(custodiadoSalvo, dto);
@@ -445,9 +449,9 @@ public class CustodiadoService {
             throw new IllegalArgumentException("Periodicidade deve ser um número positivo (em dias)");
         }
 
-        if (dto.getDataComparecimentoInicial() == null) {
-            throw new IllegalArgumentException("Data do comparecimento inicial é obrigatória");
-        }
+        // if (dto.getDataComparecimentoInicial() == null) {
+        //     throw new IllegalArgumentException("Data do comparecimento inicial é obrigatória");
+        // }
 
         // Pelo menos CPF ou RG deve estar preenchido
         if ((dto.getCpf() == null || dto.getCpf().trim().isEmpty()) &&
@@ -455,7 +459,6 @@ public class CustodiadoService {
             throw new IllegalArgumentException("Pelo menos um documento (CPF ou RG) deve ser informado");
         }
     }
-
     private void validarEnderecoCompleto(CustodiadoDTO dto) {
         if (dto.getCep() == null || dto.getCep().trim().isEmpty()) {
             throw new IllegalArgumentException("CEP é obrigatório");

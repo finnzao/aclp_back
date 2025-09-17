@@ -22,8 +22,6 @@ import java.time.LocalDate;
 @Builder
 public class CustodiadoCreateDTO {
 
-    // ✅ SEM CAMPO ID - será gerado automaticamente
-
     @NotBlank(message = "Nome é obrigatório")
     @Size(min = 2, max = 150, message = "Nome deve ter entre 2 e 150 caracteres")
     private String nome;
@@ -95,11 +93,10 @@ public class CustodiadoCreateDTO {
     private String estado;
 
     /**
-     * ✅ Converter para CustodiadoDTO para compatibilidade com service
+     *  Converter para CustodiadoDTO para compatibilidade com service
      */
     public CustodiadoDTO toCustodiadoDTO() {
         return CustodiadoDTO.builder()
-                .custodiadoId(null) // ID sempre null para novos registros
                 .nome(this.nome)
                 .cpf(this.cpf)
                 .rg(this.rg)

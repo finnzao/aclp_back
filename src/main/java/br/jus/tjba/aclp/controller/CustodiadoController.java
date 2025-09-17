@@ -173,7 +173,8 @@ public class CustodiadoController {
     }
 
     @PostMapping
-    @Operation(summary = "Cadastrar novo custodiado", description = "Cadastra um novo custodiado no sistema")
+    @Operation(summary = "Cadastrar novo custodiado",
+            description = "Cadastra um novo custodiado no sistema. ID é gerado automaticamente. Data de comparecimento inicial é opcional (usa hoje se não informada)")
     @ApiResponses(value = {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Custodiado cadastrado com sucesso"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Dados inválidos"),
@@ -183,25 +184,38 @@ public class CustodiadoController {
         log.info("Cadastrando novo custodiado - Processo: {}, Nome: {}", dto.getProcesso(), dto.getNome());
 
         try {
-            if (dto.getCustodiadoId() != null) {
-                log.warn("ID {} ignorado para novo custodiado - será gerado automaticamente", dto.getCustodiadoId());
-                dto.setCustodiadoId(null); // Forçar ID null para novo registro
+            //  GARANTIR QUE NÃO HÁ ID NA REQUISIÇÃO DE CRIAÇÃO
+            if (dto.getId() != null) {
+                log.warn("ID {} recebido na criação será ignorado - ID é auto-increment", dto.getId());
+                dto.setId(null); // Forçar null
+            }
+
+            // Log da data de comparecimento
+            if (dto.getDataComparecimentoInicial() == null) {
+                log.info("Data de comparecimento inicial não fornecida - será usada data atual");
+            } else {
+                log.info("Data de comparecimento inicial fornecida: {}", dto.getDataComparecimentoInicial());
             }
 
             Custodiado custodiado = custodiadoService.save(dto);
-            log.info("Custodiado cadastrado com sucesso. ID: {}", custodiado.getId());
+            log.info(" Custodiado cadastrado com sucesso. ID gerado: {}", custodiado.getId());
 
             return ResponseEntity.status(HttpStatus.CREATED).body(
                     ApiResponse.success("Custodiado cadastrado com sucesso",
                             CustodiadoResponseDTO.fromEntity(custodiado, custodiadoService))
             );
         } catch (IllegalArgumentException e) {
+            log.warn("Erro de validação ao cadastrar custodiado: {}", e.getMessage());
             return ResponseEntity.badRequest().body(
                     ApiResponse.error(e.getMessage())
             );
+        } catch (Exception e) {
+            log.error("Erro inesperado ao cadastrar custodiado", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                    ApiResponse.error("Erro interno ao cadastrar custodiado")
+            );
         }
     }
-
     @PutMapping("/{id}")
     @Operation(summary = "Atualizar custodiado", description = "Atualiza os dados de um custodiado existente")
     @ApiResponses(value = {
