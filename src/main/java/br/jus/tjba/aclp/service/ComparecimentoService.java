@@ -853,10 +853,13 @@ public class ComparecimentoService {
     private void processarMudancaEndereco(ComparecimentoDTO dto, Custodiado custodiado, HistoricoComparecimento historico) {
         log.info("Processando mudança de endereço - Custodiado: {}", custodiado.getNome());
 
-        // 1. Finalizar endereço anterior no histórico
-        finalizarEnderecoAnterior(custodiado, dto.getDataComparecimento());
+        int enderecosDesativados = historicoEnderecoRepository.desativarTodosEnderecosPorCustodiado(custodiado.getId());
 
-        // 2. Criar novo registro no histórico de endereços (historico já foi salvo)
+        if (enderecosDesativados > 0) {
+            log.info("Desativados {} endereço(s) anterior(es) do custodiado ID: {}",
+                    enderecosDesativados, custodiado.getId());
+        }
+
         criarNovoHistoricoEndereco(custodiado, dto, historico);
     }
 
@@ -871,7 +874,19 @@ public class ComparecimentoService {
         });
     }
 
+    /**
+     * CORREÇÃO: Cria novo histórico garantindo que será o único ativo
+     */
     private void criarNovoHistoricoEndereco(Custodiado custodiado, ComparecimentoDTO dto, HistoricoComparecimento historico) {
+        // Verificação adicional: garantir que não há endereços ativos antes de criar
+        long enderecosAtivos = historicoEnderecoRepository.countEnderecosAtivosPorCustodiado(custodiado.getId());
+
+        if (enderecosAtivos > 0) {
+            log.warn("ATENÇÃO: Ainda existem {} endereços ativos para custodiado {}. Desativando...",
+                    enderecosAtivos, custodiado.getId());
+            historicoEnderecoRepository.desativarTodosEnderecosPorCustodiado(custodiado.getId());
+        }
+
         HistoricoEndereco novoHistorico = HistoricoEndereco.builder()
                 .custodiado(custodiado)
                 .cep(dto.getNovoEndereco().getCep())
@@ -882,24 +897,24 @@ public class ComparecimentoService {
                 .cidade(dto.getNovoEndereco().getCidade())
                 .estado(dto.getNovoEndereco().getEstado())
                 .dataInicio(dto.getDataComparecimento())
+                .dataFim(null) // Endereço ativo não tem data fim
                 .ativo(Boolean.TRUE)
                 .motivoAlteracao(dto.getMotivoMudancaEndereco())
                 .validadoPor(dto.getValidadoPor())
-                .historicoComparecimento(historico) // ✅ Agora historico já existe no banco
+                .historicoComparecimento(historico)
                 .build();
 
-        // Salvar endereço
         HistoricoEndereco enderecoSalvo = historicoEnderecoRepository.save(novoHistorico);
 
-        // ✅ USAR MÉTODO AUXILIAR para adicionar endereço
+        // Verificação final: garantir que apenas este endereço está ativo
+        historicoEnderecoRepository.desativarOutrosEnderecosAtivos(custodiado.getId(), enderecoSalvo.getId());
+
         adicionarEnderecoAoHistorico(historico, enderecoSalvo);
 
-        log.info("Novo histórico de endereço criado - ID: {}, Endereço: {}",
+        log.info("Novo histórico de endereço criado - ID: {}, Endereço: {}, É o único ativo: true",
                 enderecoSalvo.getId(), enderecoSalvo.getEnderecoResumido());
     }
-
     /**
-     * ✅ MÉTODO CRIADO: Adiciona endereço alterado ao histórico
      * Substitui o método que estava faltando na entidade
      */
     private void adicionarEnderecoAoHistorico(HistoricoComparecimento historico, HistoricoEndereco endereco) {

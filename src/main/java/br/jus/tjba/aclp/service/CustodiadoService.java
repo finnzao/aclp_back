@@ -11,9 +11,12 @@ import br.jus.tjba.aclp.model.enums.TipoValidacao;
 import br.jus.tjba.aclp.repository.CustodiadoRepository;
 import br.jus.tjba.aclp.repository.HistoricoComparecimentoRepository;
 import br.jus.tjba.aclp.repository.HistoricoEnderecoRepository;
+
 import jakarta.persistence.EntityNotFoundException;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -351,13 +354,22 @@ public class CustodiadoService {
         try {
             log.debug("Criando histórico de endereço inicial para custodiado ID: {}", custodiado.getId());
 
+            // CORREÇÃO: Desativar quaisquer endereços ativos existentes (segurança)
+            int desativados = historicoEnderecoRepository.desativarTodosEnderecosPorCustodiado(custodiado.getId());
+
+            if (desativados > 0) {
+                log.warn("Desativados {} endereços ativos pré-existentes para custodiado ID: {}",
+                        desativados, custodiado.getId());
+            }
+
             // Verificar se já existe endereço ativo para evitar duplicidade
             Optional<HistoricoEndereco> enderecoExistente =
                     historicoEnderecoRepository.findEnderecoAtivoPorCustodiado(custodiado.getId());
 
             if (enderecoExistente.isPresent()) {
-                log.warn("Custodiado ID: {} já possui endereço ativo, pulando criação", custodiado.getId());
-                return;
+                log.warn("Custodiado ID: {} já possui endereço ativo, desativando antes de criar novo",
+                        custodiado.getId());
+                historicoEnderecoRepository.desativarTodosEnderecosPorCustodiado(custodiado.getId());
             }
 
             HistoricoEndereco enderecoInicial = HistoricoEndereco.builder()
@@ -370,12 +382,17 @@ public class CustodiadoService {
                     .cidade(dto.getCidade().trim())
                     .estado(dto.getEstado().trim().toUpperCase())
                     .dataInicio(custodiado.getDataComparecimentoInicial())
+                    .dataFim(null) // Endereço ativo não tem data fim
                     .ativo(Boolean.TRUE)
                     .motivoAlteracao("Endereço inicial no cadastro")
                     .validadoPor("Sistema ACLP")
                     .build();
 
             HistoricoEndereco enderecoSalvo = historicoEnderecoRepository.save(enderecoInicial);
+
+            // Garantia final: desativar outros endereços ativos (caso algum tenha sido criado concorrentemente)
+            historicoEnderecoRepository.desativarOutrosEnderecosAtivos(custodiado.getId(), enderecoSalvo.getId());
+
             log.info("Histórico de endereço inicial criado - ID: {}, Custodiado: {}, Endereço: {}",
                     enderecoSalvo.getId(), custodiado.getNome(), enderecoSalvo.getEnderecoResumido());
 

@@ -5,6 +5,7 @@ import br.jus.tjba.aclp.model.HistoricoEndereco;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
@@ -27,9 +28,42 @@ public interface HistoricoEnderecoRepository extends JpaRepository<HistoricoEnde
 
     /**
      * Busca o endereço ativo atual de um custodiado
+     * CORREÇÃO: Garante que retorna apenas um endereço ativo (o mais recente)
      */
-    @Query("SELECT h FROM HistoricoEndereco h WHERE h.custodiado.id = :custodiadoId AND h.ativo = true")
+    @Query("SELECT h FROM HistoricoEndereco h WHERE h.custodiado.id = :custodiadoId AND h.ativo = true " +
+            "ORDER BY h.dataInicio DESC, h.id DESC LIMIT 1")
     Optional<HistoricoEndereco> findEnderecoAtivoPorCustodiado(@Param("custodiadoId") Long custodiadoId);
+
+    /**
+     * NOVO: Desativa todos os endereços ativos de um custodiado
+     */
+    @Modifying
+    @Query("UPDATE HistoricoEndereco h SET h.ativo = false, h.atualizadoEm = CURRENT_TIMESTAMP " +
+            "WHERE h.custodiado.id = :custodiadoId AND h.ativo = true")
+    int desativarTodosEnderecosPorCustodiado(@Param("custodiadoId") Long custodiadoId);
+
+    /**
+     * NOVO: Desativa endereços ativos de um custodiado exceto um específico
+     */
+    @Modifying
+    @Query("UPDATE HistoricoEndereco h SET h.ativo = false, h.atualizadoEm = CURRENT_TIMESTAMP " +
+            "WHERE h.custodiado.id = :custodiadoId AND h.ativo = true AND h.id != :enderecoId")
+    int desativarOutrosEnderecosAtivos(@Param("custodiadoId") Long custodiadoId, @Param("enderecoId") Long enderecoId);
+
+    /**
+     * NOVO: Busca todos os endereços ativos duplicados (para diagnóstico)
+     */
+    @Query("SELECT h FROM HistoricoEndereco h WHERE h.custodiado.id IN " +
+            "(SELECT h2.custodiado.id FROM HistoricoEndereco h2 WHERE h2.ativo = true " +
+            "GROUP BY h2.custodiado.id HAVING COUNT(h2.id) > 1) " +
+            "AND h.ativo = true ORDER BY h.custodiado.id, h.dataInicio DESC")
+    List<HistoricoEndereco> findEnderecosDuplicados();
+
+    /**
+     * NOVO: Conta endereços ativos por custodiado (para validação)
+     */
+    @Query("SELECT COUNT(h) FROM HistoricoEndereco h WHERE h.custodiado.id = :custodiadoId AND h.ativo = true")
+    long countEnderecosAtivosPorCustodiado(@Param("custodiadoId") Long custodiadoId);
 
     /**
      * Busca endereços históricos de um custodiado (inativos)
