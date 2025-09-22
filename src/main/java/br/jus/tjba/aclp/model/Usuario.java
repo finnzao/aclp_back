@@ -6,6 +6,8 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import br.jus.tjba.aclp.model.enums.StatusUsuario;
+
 import lombok.*;
 
 import java.time.LocalDateTime;
@@ -83,6 +85,44 @@ public class Usuario {
     @Builder.Default
     private Long version = 0L;
 
+    //StatusUsuario
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status_usuario", nullable = false, length = 20)
+    @Builder.Default
+    private StatusUsuario statusUsuario = StatusUsuario.ACTIVE;
+
+    @Column(name = "mfa_enabled", nullable = false)
+    @Builder.Default
+    private Boolean mfaEnabled = false;
+
+    @Column(name = "mfa_secret", length = 100)
+    private String mfaSecret;
+
+    @Column(name = "email_verificado", nullable = false)
+    @Builder.Default
+    private Boolean emailVerificado = false;
+
+    @Column(name = "data_verificacao_email")
+    private LocalDateTime dataVerificacaoEmail;
+
+    @Column(name = "tentativas_login_falhadas")
+    @Builder.Default
+    private Integer tentativasLoginFalhadas = 0;
+
+    @Column(name = "bloqueado_ate")
+    private LocalDateTime bloqueadoAte;
+
+    @Column(name = "deve_trocar_senha", nullable = false)
+    @Builder.Default
+    private Boolean deveTrocarSenha = false;
+
+    @Column(name = "senha_expira_em")
+    private LocalDateTime senhaExpiraEm;
+
+    @Column(name = "ultimo_reset_senha")
+    private LocalDateTime ultimoResetSenha;
+
+
     @PrePersist
     public void prePersist() {
         if (this.criadoEm == null) {
@@ -94,8 +134,24 @@ public class Usuario {
         if (this.tipo == null) {
             this.tipo = TipoUsuario.USUARIO;
         }
+        if (this.statusUsuario == null) {
+            this.statusUsuario = StatusUsuario.ACTIVE;
+        }
+        if (this.mfaEnabled == null) {
+            this.mfaEnabled = Boolean.FALSE;
+        }
+        if (this.emailVerificado == null) {
+            this.emailVerificado = Boolean.FALSE;
+        }
+        if (this.deveTrocarSenha == null) {
+            this.deveTrocarSenha = Boolean.FALSE;
+        }
         if (this.version == null) {
             this.version = 0L;
+        }
+
+        if (this.senhaExpiraEm == null) {
+            this.senhaExpiraEm = LocalDateTime.now().plusDays(320);
         }
     }
 
@@ -118,6 +174,60 @@ public class Usuario {
 
     public String getNomeCompleto() {
         return nome + (departamento != null ? " (" + departamento + ")" : "");
+    }
+
+    /**
+     * Verifica se usuário pode fazer login
+     */
+    public boolean podeLogar() {
+        if (statusUsuario != StatusUsuario.ACTIVE) {
+            return false;
+        }
+        if (!ativo) {
+            return false;
+        }
+        if (bloqueadoAte != null && bloqueadoAte.isAfter(LocalDateTime.now())) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Verifica se senha expirou
+     */
+    public boolean senhaExpirada() {
+        return senhaExpiraEm != null && senhaExpiraEm.isBefore(LocalDateTime.now());
+    }
+
+    /**
+     * Incrementa tentativas de login falhadas
+     */
+    public void incrementarTentativasFalhadas() {
+        if (tentativasLoginFalhadas == null) {
+            tentativasLoginFalhadas = 0;
+        }
+        tentativasLoginFalhadas++;
+
+        // Bloquear após 5 tentativas
+        if (tentativasLoginFalhadas >= 5) {
+            bloqueadoAte = LocalDateTime.now().plusMinutes(30);
+        }
+    }
+
+    /**
+     * Reseta tentativas de login
+     */
+    public void resetarTentativas() {
+        tentativasLoginFalhadas = 0;
+        bloqueadoAte = null;
+    }
+
+    /**
+     * Marca email como verificado
+     */
+    public void marcarEmailVerificado() {
+        this.emailVerificado = true;
+        this.dataVerificacaoEmail = LocalDateTime.now();
     }
 
     @Override
