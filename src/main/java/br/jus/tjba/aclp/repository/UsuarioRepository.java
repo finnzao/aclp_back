@@ -22,7 +22,10 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
     @Query("SELECT u FROM Usuario u WHERE u.nome LIKE %:nome% AND u.ativo = true")
     List<Usuario> findByNomeContainingIgnoreCaseAndAtivoTrue(@Param("nome") String nome);
 
+    Optional<Usuario> findByPasswordResetToken(String token);
+
     boolean existsByEmail(String email);
+
 
     long countByTipo(TipoUsuario tipo);
 }

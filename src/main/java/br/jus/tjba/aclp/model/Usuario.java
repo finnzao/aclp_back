@@ -122,6 +122,11 @@ public class Usuario {
     @Column(name = "ultimo_reset_senha")
     private LocalDateTime ultimoResetSenha;
 
+    @Column(name = "password_reset_token", length = 255)
+    private String passwordResetToken;
+
+    @Column(name = "password_reset_expiry")
+    private LocalDateTime passwordResetExpiry;
 
     @PrePersist
     public void prePersist() {
