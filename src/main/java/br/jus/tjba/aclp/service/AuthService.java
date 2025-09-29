@@ -25,7 +25,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import javax.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequest;  // ✅ CORRIGIDO: jakarta em vez de javax
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -425,6 +425,20 @@ public class AuthService {
     }
 
     /**
+     * Retorna usuário mock para desenvolvimento (substituir em produção)
+     */
+    public Usuario getMockAdminUser() {
+        return usuarioRepository.findByEmail("admin@tjba.jus.br")
+                .orElseGet(() -> {
+                    log.warn("Admin mock não encontrado, retornando primeiro admin do sistema");
+                    return usuarioRepository.findByTipo(br.jus.tjba.aclp.model.enums.TipoUsuario.ADMIN)
+                            .stream()
+                            .findFirst()
+                            .orElse(null);
+                });
+    }
+
+    /**
      * Retorna informações da sessão atual
      */
     public SessionInfoDTO getCurrentSessionInfo(String token) {
@@ -769,9 +783,6 @@ public class AuthService {
                 """, usuario.getNome(), lockoutDurationMinutes);
 
         emailService.enviarEmail(usuario.getEmail(), "Conta Bloqueada - ACLP", content);
-    }
-
-    public Usuario getMockAdminUser() {
     }
 
     // ========== CLASSES INTERNAS ==========
