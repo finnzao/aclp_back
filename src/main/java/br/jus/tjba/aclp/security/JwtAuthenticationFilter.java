@@ -1,118 +1,104 @@
 package br.jus.tjba.aclp.security;
 
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Profile;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.lang.NonNull;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
 
-import java.util.Arrays;
-import java.util.Collections;
+import java.io.IOException;
 
 /**
- * Configuração de Segurança DESABILITADA para testes
+ * Filtro de autenticação JWT
+ * Processa o token JWT em cada requisição e configura o contexto de segurança
  *
- * ATENÇÃO: Esta configuração é INSEGURA
- * Use apenas em desenvolvimento/testes
- *
- * Para ativar: spring.profiles.active=dev
+ * Este filtro é executado APENAS em modo PROD (quando JWT está ativo)
+ * Em modo DEV, a segurança está desabilitada
  */
-@Configuration
-@EnableWebSecurity
-@Profile({"dev", "test"}) // Apenas em desenvolvimento
+@Component
+@RequiredArgsConstructor
 @Slf4j
-public class JwtAuthenticationFilter extends UsernamePasswordAuthenticationFilter {
+public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        log.warn("╔════════════════════════════════════════════════════════════════╗");
-        log.warn("║  ⚠️  SEGURANÇA DESABILITADA - MODO DE TESTE                   ║");
-        log.warn("║  Todos os endpoints estão ABERTOS sem autenticação            ║");
-        log.warn("║  CSRF está DESABILITADO                                       ║");
-        log.warn("║  NUNCA use esta configuração em PRODUÇÃO                      ║");
-        log.warn("╚════════════════════════════════════════════════════════════════╝");
+    private final JwtTokenProvider jwtTokenProvider;
+    private final UserDetailsService userDetailsService;
 
-        http
-                // Desabilitar CSRF (necessário para APIs REST)
-                .csrf(csrf -> csrf.disable())
+    @Override
+    protected void doFilterInternal(
+            @NonNull HttpServletRequest request,
+            @NonNull HttpServletResponse response,
+            @NonNull FilterChain filterChain) throws ServletException, IOException {
 
-                // Configurar CORS
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+        try {
+            String jwt = getJwtFromRequest(request);
 
-                // Configurar autorização - PERMITIR TUDO
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/**").permitAll() // Permitir TODAS as rotas
-                        .anyRequest().permitAll()
-                )
+            if (jwt != null && jwtTokenProvider.validateToken(jwt)) {
+                String username = jwtTokenProvider.getUsernameFromToken(jwt);
 
-                // Stateless - não criar sessão
-                .sessionManagement(session ->
-                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-                )
+                UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
-                // Desabilitar formLogin
-                .formLogin(form -> form.disable())
+                UsernamePasswordAuthenticationToken authentication =
+                        new UsernamePasswordAuthenticationToken(
+                                userDetails,
+                                null,
+                                userDetails.getAuthorities()
+                        );
 
-                // Desabilitar httpBasic
-                .httpBasic(basic -> basic.disable())
+                authentication.setDetails(
+                        new WebAuthenticationDetailsSource().buildDetails(request)
+                );
 
-                // Desabilitar logout padrão
-                .logout(logout -> logout.disable());
+                SecurityContextHolder.getContext().setAuthentication(authentication);
 
-        log.info("Security Filter Chain configurado:");
-        log.info("- CSRF: DESABILITADO");
-        log.info("- Autenticação: DESABILITADA");
-        log.info("- CORS: PERMISSIVO");
-        log.info("- Todas as rotas: PÚBLICAS");
+                log.debug("✅ Autenticação JWT processada: {}", username);
+            }
 
-        return http.build();
+        } catch (Exception e) {
+            log.error("❌ Erro ao processar JWT: {}", e.getMessage());
+            SecurityContextHolder.clearContext();
+        }
+
+        filterChain.doFilter(request, response);
     }
 
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
+    /**
+     * Extrai o token JWT do header Authorization
+     */
+    private String getJwtFromRequest(HttpServletRequest request) {
+        String bearerToken = request.getHeader("Authorization");
 
-        // Permitir todas as origens
-        configuration.setAllowedOriginPatterns(Collections.singletonList("*"));
+        if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
+            return bearerToken.substring(7);
+        }
 
-        // Permitir credenciais
-        configuration.setAllowCredentials(true);
-
-        // Permitir todos os métodos
-        configuration.setAllowedMethods(Arrays.asList(
-                "GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"
-        ));
-
-        // Permitir todos os headers
-        configuration.setAllowedHeaders(Arrays.asList("*"));
-
-        // Expor headers
-        configuration.setExposedHeaders(Arrays.asList(
-                "Authorization",
-                "Content-Disposition",
-                "Content-Type"
-        ));
-
-        // Cache preflight
-        configuration.setMaxAge(3600L);
-
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
-
-        return source;
+        return null;
     }
 
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+    /**
+     * Define quais rotas NÃO devem passar por este filtro
+     * Rotas públicas não precisam de autenticação JWT
+     */
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getRequestURI();
+
+        return path.startsWith("/api/auth/") ||
+                path.startsWith("/api/setup/") ||
+                path.startsWith("/api/demo/") ||
+                path.startsWith("/api/verificacao/") ||
+                path.startsWith("/swagger-ui") ||
+                path.startsWith("/v3/api-docs") ||
+                path.startsWith("/h2-console") ||
+                path.startsWith("/actuator/health") ||
+                path.equals("/");
     }
 }

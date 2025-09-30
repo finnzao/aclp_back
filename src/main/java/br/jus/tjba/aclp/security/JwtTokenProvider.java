@@ -131,8 +131,26 @@ public class JwtTokenProvider {
         return false;
     }
 
+    // ============================================================================
+    // ⭐ MÉTODO ADICIONADO: getUsernameFromToken
+    // ============================================================================
+
     /**
-     * Extrai email do token
+     * Extrai username (email) do token
+     * Este método é usado pelo JwtAuthenticationFilter
+     *
+     * @param token Token JWT
+     * @return Email do usuário (username)
+     */
+    public String getUsernameFromToken(String token) {
+        Claims claims = getClaims(token);
+        return claims.getSubject(); // Subject contém o email do usuário
+    }
+
+    // ============================================================================
+
+    /**
+     * Extrai email do token (mesmo que getUsernameFromToken)
      */
     public String getEmailFromToken(String token) {
         Claims claims = getClaims(token);
@@ -145,6 +163,22 @@ public class JwtTokenProvider {
     public Long getUserIdFromToken(String token) {
         Claims claims = getClaims(token);
         return claims.get("userId", Long.class);
+    }
+
+    /**
+     * Extrai nome do usuário do token
+     */
+    public String getNomeFromToken(String token) {
+        Claims claims = getClaims(token);
+        return claims.get("nome", String.class);
+    }
+
+    /**
+     * Extrai tipo do usuário do token
+     */
+    public String getTipoFromToken(String token) {
+        Claims claims = getClaims(token);
+        return claims.get("tipo", String.class);
     }
 
     /**
@@ -161,6 +195,14 @@ public class JwtTokenProvider {
     public Date getExpirationDateFromToken(String token) {
         Claims claims = getClaims(token);
         return claims.getExpiration();
+    }
+
+    /**
+     * Extrai data de emissão do token
+     */
+    public Date getIssuedAtFromToken(String token) {
+        Claims claims = getClaims(token);
+        return claims.getIssuedAt();
     }
 
     /**
@@ -231,6 +273,19 @@ public class JwtTokenProvider {
     }
 
     /**
+     * Retorna tempo restante do token em minutos
+     */
+    public long getTokenRemainingTime(String token) {
+        try {
+            Date expiration = getExpirationDateFromToken(token);
+            long millisUntilExpiry = expiration.getTime() - System.currentTimeMillis();
+            return millisUntilExpiry / (60 * 1000);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    /**
      * Verifica se token vai expirar em breve
      */
     public boolean isTokenExpiringSoon(String token, long minutesThreshold) {
@@ -240,6 +295,18 @@ public class JwtTokenProvider {
             return minutesUntilExpiry <= minutesThreshold;
         } catch (Exception e) {
             return true;
+        }
+    }
+
+    /**
+     * Verifica se token é válido para um usuário específico
+     */
+    public boolean validateTokenForUser(String token, String username) {
+        try {
+            String tokenUsername = getUsernameFromToken(token);
+            return (username.equals(tokenUsername) && validateToken(token));
+        } catch (Exception e) {
+            return false;
         }
     }
 
@@ -267,5 +334,36 @@ public class JwtTokenProvider {
         return roles.stream()
                 .map(SimpleGrantedAuthority::new)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Retorna informações resumidas do token (para debug/logs)
+     */
+    public String getTokenInfo(String token) {
+        try {
+            Claims claims = getClaims(token);
+            return String.format(
+                    "Token Info: Subject=%s, Issued=%s, Expires=%s, Issuer=%s",
+                    claims.getSubject(),
+                    claims.getIssuedAt(),
+                    claims.getExpiration(),
+                    claims.getIssuer()
+            );
+        } catch (Exception e) {
+            return "Token inválido ou malformado";
+        }
+    }
+
+    /**
+     * Verifica se o token foi emitido recentemente (útil para refresh)
+     */
+    public boolean isTokenFresh(String token, long minutesThreshold) {
+        try {
+            Date issuedAt = getIssuedAtFromToken(token);
+            long minutesSinceIssued = (System.currentTimeMillis() - issuedAt.getTime()) / (60 * 1000);
+            return minutesSinceIssued <= minutesThreshold;
+        } catch (Exception e) {
+            return false;
+        }
     }
 }
