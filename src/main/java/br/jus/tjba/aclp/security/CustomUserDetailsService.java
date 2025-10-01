@@ -11,74 +11,59 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
-/**
- * Implementação customizada do UserDetailsService do Spring Security
- * Carrega usuários do banco de dados e converte para UserDetails
- */
-@Slf4j
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class CustomUserDetailsService implements UserDetailsService {
 
     private final UsuarioRepository usuarioRepository;
 
     @Override
-    @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
         log.debug("Carregando usuário: {}", email);
 
         Usuario usuario = usuarioRepository.findByEmail(email)
-                .orElseThrow(() -> {
-                    log.warn("Usuário não encontrado: {}", email);
-                    return new UsernameNotFoundException("Usuário não encontrado: " + email);
-                });
+                .orElseThrow(() -> new UsernameNotFoundException(
+                        "Usuário não encontrado com email: " + email));
 
-        log.debug("Usuário encontrado: {} - Ativo: {} - Tipo: {}",
-                usuario.getEmail(), usuario.getAtivo(), usuario.getTipo());
+        if (!usuario.getAtivo()) {
+            log.warn("Tentativa de login com conta desativada: {}", email);
+            throw new UsernameNotFoundException("Conta desativada");
+        }
+
+        Collection<? extends GrantedAuthority> authorities = getAuthorities(usuario);
+
+        log.debug("Usuário carregado: {}, Authorities: {}", email, authorities);
 
         return User.builder()
                 .username(usuario.getEmail())
                 .password(usuario.getSenha())
-                .disabled(!usuario.getAtivo())
+                .authorities(authorities)
                 .accountExpired(false)
-                .accountLocked(!usuario.podeLogar())
+                .accountLocked(usuario.getBloqueadoAte() != null &&
+                        usuario.getBloqueadoAte().isAfter(java.time.LocalDateTime.now()))
                 .credentialsExpired(usuario.senhaExpirada())
-                .authorities(getAuthorities(usuario))
+                .disabled(!usuario.getAtivo())
                 .build();
     }
 
-    /**
-     * Retorna as authorities (permissões) do usuário
-     */
     private Collection<? extends GrantedAuthority> getAuthorities(Usuario usuario) {
-        List<GrantedAuthority> authorities = new ArrayList<>();
+        Set<GrantedAuthority> authorities = new HashSet<>();
 
-        // Adicionar role baseada no tipo de usuário
-        authorities.add(new SimpleGrantedAuthority("ROLE_" + usuario.getTipo().name()));
+        String roleName = "ROLE_" + usuario.getTipo().name();
+        authorities.add(new SimpleGrantedAuthority(roleName));
 
-        // Adicionar role simplificada
         if (usuario.isAdmin()) {
-            authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
-        } else {
             authorities.add(new SimpleGrantedAuthority("ROLE_USER"));
         }
 
-        log.debug("Authorities para {}: {}", usuario.getEmail(), authorities);
+        log.debug("Authorities geradas para {}: {}", usuario.getEmail(), authorities);
 
         return authorities;
-    }
-
-    /**
-     * Carrega usuário por ID (método auxiliar)
-     */
-    public Usuario loadUserById(Long id) {
-        return usuarioRepository.findById(id)
-                .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado com ID: " + id));
     }
 }
