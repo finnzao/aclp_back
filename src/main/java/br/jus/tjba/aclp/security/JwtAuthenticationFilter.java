@@ -18,11 +18,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
 /**
- * Filtro de autenticação JWT
- * Processa o token JWT em cada requisição e configura o contexto de segurança
- *
- * Este filtro é executado APENAS em modo PROD (quando JWT está ativo)
- * Em modo DEV, a segurança está desabilitada
+ * Filtro de autenticacao JWT
+ * Processa o token JWT em cada requisicao e configura o contexto de seguranca
  */
 @Component
 @RequiredArgsConstructor
@@ -59,11 +56,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
 
-                log.debug("✅ Autenticação JWT processada: {}", username);
+                log.debug("Autenticacao JWT processada: {}", username);
             }
 
         } catch (Exception e) {
-            log.error("❌ Erro ao processar JWT: {}", e.getMessage());
+            log.error("Erro ao processar JWT: {}", e.getMessage());
             SecurityContextHolder.clearContext();
         }
 
@@ -84,17 +81,25 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     /**
-     * Define quais rotas NÃO devem passar por este filtro
-     * Rotas públicas não precisam de autenticação JWT
+     * Define quais rotas NAO devem passar por este filtro
+     * Apenas rotas completamente publicas que nao precisam de JWT
      */
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
 
-        return path.startsWith("/api/auth/") ||
+        return path.equals("/api/auth/login") ||
+                path.equals("/api/auth/refresh") ||
+                path.equals("/api/auth/forgot-password") ||
+                path.equals("/api/auth/reset-password") ||
+                path.equals("/api/auth/health") ||
+                path.equals("/api/auth/check-setup") ||
+                path.equals("/api/auth/validate") ||
                 path.startsWith("/api/setup/") ||
                 path.startsWith("/api/demo/") ||
                 path.startsWith("/api/verificacao/") ||
+                path.startsWith("/api/usuarios/convites/validar/") ||
+                path.equals("/api/usuarios/convites/ativar") ||
                 path.startsWith("/swagger-ui") ||
                 path.startsWith("/v3/api-docs") ||
                 path.startsWith("/h2-console") ||

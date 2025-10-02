@@ -36,8 +36,16 @@ public class SecurityConfig {
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authz -> authz
-                        // Endpoints públicos
-                        .requestMatchers("/api/auth/**").permitAll()
+                        // Endpoints publicos de autenticacao (sem token)
+                        .requestMatchers("/api/auth/login").permitAll()
+                        .requestMatchers("/api/auth/refresh").permitAll()
+                        .requestMatchers("/api/auth/forgot-password").permitAll()
+                        .requestMatchers("/api/auth/reset-password").permitAll()
+                        .requestMatchers("/api/auth/health").permitAll()
+                        .requestMatchers("/api/auth/check-setup").permitAll()
+                        .requestMatchers("/api/auth/validate").permitAll()
+
+                        // Setup e Demo
                         .requestMatchers("/api/setup/**").permitAll()
                         .requestMatchers("/api/demo/**").permitAll()
                         .requestMatchers("/api/usuarios/convites/validar/**").permitAll()
@@ -64,12 +72,12 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/usuarios/convites").hasRole("ADMIN")
 
-                        // Qualquer outra requisição precisa autenticação
+                        // Qualquer outra requisicao precisa autenticacao
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                .headers(headers -> headers.frameOptions().disable()); // Para H2 Console
+                .headers(headers -> headers.frameOptions().disable());
 
         return http.build();
     }

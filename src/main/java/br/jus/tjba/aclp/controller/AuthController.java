@@ -247,27 +247,34 @@ public class AuthController {
      */
     @PostMapping("/change-password")
     @Operation(summary = "Alterar senha",
-            description = "Altera senha do usuário autenticado (requer senha atual)")
+            description = "Altera senha do usuario autenticado (requer senha atual)")
     @SecurityRequirement(name = "bearer-auth")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Senha alterada com sucesso"),
-            @ApiResponse(responseCode = "400", description = "Senha atual incorreta ou nova senha inválida"),
-            @ApiResponse(responseCode = "401", description = "Não autenticado")
+            @ApiResponse(responseCode = "400", description = "Senha atual incorreta ou nova senha invalida"),
+            @ApiResponse(responseCode = "401", description = "Nao autenticado")
     })
     public ResponseEntity<?> changePassword(
             @Valid @RequestBody ChangePasswordDTO request,
             @AuthenticationPrincipal UserDetails userDetails) {
 
+        if (userDetails == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of(
+                            "success", false,
+                            "message", "Usuario nao autenticado"
+                    ));
+        }
+
         String userEmail = userDetails.getUsername();
-        log.info("Alteração de senha solicitada - Usuário: {}", userEmail);
+        log.info("Alteracao de senha solicitada - Usuario: {}", userEmail);
 
         try {
-            // Validar se senhas coincidem
             if (!request.senhasCoincidentes()) {
                 return ResponseEntity.badRequest()
                         .body(Map.of(
                                 "success", false,
-                                "message", "As senhas não coincidem"
+                                "message", "As senhas nao coincidem"
                         ));
             }
 
@@ -290,18 +297,27 @@ public class AuthController {
     }
 
     /**
-     * Retorna informações do usuário autenticado
+     * Retorna informacoes do usuario autenticado
      */
     @GetMapping("/me")
-    @Operation(summary = "Dados do usuário",
-            description = "Retorna informações do usuário autenticado")
+    @Operation(summary = "Dados do usuario",
+            description = "Retorna informacoes do usuario autenticado")
     @SecurityRequirement(name = "bearer-auth")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Dados do usuário"),
-            @ApiResponse(responseCode = "401", description = "Não autenticado")
+            @ApiResponse(responseCode = "200", description = "Dados do usuario"),
+            @ApiResponse(responseCode = "401", description = "Nao autenticado")
     })
     public ResponseEntity<?> getCurrentUser(
             @AuthenticationPrincipal UserDetails userDetails) {
+
+        if (userDetails == null) {
+            log.warn("Tentativa de acesso ao /me sem autenticacao");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of(
+                            "success", false,
+                            "message", "Usuario nao autenticado"
+                    ));
+        }
 
         try {
             String email = userDetails.getUsername();
@@ -311,7 +327,7 @@ public class AuthController {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                         .body(Map.of(
                                 "success", false,
-                                "message", "Usuário não encontrado"
+                                "message", "Usuario nao encontrado"
                         ));
             }
 
@@ -322,24 +338,23 @@ public class AuthController {
                             "nome", usuario.getNome(),
                             "email", usuario.getEmail(),
                             "tipo", usuario.getTipo(),
-                            "departamento", usuario.getDepartamento(),
-                            "telefone", usuario.getTelefone(),
-                            "ultimoLogin", usuario.getUltimoLogin(),
+                            "departamento", usuario.getDepartamento() != null ? usuario.getDepartamento() : "",
+                            "telefone", usuario.getTelefone() != null ? usuario.getTelefone() : "",
+                            "ultimoLogin", usuario.getUltimoLogin() != null ? usuario.getUltimoLogin() : "",
                             "isAdmin", usuario.isAdmin()
                     )
             ));
 
         } catch (Exception e) {
-            log.error("Erro ao obter usuário atual", e);
+            log.error("Erro ao obter usuario atual", e);
 
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of(
                             "success", false,
-                            "message", "Erro ao obter dados do usuário"
+                            "message", "Erro ao obter dados do usuario"
                     ));
         }
     }
-
     /**
      * Retorna informações da sessão atual
      */
@@ -379,12 +394,20 @@ public class AuthController {
      * Lista todas as sessões do usuário
      */
     @GetMapping("/sessions")
-    @Operation(summary = "Listar sessões",
-            description = "Lista todas as sessões ativas do usuário")
+    @Operation(summary = "Listar sessoes",
+            description = "Lista todas as sessoes ativas do usuario")
     @SecurityRequirement(name = "bearer-auth")
-    @ApiResponse(responseCode = "200", description = "Lista de sessões")
+    @ApiResponse(responseCode = "200", description = "Lista de sessoes")
     public ResponseEntity<?> getUserSessions(
             @AuthenticationPrincipal UserDetails userDetails) {
+
+        if (userDetails == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of(
+                            "success", false,
+                            "message", "Usuario nao autenticado"
+                    ));
+        }
 
         try {
             String email = userDetails.getUsername();
@@ -399,7 +422,7 @@ public class AuthController {
         } catch (Exception e) {
             return ResponseEntity.ok(Map.of(
                     "success", false,
-                    "message", "Erro ao listar sessões"
+                    "message", "Erro ao listar sessoes"
             ));
         }
     }
@@ -408,16 +431,24 @@ public class AuthController {
      * Invalida uma sessão específica
      */
     @DeleteMapping("/sessions/{sessionId}")
-    @Operation(summary = "Invalidar sessão",
-            description = "Invalida uma sessão específica")
+    @Operation(summary = "Invalidar sessao",
+            description = "Invalida uma sessao especifica")
     @SecurityRequirement(name = "bearer-auth")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Sessão invalidada"),
-            @ApiResponse(responseCode = "403", description = "Sem permissão para invalidar esta sessão")
+            @ApiResponse(responseCode = "200", description = "Sessao invalidada"),
+            @ApiResponse(responseCode = "403", description = "Sem permissao para invalidar esta sessao")
     })
     public ResponseEntity<?> invalidateSession(
             @PathVariable String sessionId,
             @AuthenticationPrincipal UserDetails userDetails) {
+
+        if (userDetails == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of(
+                            "success", false,
+                            "message", "Usuario nao autenticado"
+                    ));
+        }
 
         try {
             String email = userDetails.getUsername();
@@ -425,7 +456,7 @@ public class AuthController {
 
             return ResponseEntity.ok(Map.of(
                     "success", true,
-                    "message", "Sessão invalidada com sucesso"
+                    "message", "Sessao invalidada com sucesso"
             ));
 
         } catch (Exception e) {
@@ -436,6 +467,7 @@ public class AuthController {
                     ));
         }
     }
+
 
     /**
      * Health check do módulo de autenticação

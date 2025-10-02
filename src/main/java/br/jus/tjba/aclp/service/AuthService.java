@@ -25,15 +25,15 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import jakarta.servlet.http.HttpServletRequest;  // ✅ CORRIGIDO: jakarta em vez de javax
+import jakarta.servlet.http.HttpServletRequest;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Serviço principal de autenticação e autorização
- * Gerencia login, logout, tokens JWT, refresh tokens e controle de sessão
+ * Servico principal de autenticacao e autorizacao
+ * Gerencia login, logout, tokens JWT, refresh tokens e controle de sessao
  */
 @Slf4j
 @Service
@@ -49,10 +49,8 @@ public class AuthService {
     private final EmailService emailService;
     private final AuditService auditService;
 
-    // Cache de sessões ativas (para controle em memória)
     private final Map<String, SessionInfo> activeSessions = new ConcurrentHashMap<>();
 
-    // Configurações
     @Value("${aclp.auth.max-login-attempts:5}")
     private int maxLoginAttempts;
 
@@ -62,7 +60,7 @@ public class AuthService {
     @Value("${aclp.auth.session-timeout-minutes:60}")
     private int sessionTimeoutMinutes;
 
-    @Value("${aclp.auth.max-concurrent-sessions:3}")
+    @Value("${aclp.auth.max-concurrent-sessions:6}")
     private int maxConcurrentSessions;
 
     @Value("${aclp.auth.refresh-token-validity-days:7}")
@@ -77,7 +75,7 @@ public class AuthService {
     private final SecureRandom secureRandom = new SecureRandom();
 
     /**
-     * Realiza o login do usuário
+     * Realiza o login do usuario
      */
     @Transactional
     public LoginResponseDTO login(LoginRequestDTO request, HttpServletRequest httpRequest) {
@@ -87,53 +85,41 @@ public class AuthService {
         log.info("Tentativa de login - Email: {}, IP: {}", request.getEmail(), ipAddress);
 
         try {
-            // 1. Verificar rate limiting por IP
             checkRateLimiting(ipAddress);
 
-            // 2. Buscar usuário
             Usuario usuario = usuarioRepository.findByEmail(request.getEmail())
-                    .orElseThrow(() -> new BadCredentialsException("Credenciais inválidas"));
+                    .orElseThrow(() -> new BadCredentialsException("Credenciais invalidas"));
 
-            // 3. Verificar se conta está bloqueada
             checkAccountLocked(usuario);
 
-            // 4. Verificar se usuário está ativo
             if (!usuario.getAtivo()) {
                 throw new DisabledException("Conta desativada");
             }
 
-            // 5. Autenticar credenciais
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.getEmail(), request.getSenha())
             );
 
-            // 6. Verificar 2FA se habilitado
             if (usuario.getMfaEnabled() && mfaEnabled) {
                 return handleMfaAuthentication(usuario, request, ipAddress);
             }
 
-            // 7. Verificar sessões concorrentes
             handleConcurrentSessions(usuario, request.isForceLogin());
 
-            // 8. Gerar tokens
             String accessToken = jwtTokenProvider.generateToken(usuario);
             String refreshToken = generateRefreshToken(usuario, ipAddress, userAgent);
 
-            // 9. Criar sessão
             SessionInfo session = createSession(usuario, accessToken, ipAddress, userAgent);
 
-            // 10. Atualizar usuário
             usuario.resetarTentativas();
             usuario.registrarLogin();
             usuarioRepository.save(usuario);
 
-            // 11. Registrar login bem-sucedido
             registerSuccessfulLogin(usuario, ipAddress, userAgent);
 
-            // 12. Auditar
             auditService.logLogin(usuario, ipAddress, "SUCCESS");
 
-            log.info("Login bem-sucedido - Usuário: {}, Session: {}", usuario.getEmail(), session.getSessionId());
+            log.info("Login bem-sucedido - Usuario: {}, Session: {}", usuario.getEmail(), session.getSessionId());
 
             return LoginResponseDTO.builder()
                     .success(true)
@@ -155,7 +141,7 @@ public class AuthService {
             throw new AuthenticationException("Conta desativada. Entre em contato com o administrador.");
 
         } catch (AccountLockedException e) {
-            throw e; // Re-throw as is
+            throw e;
 
         } catch (Exception e) {
             log.error("Erro no login - Email: {}, IP: {}", request.getEmail(), ipAddress, e);
@@ -164,7 +150,7 @@ public class AuthService {
     }
 
     /**
-     * Realiza logout do usuário
+     * Realiza logout do usuario
      */
     @Transactional
     public void logout(String token, HttpServletRequest request) {
@@ -175,23 +161,18 @@ public class AuthService {
 
             log.info("Logout solicitado - Email: {}, Session: {}", email, sessionId);
 
-            // 1. Invalidar token JWT (adicionar à blacklist)
             jwtTokenProvider.invalidateToken(token);
 
-            // 2. Remover refresh tokens
             refreshTokenRepository.deleteByUsuarioEmail(email);
 
-            // 3. Remover sessão ativa
             activeSessions.remove(sessionId);
 
-            // 4. Auditar
             auditService.logLogout(email, ipAddress, "SUCCESS");
 
             log.info("Logout realizado - Email: {}", email);
 
         } catch (Exception e) {
             log.error("Erro no logout", e);
-            // Logout sempre deve ter sucesso para o cliente
         }
     }
 
@@ -202,33 +183,27 @@ public class AuthService {
     public RefreshTokenResponseDTO refreshToken(RefreshTokenRequestDTO request, HttpServletRequest httpRequest) {
         String ipAddress = extractIpAddress(httpRequest);
 
-        log.debug("Renovação de token solicitada - IP: {}", ipAddress);
+        log.debug("Renovacao de token solicitada - IP: {}", ipAddress);
 
-        // 1. Validar refresh token
         RefreshToken refreshToken = refreshTokenRepository.findByToken(request.getRefreshToken())
-                .orElseThrow(() -> new InvalidTokenException("Refresh token inválido"));
+                .orElseThrow(() -> new InvalidTokenException("Refresh token invalido"));
 
-        // 2. Verificar expiração
         if (refreshToken.isExpired()) {
             refreshTokenRepository.delete(refreshToken);
             throw new InvalidTokenException("Refresh token expirado");
         }
 
-        // 3. Verificar se foi revogado
         if (refreshToken.isRevoked()) {
             throw new InvalidTokenException("Refresh token revogado");
         }
 
-        // 4. Verificar usuário
         Usuario usuario = refreshToken.getUsuario();
         if (!usuario.getAtivo() || !usuario.podeLogar()) {
-            throw new AuthenticationException("Usuário não autorizado");
+            throw new AuthenticationException("Usuario nao autorizado");
         }
 
-        // 5. Gerar novo access token
         String newAccessToken = jwtTokenProvider.generateToken(usuario);
 
-        // 6. Opcionalmente, rotacionar refresh token
         String newRefreshToken = null;
         if (shouldRotateRefreshToken(refreshToken)) {
             refreshToken.revogar();
@@ -237,10 +212,9 @@ public class AuthService {
             newRefreshToken = generateRefreshToken(usuario, ipAddress, httpRequest.getHeader("User-Agent"));
         }
 
-        // 7. Atualizar sessão
         updateSession(usuario.getEmail(), newAccessToken);
 
-        log.info("Token renovado - Usuário: {}", usuario.getEmail());
+        log.info("Token renovado - Usuario: {}", usuario.getEmail());
 
         return RefreshTokenResponseDTO.builder()
                 .success(true)
@@ -261,14 +235,13 @@ public class AuthService {
             if (!isValid) {
                 return TokenValidationResponseDTO.builder()
                         .valid(false)
-                        .message("Token inválido")
+                        .message("Token invalido")
                         .build();
             }
 
             String email = jwtTokenProvider.getEmailFromToken(token);
             Date expiration = jwtTokenProvider.getExpirationDateFromToken(token);
 
-            // Verificar se token está na blacklist
             if (jwtTokenProvider.isTokenBlacklisted(token)) {
                 return TokenValidationResponseDTO.builder()
                         .valid(false)
@@ -276,12 +249,11 @@ public class AuthService {
                         .build();
             }
 
-            // Verificar se usuário ainda existe e está ativo
             Optional<Usuario> usuario = usuarioRepository.findByEmail(email);
             if (usuario.isEmpty() || !usuario.get().getAtivo()) {
                 return TokenValidationResponseDTO.builder()
                         .valid(false)
-                        .message("Usuário inválido")
+                        .message("Usuario invalido")
                         .build();
             }
 
@@ -290,7 +262,7 @@ public class AuthService {
                     .email(email)
                     .expiration(expiration)
                     .authorities(jwtTokenProvider.getAuthoritiesFromToken(token))
-                    .message("Token válido")
+                    .message("Token valido")
                     .build();
 
         } catch (Exception e) {
@@ -303,34 +275,30 @@ public class AuthService {
     }
 
     /**
-     * Inicia processo de recuperação de senha
+     * Inicia processo de recuperacao de senha
      */
     @Transactional
     public void requestPasswordReset(PasswordResetRequestDTO request) {
         String email = request.getEmail().trim().toLowerCase();
 
-        log.info("Recuperação de senha solicitada - Email: {}", email);
+        log.info("Recuperacao de senha solicitada - Email: {}", email);
 
-        // Sempre retornar sucesso para não revelar se email existe
         Usuario usuario = usuarioRepository.findByEmail(email).orElse(null);
 
         if (usuario != null && usuario.getAtivo()) {
             String resetToken = generatePasswordResetToken();
             LocalDateTime expiry = LocalDateTime.now().plusHours(passwordResetTokenHours);
 
-            // Salvar token de reset
             usuario.setPasswordResetToken(resetToken);
             usuario.setPasswordResetExpiry(expiry);
             usuarioRepository.save(usuario);
 
-            // Enviar email
             sendPasswordResetEmail(usuario, resetToken);
 
             auditService.logPasswordResetRequest(email, "SUCCESS");
         }
 
-        // Sempre retornar sucesso
-        log.info("Email de recuperação processado - Email: {}", email);
+        log.info("Email de recuperacao processado - Email: {}", email);
     }
 
     /**
@@ -341,29 +309,24 @@ public class AuthService {
         log.info("Reset de senha solicitado");
 
         Usuario usuario = usuarioRepository.findByPasswordResetToken(request.getToken())
-                .orElseThrow(() -> new InvalidTokenException("Token inválido"));
+                .orElseThrow(() -> new InvalidTokenException("Token invalido"));
 
-        // Verificar expiração
         if (usuario.getPasswordResetExpiry().isBefore(LocalDateTime.now())) {
             throw new InvalidTokenException("Token expirado");
         }
 
-        // Validar nova senha
         validatePasswordStrength(request.getNovaSenha());
 
-        // Atualizar senha
         usuario.setSenha(passwordEncoder.encode(request.getNovaSenha()));
         usuario.setPasswordResetToken(null);
         usuario.setPasswordResetExpiry(null);
         usuario.setDeveTrocarSenha(false);
         usuario.setUltimoResetSenha(LocalDateTime.now());
 
-        // Invalidar todas as sessões e tokens
         invalidateAllUserSessions(usuario.getEmail());
 
         usuarioRepository.save(usuario);
 
-        // Notificar usuário
         sendPasswordChangedEmail(usuario);
 
         auditService.logPasswordReset(usuario.getEmail(), "SUCCESS");
@@ -372,37 +335,32 @@ public class AuthService {
     }
 
     /**
-     * Altera senha do usuário autenticado
+     * Altera senha do usuario autenticado
      */
     @Transactional
     public void changePassword(ChangePasswordDTO request, String userEmail) {
-        log.info("Alteração de senha solicitada - Email: {}", userEmail);
+        log.info("Alteracao de senha solicitada - Email: {}", userEmail);
 
         Usuario usuario = usuarioRepository.findByEmail(userEmail)
-                .orElseThrow(() -> new AuthenticationException("Usuário não encontrado"));
+                .orElseThrow(() -> new AuthenticationException("Usuario nao encontrado"));
 
-        // Verificar senha atual
         if (!passwordEncoder.matches(request.getSenhaAtual(), usuario.getSenha())) {
             throw new AuthenticationException("Senha atual incorreta");
         }
 
-        // Validar nova senha
         validatePasswordStrength(request.getNovaSenha());
 
-        // Verificar se não é igual à anterior
         if (passwordEncoder.matches(request.getNovaSenha(), usuario.getSenha())) {
-            throw new IllegalArgumentException("Nova senha não pode ser igual à anterior");
+            throw new IllegalArgumentException("Nova senha nao pode ser igual a anterior");
         }
 
-        // Atualizar senha
         usuario.setSenha(passwordEncoder.encode(request.getNovaSenha()));
         usuario.setDeveTrocarSenha(false);
         usuario.setUltimoResetSenha(LocalDateTime.now());
-        usuario.setSenhaExpiraEm(LocalDateTime.now().plusDays(90)); // Política de 90 dias
+        usuario.setSenhaExpiraEm(LocalDateTime.now().plusDays(90));
 
         usuarioRepository.save(usuario);
 
-        // Notificar
         sendPasswordChangedEmail(usuario);
 
         auditService.logPasswordChange(userEmail, "SUCCESS");
@@ -411,7 +369,7 @@ public class AuthService {
     }
 
     /**
-     * Retorna o usuário autenticado atual
+     * Retorna o usuario autenticado atual
      */
     public Usuario getUsuarioAtual() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -425,12 +383,12 @@ public class AuthService {
     }
 
     /**
-     * Retorna usuário mock para desenvolvimento (substituir em produção)
+     * Retorna usuario mock para desenvolvimento
      */
     public Usuario getMockAdminUser() {
         return usuarioRepository.findByEmail("admin@tjba.jus.br")
                 .orElseGet(() -> {
-                    log.warn("Admin mock não encontrado, retornando primeiro admin do sistema");
+                    log.warn("Admin mock nao encontrado, retornando primeiro admin do sistema");
                     return usuarioRepository.findByTipo(br.jus.tjba.aclp.model.enums.TipoUsuario.ADMIN)
                             .stream()
                             .findFirst()
@@ -439,7 +397,7 @@ public class AuthService {
     }
 
     /**
-     * Retorna informações da sessão atual
+     * Retorna informacoes da sessao atual
      */
     public SessionInfoDTO getCurrentSessionInfo(String token) {
         try {
@@ -461,13 +419,13 @@ public class AuthService {
                     .build();
 
         } catch (Exception e) {
-            log.error("Erro ao obter info da sessão", e);
+            log.error("Erro ao obter info da sessao", e);
             return null;
         }
     }
 
     /**
-     * Lista todas as sessões ativas de um usuário
+     * Lista todas as sessoes ativas de um usuario
      */
     public List<SessionInfoDTO> getUserSessions(String userEmail) {
         return activeSessions.values().stream()
@@ -485,47 +443,40 @@ public class AuthService {
     }
 
     /**
-     * Invalida uma sessão específica
+     * Invalida uma sessao especifica
      */
     @Transactional
     public void invalidateSession(String sessionId, String requestingUser) {
         SessionInfo session = activeSessions.get(sessionId);
 
         if (session != null) {
-            // Verificar permissão (própria sessão ou admin)
             Usuario usuario = getUsuarioAtual();
             if (!session.getUserEmail().equals(requestingUser) && !usuario.isAdmin()) {
-                throw new AuthenticationException("Sem permissão para invalidar esta sessão");
+                throw new AuthenticationException("Sem permissao para invalidar esta sessao");
             }
 
             activeSessions.remove(sessionId);
 
-            // Invalidar refresh tokens associados
             refreshTokenRepository.deleteByUsuarioEmail(session.getUserEmail());
 
-            log.info("Sessão invalidada - ID: {}, Usuário: {}", sessionId, session.getUserEmail());
+            log.info("Sessao invalidada - ID: {}, Usuario: {}", sessionId, session.getUserEmail());
         }
     }
 
     /**
-     * Invalida todas as sessões de um usuário
+     * Invalida todas as sessoes de um usuario
      */
     @Transactional
     public void invalidateAllUserSessions(String userEmail) {
-        // Remover sessões em memória
         activeSessions.entrySet().removeIf(entry ->
                 entry.getValue().getUserEmail().equals(userEmail));
 
-        // Remover refresh tokens
         refreshTokenRepository.deleteByUsuarioEmail(userEmail);
 
-        // Adicionar tokens à blacklist
         jwtTokenProvider.blacklistUserTokens(userEmail);
 
-        log.info("Todas as sessões invalidadas - Usuário: {}", userEmail);
+        log.info("Todas as sessoes invalidadas - Usuario: {}", userEmail);
     }
-
-    // ========== MÉTODOS PRIVADOS ==========
 
     private void checkRateLimiting(String ipAddress) {
         long recentAttempts = loginAttemptRepository.countRecentAttemptsByIp(
@@ -547,7 +498,6 @@ public class AuthService {
     }
 
     private void handleFailedLogin(String email, String ipAddress) {
-        // Registrar tentativa falhada
         LoginAttempt attempt = LoginAttempt.builder()
                 .email(email)
                 .ipAddress(ipAddress)
@@ -556,12 +506,10 @@ public class AuthService {
                 .build();
         loginAttemptRepository.save(attempt);
 
-        // Incrementar contador no usuário
         usuarioRepository.findByEmail(email).ifPresent(usuario -> {
             usuario.incrementarTentativasFalhadas();
             usuarioRepository.save(usuario);
 
-            // Notificar se conta foi bloqueada
             if (usuario.getBloqueadoAte() != null) {
                 sendAccountLockedEmail(usuario);
             }
@@ -580,7 +528,6 @@ public class AuthService {
     }
 
     private String generateRefreshToken(Usuario usuario, String ipAddress, String userAgent) {
-        // Gerar token único
         String tokenValue = UUID.randomUUID().toString() + "-" + System.currentTimeMillis();
 
         RefreshToken refreshToken = RefreshToken.builder()
@@ -625,51 +572,52 @@ public class AuthService {
                 });
     }
 
+    /**
+     * Gerencia sessoes concorrentes
+     * Remove automaticamente a sessao mais antiga se o limite for atingido
+     */
     private void handleConcurrentSessions(Usuario usuario, boolean forceLogin) {
         List<SessionInfo> userSessions = activeSessions.values().stream()
                 .filter(s -> s.getUserEmail().equals(usuario.getEmail()))
+                .sorted(Comparator.comparing(SessionInfo::getLoginTime))
                 .toList();
 
+        log.info("Usuario {} possui {} sessoes ativas. Limite: {}",
+                usuario.getEmail(), userSessions.size(), maxConcurrentSessions);
+
         if (userSessions.size() >= maxConcurrentSessions) {
-            if (forceLogin) {
-                // Remover sessão mais antiga
-                userSessions.stream()
-                        .min(Comparator.comparing(SessionInfo::getLoginTime))
-                        .ifPresent(s -> activeSessions.remove(s.getSessionId()));
-            } else {
-                throw new AuthenticationException(
-                        String.format("Limite de %d sessões simultâneas atingido", maxConcurrentSessions));
-            }
+            SessionInfo oldestSession = userSessions.get(0);
+
+            log.info("Limite de sessoes atingido para {}. Removendo sessao mais antiga: {}",
+                    usuario.getEmail(), oldestSession.getSessionId());
+
+            activeSessions.remove(oldestSession.getSessionId());
+
+            jwtTokenProvider.invalidateToken(oldestSession.getToken());
         }
     }
 
     private boolean shouldRotateRefreshToken(RefreshToken token) {
-        // Rotacionar se token tem mais de 1 dia
         return token.getCreatedAt().isBefore(LocalDateTime.now().minusDays(1));
     }
 
     private LoginResponseDTO handleMfaAuthentication(Usuario usuario, LoginRequestDTO request, String ipAddress) {
-        // Se código MFA não foi fornecido, solicitar
         if (request.getMfaCode() == null || request.getMfaCode().isEmpty()) {
             return LoginResponseDTO.builder()
                     .success(false)
                     .requiresMfa(true)
-                    .message("Código de autenticação necessário")
+                    .message("Codigo de autenticacao necessario")
                     .build();
         }
 
-        // Validar código MFA
         if (!validateMfaCode(usuario, request.getMfaCode())) {
-            throw new AuthenticationException("Código de autenticação inválido");
+            throw new AuthenticationException("Codigo de autenticacao invalido");
         }
 
-        // Continuar com login normal
-        return null; // Continuar fluxo normal
+        return null;
     }
 
     private boolean validateMfaCode(Usuario usuario, String code) {
-        // Implementar validação TOTP
-        // Por enquanto, retorna true (implementar com biblioteca como GoogleAuth)
         return true;
     }
 
@@ -679,15 +627,15 @@ public class AuthService {
         }
 
         if (!password.matches(".*[A-Z].*")) {
-            throw new IllegalArgumentException("Senha deve conter pelo menos uma letra maiúscula");
+            throw new IllegalArgumentException("Senha deve conter pelo menos uma letra maiuscula");
         }
 
         if (!password.matches(".*[a-z].*")) {
-            throw new IllegalArgumentException("Senha deve conter pelo menos uma letra minúscula");
+            throw new IllegalArgumentException("Senha deve conter pelo menos uma letra minuscula");
         }
 
         if (!password.matches(".*[0-9].*")) {
-            throw new IllegalArgumentException("Senha deve conter pelo menos um número");
+            throw new IllegalArgumentException("Senha deve conter pelo menos um numero");
         }
 
         if (!password.matches(".*[@$!%*?&#].*")) {
@@ -730,34 +678,34 @@ public class AuthService {
 
     private void sendPasswordResetEmail(Usuario usuario, String token) {
         String resetLink = String.format("%s/reset-password?token=%s",
-                "http://localhost:3000", token); // Configurar URL base
+                "http://localhost:3000", token);
 
         String content = String.format("""
-                Olá %s,
+                Ola %s,
                 
-                Você solicitou a recuperação de senha para o Sistema ACLP.
+                Voce solicitou a recuperacao de senha para o Sistema ACLP.
                 
                 Clique no link abaixo para criar uma nova senha:
                 %s
                 
-                Este link é válido por %d horas.
+                Este link e valido por %d horas.
                 
-                Se você não solicitou esta recuperação, ignore este email.
+                Se voce nao solicitou esta recuperacao, ignore este email.
                 
                 Atenciosamente,
                 Sistema ACLP - TJBA
                 """, usuario.getNome(), resetLink, passwordResetTokenHours);
 
-        emailService.enviarEmail(usuario.getEmail(), "Recuperação de Senha - ACLP", content);
+        emailService.enviarEmail(usuario.getEmail(), "Recuperacao de Senha - ACLP", content);
     }
 
     private void sendPasswordChangedEmail(Usuario usuario) {
         String content = String.format("""
-                Olá %s,
+                Ola %s,
                 
                 Sua senha do Sistema ACLP foi alterada com sucesso.
                 
-                Se você não realizou esta alteração, entre em contato imediatamente com o suporte.
+                Se voce nao realizou esta alteracao, entre em contato imediatamente com o suporte.
                 
                 Data/Hora: %s
                 
@@ -770,13 +718,13 @@ public class AuthService {
 
     private void sendAccountLockedEmail(Usuario usuario) {
         String content = String.format("""
-                Olá %s,
+                Ola %s,
                 
-                Sua conta foi temporariamente bloqueada devido a múltiplas tentativas de login falhadas.
+                Sua conta foi temporariamente bloqueada devido a multiplas tentativas de login falhadas.
                 
-                A conta será desbloqueada automaticamente em %d minutos.
+                A conta sera desbloqueada automaticamente em %d minutos.
                 
-                Se não foi você, entre em contato com o suporte.
+                Se nao foi voce, entre em contato com o suporte.
                 
                 Atenciosamente,
                 Sistema ACLP - TJBA
@@ -784,8 +732,6 @@ public class AuthService {
 
         emailService.enviarEmail(usuario.getEmail(), "Conta Bloqueada - ACLP", content);
     }
-
-    // ========== CLASSES INTERNAS ==========
 
     @lombok.Data
     @lombok.Builder
