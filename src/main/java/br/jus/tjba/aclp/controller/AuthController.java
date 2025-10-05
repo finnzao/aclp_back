@@ -28,7 +28,6 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*", maxAge = 3600)
 @Tag(name = "Autenticação", description = "Endpoints de autenticação e autorização")
 @Slf4j
 public class AuthController {

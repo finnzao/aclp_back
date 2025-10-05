@@ -17,9 +17,6 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/status")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*", maxAge = 3600,
-        allowedHeaders = "*",
-        methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.OPTIONS})
 @Tag(name = "Status", description = "Gerenciamento automático do status das pessoas")
 @Slf4j
 public class StatusController {

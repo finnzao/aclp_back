@@ -22,9 +22,6 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api/historico-enderecos")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*", maxAge = 3600,
-        allowedHeaders = "*",
-        methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE, RequestMethod.OPTIONS})
 @Tag(name = "Histórico de Endereços", description = "API para consulta do histórico de endereços das pessoas")
 @Slf4j
 public class HistoricoEnderecoController {

@@ -24,7 +24,6 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/verificacao")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*", maxAge = 3600)
 @Tag(name = "Verificação de Email", description = "Endpoints para verificação de email antes do cadastro de usuários")
 @Slf4j
 public class EmailVerificationController {

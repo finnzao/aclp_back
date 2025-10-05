@@ -29,7 +29,6 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/usuarios/convites")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*", maxAge = 3600)
 @Tag(name = "Convites de Usuários", description = "Endpoints para gerenciar convites e primeiro acesso")
 @Slf4j
 public class UserInviteController {

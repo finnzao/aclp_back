@@ -25,9 +25,6 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/comparecimentos")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*", maxAge = 3600,
-        allowedHeaders = "*",
-        methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE, RequestMethod.OPTIONS})
 @Tag(name = "Comparecimentos", description = "API para gerenciamento de comparecimentos e mudanças de endereço")
 @Slf4j
 public class ComparecimentoController {

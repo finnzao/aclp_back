@@ -24,7 +24,6 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/demo")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*", maxAge = 3600)
 @Tag(name = "Demo", description = "Endpoints de demonstração (desenvolvimento)")
 @Slf4j
 public class DemoController {

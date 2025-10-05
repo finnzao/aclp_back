@@ -33,9 +33,6 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/custodiados")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*", maxAge = 3600,
-        allowedHeaders = "*",
-        methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE, RequestMethod.OPTIONS})
 @Tag(name = "Custodiados", description = "API para gerenciamento de custodiados em liberdade provisória")
 @Slf4j
 public class CustodiadoController {

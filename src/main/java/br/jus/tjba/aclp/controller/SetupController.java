@@ -20,7 +20,6 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/setup")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*", maxAge = 3600)
 @Tag(name = "Setup", description = "Endpoints para configuração inicial do sistema")
 @Slf4j
 public class SetupController {
