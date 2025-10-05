@@ -88,22 +88,41 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
 
-        return path.equals("/api/auth/login") ||
+        // Rotas de autenticação
+        if (path.equals("/api/auth/login") ||
                 path.equals("/api/auth/refresh") ||
                 path.equals("/api/auth/forgot-password") ||
                 path.equals("/api/auth/reset-password") ||
                 path.equals("/api/auth/health") ||
                 path.equals("/api/auth/check-setup") ||
-                path.equals("/api/auth/validate") ||
-                path.startsWith("/api/setup/") ||
+                path.equals("/api/auth/validate")) {
+            return true;
+        }
+
+        // ===== ROTAS PÚBLICAS DE CONVITES =====
+        // Validar convite - GET /api/usuarios/convites/validar/{token}
+        if (path.startsWith("/api/usuarios/convites/validar/")) {
+            return true;
+        }
+
+        // Ativar convite - POST /api/usuarios/convites/ativar
+        if (path.equals("/api/usuarios/convites/ativar") &&
+                request.getMethod().equals("POST")) {
+            return true;
+        }
+
+        // Outras rotas públicas
+        if (path.startsWith("/api/setup/") ||
                 path.startsWith("/api/demo/") ||
                 path.startsWith("/api/verificacao/") ||
-                path.startsWith("/api/usuarios/convites/validar/") ||
-                path.equals("/api/usuarios/convites/ativar") ||
                 path.startsWith("/swagger-ui") ||
                 path.startsWith("/v3/api-docs") ||
                 path.startsWith("/h2-console") ||
                 path.startsWith("/actuator/health") ||
-                path.equals("/");
+                path.equals("/")) {
+            return true;
+        }
+
+        return false;
     }
 }
