@@ -1,132 +1,156 @@
 package br.jus.tjba.aclp.model;
 
-import br.jus.tjba.aclp.model.enums.TipoUsuario;
 import br.jus.tjba.aclp.model.enums.StatusConvite;
+import br.jus.tjba.aclp.model.enums.TipoUsuario;
 import jakarta.persistence.*;
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * Modelo de Convite para novos usuários
- * Permite que admins convidem usuários por email
- */
 @Entity
-@Table(name = "convites",
-        indexes = {
-                @Index(name = "idx_convite_token", columnList = "token"),
-                @Index(name = "idx_convite_email", columnList = "email"),
-                @Index(name = "idx_convite_status", columnList = "status")
-        }
-)
+@Table(name = "convites")
 @Data
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
 public class Convite {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @NotBlank(message = "Token é obrigatório")
-    @Column(nullable = false, unique = true, length = 255)
-    private String token;
-
-    @NotBlank(message = "Email é obrigatório")
-    @Email(message = "Email deve ser válido")
-    @Column(nullable = false, length = 150)
+    /**
+     * Email do convidado - será o login dele no sistema
+     */
+    @Column(nullable = false)
     private String email;
 
-    @NotNull(message = "Tipo de usuário é obrigatório")
+    /**
+     * Tipo de usuário que será criado (USUARIO ou ADMIN)
+     */
     @Enumerated(EnumType.STRING)
-    @Column(name = "tipo_usuario", nullable = false, length = 20)
+    @Column(name = "tipo_usuario", nullable = false)
     private TipoUsuario tipoUsuario;
 
-    @NotNull(message = "Status é obrigatório")
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    @Builder.Default
-    private StatusConvite status = StatusConvite.PENDENTE;
+    /**
+     * Token único para validação do convite
+     * Gerado automaticamente via UUID
+     */
+    @Column(unique = true, nullable = false, length = 100)
+    private String token;
 
+    /**
+     * Status atual do convite
+     * PENDENTE: aguardando ativação
+     * ATIVADO: convite foi usado e conta criada
+     * EXPIRADO: passou do prazo de validade
+     * CANCELADO: admin cancelou o convite
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private StatusConvite status;
+
+    /**
+     * Comarca copiada do admin que criou o convite
+     * O usuário criado terá a mesma comarca
+     */
+    @Column(name = "comarca", length = 100)
+    private String comarca;
+
+    /**
+     * Departamento copiado do admin que criou o convite
+     * O usuário criado terá o mesmo departamento
+     */
+    @Column(name = "departamento", length = 100)
+    private String departamento;
+
+    /**
+     * Admin que criou este convite
+     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "criado_por_id")
     private Usuario criadoPor;
 
-    @Column(name = "criado_em", nullable = false)
-    @Builder.Default
-    private LocalDateTime criadoEm = LocalDateTime.now();
-
-    @Column(name = "expira_em", nullable = false)
-    @Builder.Default
-    private LocalDateTime expiraEm = LocalDateTime.now().plusDays(7);
-
-    @Column(name = "ativado_em")
-    private LocalDateTime ativadoEm;
-
+    /**
+     * Usuário criado quando o convite foi ativado
+     * null enquanto convite está pendente
+     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "usuario_id")
     private Usuario usuario;
 
-    @Column(name = "ip_criacao", length = 50)
+    /**
+     * IP de onde o convite foi criado (auditoria)
+     */
+    @Column(name = "ip_criacao", length = 45)
     private String ipCriacao;
 
-    @Column(name = "ip_ativacao", length = 50)
+
+    @Column(name = "ip_ativacao", length = 45)
     private String ipAtivacao;
 
-    @PrePersist
-    public void prePersist() {
-        if (this.token == null || this.token.isEmpty()) {
-            this.token = UUID.randomUUID().toString();
-        }
-        if (this.criadoEm == null) {
-            this.criadoEm = LocalDateTime.now();
-        }
-        if (this.expiraEm == null) {
-            this.expiraEm = LocalDateTime.now().plusDays(7);
-        }
-        if (this.status == null) {
-            this.status = StatusConvite.PENDENTE;
-        }
-    }
+
+    @Column(name = "criado_em", nullable = false)
+    private LocalDateTime criadoEm;
+
+    @Column(name = "expira_em", nullable = false)
+    private LocalDateTime expiraEm;
+
+    @Column(name = "ativado_em")
+    private LocalDateTime ativadoEm;
 
     /**
-     * Verifica se o convite está expirado
+     * Inicializa valores padrão
      */
-    public boolean isExpirado() {
-        return LocalDateTime.now().isAfter(expiraEm);
+    @PrePersist
+    protected void onCreate() {
+        this.criadoEm = LocalDateTime.now();
+        this.expiraEm = LocalDateTime.now().plusDays(7); // 7 dias de validade
+        this.token = UUID.randomUUID().toString();
+        this.status = StatusConvite.PENDENTE;
     }
 
     /**
-     * Verifica se o convite é válido (pendente e não expirado)
+     * Verifica se o convite pode ser usado
+     * @return true se está pendente e não expirou
      */
     public boolean isValido() {
         return status == StatusConvite.PENDENTE && !isExpirado();
     }
 
     /**
-     * Marca o convite como ativado
+     * Verifica se o convite já expirou
+     * @return true se a data atual passou da data de expiração
      */
-    public void ativar(Usuario usuario, String ipAtivacao) {
-        this.status = StatusConvite.ATIVADO;
-        this.ativadoEm = LocalDateTime.now();
-        this.usuario = usuario;
-        this.ipAtivacao = ipAtivacao;
+    public boolean isExpirado() {
+        return LocalDateTime.now().isAfter(expiraEm);
     }
 
     /**
-     * Cancela o convite
+     * Ativa o convite após criação do usuário
+     * @param usuario Usuário criado
+     * @param ip IP de onde foi ativado
+     */
+    public void ativar(Usuario usuario, String ip) {
+        this.usuario = usuario;
+        this.status = StatusConvite.ATIVADO;
+        this.ativadoEm = LocalDateTime.now();
+        this.ipAtivacao = ip;
+    }
+
+    /**
+     * Cancela o convite (admin pode cancelar antes de ser usado)
      */
     public void cancelar() {
         this.status = StatusConvite.CANCELADO;
     }
 
     /**
-     * Marca como expirado
+     * Marca o convite como expirado (job automático)
      */
     public void expirar() {
         this.status = StatusConvite.EXPIRADO;

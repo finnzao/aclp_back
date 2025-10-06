@@ -60,6 +60,11 @@ public class Usuario {
     @Column(name = "telefone", length = 20)
     private String telefone;
 
+    @Column(name = "comarca", length = 100)
+    private String comarca;
+
+    @Column(name = "cargo", length = 100)
+    private String cargo;
     @Column(name = "avatar")
     private String avatar;
 

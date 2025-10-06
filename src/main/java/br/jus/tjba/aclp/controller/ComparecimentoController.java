@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -108,6 +109,86 @@ public class ComparecimentoController {
 
         List<HistoricoComparecimento> comparecimentos = comparecimentoService.buscarComparecimentosHoje();
         return ApiResponseUtil.success(comparecimentos, "Comparecimentos de hoje encontrados");
+    }
+
+    // NOVO ENDPOINT
+    @GetMapping("/todos")
+    @Operation(summary = "Listar todos os comparecimentos",
+            description = "Retorna todos os comparecimentos registrados no sistema com paginação")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "Lista de comparecimentos retornada com sucesso"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500",
+                    description = "Erro interno do servidor")
+    })
+    public ResponseEntity<Map<String, Object>> listarTodosComparecimentos(
+            @Parameter(description = "Número da página (inicia em 0)")
+            @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Quantidade de itens por página")
+            @RequestParam(defaultValue = "50") int size) {
+
+        log.info("Listando todos os comparecimentos - Página: {}, Tamanho: {}", page, size);
+
+        try {
+            Page<HistoricoComparecimento> comparecimentosPage =
+                    comparecimentoService.buscarTodosComparecimentos(page, size);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("comparecimentos", comparecimentosPage.getContent());
+            response.put("paginaAtual", comparecimentosPage.getNumber());
+            response.put("totalPaginas", comparecimentosPage.getTotalPages());
+            response.put("totalItens", comparecimentosPage.getTotalElements());
+            response.put("itensPorPagina", comparecimentosPage.getSize());
+            response.put("temProxima", comparecimentosPage.hasNext());
+            response.put("temAnterior", comparecimentosPage.hasPrevious());
+
+            return ApiResponseUtil.success(response, "Comparecimentos listados com sucesso");
+        } catch (Exception e) {
+            log.error("Erro ao listar todos os comparecimentos", e);
+            return ApiResponseUtil.internalServerError("Erro ao listar comparecimentos: " + e.getMessage());
+        }
+    }
+
+    // NOVO ENDPOINT
+    @GetMapping("/filtrar")
+    @Operation(summary = "Filtrar comparecimentos",
+            description = "Busca comparecimentos com filtros opcionais de data e tipo")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "Comparecimentos filtrados com sucesso")
+    })
+    public ResponseEntity<Map<String, Object>> filtrarComparecimentos(
+            @Parameter(description = "Data inicial (formato: YYYY-MM-DD)")
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataInicio,
+            @Parameter(description = "Data final (formato: YYYY-MM-DD)")
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataFim,
+            @Parameter(description = "Tipo de validação (PRESENCIAL ou ONLINE)")
+            @RequestParam(required = false) String tipoValidacao,
+            @Parameter(description = "Número da página")
+            @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Itens por página")
+            @RequestParam(defaultValue = "50") int size) {
+
+        log.info("Filtrando comparecimentos - Início: {}, Fim: {}, Tipo: {}",
+                dataInicio, dataFim, tipoValidacao);
+
+        try {
+            Page<HistoricoComparecimento> comparecimentosPage =
+                    comparecimentoService.buscarComparecimentosComFiltros(
+                            dataInicio, dataFim, tipoValidacao, page, size);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("comparecimentos", comparecimentosPage.getContent());
+            response.put("paginaAtual", comparecimentosPage.getNumber());
+            response.put("totalPaginas", comparecimentosPage.getTotalPages());
+            response.put("totalItens", comparecimentosPage.getTotalElements());
+            response.put("itensPorPagina", comparecimentosPage.getSize());
+
+            return ApiResponseUtil.success(response, "Comparecimentos filtrados com sucesso");
+        } catch (Exception e) {
+            log.error("Erro ao filtrar comparecimentos", e);
+            return ApiResponseUtil.internalServerError("Erro ao filtrar comparecimentos: " + e.getMessage());
+        }
     }
 
     @GetMapping("/custodiado/{custodiadoId}/mudancas-endereco")
@@ -213,6 +294,24 @@ public class ComparecimentoController {
         } catch (Exception e) {
             log.error("Erro ao buscar estatísticas gerais", e);
             return ApiResponseUtil.internalServerError("Erro interno ao buscar estatísticas: " + e.getMessage());
+        }
+    }
+
+    // NOVO ENDPOINT
+    @GetMapping("/estatisticas/detalhadas")
+    @Operation(summary = "Estatísticas detalhadas",
+            description = "Retorna estatísticas completas sobre comparecimentos")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+            description = "Estatísticas retornadas com sucesso")
+    public ResponseEntity<Map<String, Object>> buscarEstatisticasDetalhadas() {
+        log.info("Buscando estatísticas detalhadas de comparecimentos");
+
+        try {
+            Map<String, Object> estatisticas = comparecimentoService.buscarEstatisticasDetalhadas();
+            return ApiResponseUtil.success(estatisticas, "Estatísticas obtidas com sucesso");
+        } catch (Exception e) {
+            log.error("Erro ao buscar estatísticas detalhadas", e);
+            return ApiResponseUtil.internalServerError("Erro ao buscar estatísticas: " + e.getMessage());
         }
     }
 

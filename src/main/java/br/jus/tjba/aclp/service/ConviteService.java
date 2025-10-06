@@ -28,6 +28,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ConviteService {
 
+
     private final ConviteRepository conviteRepository;
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
@@ -38,7 +39,7 @@ public class ConviteService {
     private String frontendUrl;
 
     /**
-     * Cria um novo convite (apenas ADMIN)
+     * Cria convite copiando comarca e departamento do admin logado
      */
     @Transactional
     public ConviteResponse criarConvite(CriarConviteRequest request, HttpServletRequest httpRequest) {
@@ -56,16 +57,18 @@ public class ConviteService {
             throw new IllegalArgumentException("Já existe um convite pendente para este email");
         }
 
-        // Pegar usuário atual (admin que está criando)
+        // Pegar admin atual
         Usuario admin = authService.getUsuarioAtual();
         if (admin == null) {
             throw new IllegalArgumentException("Usuário não autenticado");
         }
 
-        // Criar convite
+        // Criar convite COPIANDO dados do admin
         Convite convite = Convite.builder()
                 .email(email)
                 .tipoUsuario(request.getTipoUsuario())
+                .comarca(admin.getComarca())           // COPIA comarca do admin
+                .departamento(admin.getDepartamento()) // COPIA departamento do admin
                 .criadoPor(admin)
                 .ipCriacao(extractIpAddress(httpRequest))
                 .build();
@@ -77,13 +80,12 @@ public class ConviteService {
             enviarEmailConvite(convite);
         } catch (Exception e) {
             log.error("Erro ao enviar email de convite: {}", e.getMessage());
-            // Não lança exceção, convite foi criado mesmo sem email
         }
 
-        // Montar resposta
         String linkConvite = String.format("%s/invite/%s", frontendUrl, convite.getToken());
 
-        log.info("Convite criado com sucesso - ID: {}, Token: {}", convite.getId(), convite.getToken());
+        log.info("Convite criado - ID: {}, Comarca: {}, Departamento: {}",
+                convite.getId(), convite.getComarca(), convite.getDepartamento());
 
         return ConviteResponse.builder()
                 .id(convite.getId())
@@ -92,6 +94,8 @@ public class ConviteService {
                 .tipoUsuario(convite.getTipoUsuario())
                 .status(convite.getStatus())
                 .linkConvite(linkConvite)
+                .comarca(convite.getComarca())
+                .departamento(convite.getDepartamento())
                 .criadoEm(convite.getCriadoEm())
                 .expiraEm(convite.getExpiraEm())
                 .criadoPorNome(admin.getNome())
@@ -100,14 +104,13 @@ public class ConviteService {
     }
 
     /**
-     * Valida convite pelo token (endpoint PÚBLICO)
+     * Valida convite retornando comarca e departamento para pré-preencher
      */
     @Transactional(readOnly = true)
     public ValidarConviteResponse validarConvite(String token) {
         log.info("Validando convite - Token: {}", token);
 
-        Convite convite = conviteRepository.findByToken(token)
-                .orElse(null);
+        Convite convite = conviteRepository.findByToken(token).orElse(null);
 
         if (convite == null) {
             return ValidarConviteResponse.builder()
@@ -139,18 +142,18 @@ public class ConviteService {
                 .email(convite.getEmail())
                 .tipoUsuario(convite.getTipoUsuario())
                 .expiraEm(convite.getExpiraEm())
+                .comarca(convite.getComarca())           // Retorna para pré-preencher
+                .departamento(convite.getDepartamento()) // Retorna para pré-preencher
                 .mensagem("Convite válido")
                 .build();
     }
-
     /**
-     * Ativa convite criando o usuário (endpoint PÚBLICO)
+     * Ativa convite criando usuário com comarca e departamento do convite
      */
     @Transactional
     public AtivarConviteResponse ativarConvite(AtivarConviteRequest request, HttpServletRequest httpRequest) {
         log.info("Ativando convite - Token: {}", request.getToken());
 
-        // Validar convite
         Convite convite = conviteRepository.findByToken(request.getToken())
                 .orElseThrow(() -> new IllegalArgumentException("Convite não encontrado"));
 
@@ -158,27 +161,27 @@ public class ConviteService {
             throw new IllegalArgumentException("Convite inválido ou expirado");
         }
 
-        // Verificar se email já foi usado (segurança extra)
         if (usuarioRepository.existsByEmail(convite.getEmail())) {
             throw new IllegalArgumentException("Este email já está em uso");
         }
 
-        // Validar senhas
         if (!request.senhasCoincidentes()) {
             throw new IllegalArgumentException("As senhas não coincidem");
         }
 
-        // Criar usuário
+        // Criar usuário HERDANDO comarca e departamento do convite
         Usuario usuario = Usuario.builder()
                 .nome(request.getNome())
                 .email(convite.getEmail())
                 .senha(passwordEncoder.encode(request.getSenha()))
                 .tipo(convite.getTipoUsuario())
-                .departamento(request.getDepartamento())
+                .comarca(convite.getComarca())           // HERDA comarca
+                .departamento(convite.getDepartamento()) // HERDA departamento
                 .telefone(request.getTelefone())
+                .cargo(request.getCargo())
                 .ativo(true)
                 .statusUsuario(StatusUsuario.ACTIVE)
-                .emailVerificado(true) // Email já verificado por convite
+                .emailVerificado(true)
                 .deveTrocarSenha(false)
                 .build();
 
@@ -188,7 +191,8 @@ public class ConviteService {
         convite.ativar(usuario, extractIpAddress(httpRequest));
         conviteRepository.save(convite);
 
-        log.info("Convite ativado - Usuario criado: {}", usuario.getEmail());
+        log.info("Convite ativado - Usuario: {}, Comarca: {}, Departamento: {}",
+                usuario.getEmail(), usuario.getComarca(), usuario.getDepartamento());
 
         return AtivarConviteResponse.builder()
                 .success(true)
@@ -198,10 +202,11 @@ public class ConviteService {
                         .nome(usuario.getNome())
                         .email(usuario.getEmail())
                         .tipo(usuario.getTipo())
+                        .comarca(usuario.getComarca())
+                        .departamento(usuario.getDepartamento())
                         .build())
                 .build();
     }
-
     /**
      * Lista todos os convites
      */
@@ -320,6 +325,7 @@ public class ConviteService {
 
     // ========== MÉTODOS AUXILIARES ==========
 
+
     private void enviarEmailConvite(Convite convite) {
         String linkConvite = String.format("%s/invite/%s", frontendUrl, convite.getToken());
 
@@ -331,6 +337,8 @@ public class ConviteService {
             Você foi convidado para acessar o Sistema ACLP do Tribunal de Justiça da Bahia.
             
             Perfil: %s
+            Comarca: %s
+            Departamento: %s
             Email: %s
             
             Para criar sua conta, acesse o link abaixo:
@@ -344,6 +352,8 @@ public class ConviteService {
             Sistema ACLP - TJBA
             """,
                 convite.getTipoUsuario().getLabel(),
+                convite.getComarca() != null ? convite.getComarca() : "Não definida",
+                convite.getDepartamento() != null ? convite.getDepartamento() : "Não definido",
                 convite.getEmail(),
                 linkConvite,
                 convite.getExpiraEm()
@@ -351,7 +361,6 @@ public class ConviteService {
 
         emailService.enviarEmail(convite.getEmail(), assunto, conteudo);
     }
-
     private ConviteListItem toListItem(Convite convite) {
         return ConviteListItem.builder()
                 .id(convite.getId())
@@ -372,12 +381,6 @@ public class ConviteService {
         if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
             return xForwardedFor.split(",")[0].trim();
         }
-
-        String xRealIp = request.getHeader("X-Real-IP");
-        if (xRealIp != null && !xRealIp.isEmpty()) {
-            return xRealIp;
-        }
-
         return request.getRemoteAddr();
     }
 }

@@ -12,6 +12,10 @@ import br.jus.tjba.aclp.repository.HistoricoEnderecoRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,38 +36,25 @@ public class ComparecimentoService {
     private final HistoricoComparecimentoRepository historicoComparecimentoRepository;
     private final HistoricoEnderecoRepository historicoEnderecoRepository;
 
-    /**
-     * Registra um novo comparecimento (presencial ou online)
-     * SOLUÇÃO 1: Ordem correta - salvar histórico ANTES de referenciar
-     */
     @Transactional
     public HistoricoComparecimento registrarComparecimento(ComparecimentoDTO dto) {
         log.info("Iniciando registro de comparecimento - Custodiado ID: {}, Tipo: {}",
                 dto.getCustodiadoId(), dto.getTipoValidacao());
 
-        // Limpar e validar dados
         limparEFormatarDadosDTO(dto);
         validarComparecimento(dto);
 
-        // Buscar custodiado
         Custodiado custodiado = custodiadoRepository.findById(dto.getCustodiadoId())
                 .orElseThrow(() -> new EntityNotFoundException("Custodiado não encontrado com ID: " + dto.getCustodiadoId()));
 
-        // 1. Criar histórico de comparecimento
         HistoricoComparecimento historico = criarHistoricoComparecimento(dto, custodiado);
-
-        // 2. ✅ SALVAR HISTÓRICO PRIMEIRO (antes de referenciar em outros objetos)
         HistoricoComparecimento historicoSalvo = historicoComparecimentoRepository.save(historico);
 
-        // 3. Processar mudança de endereço DEPOIS (agora historico já existe no banco)
         if (dto.houveMudancaEndereco()) {
             processarMudancaEndereco(dto, custodiado, historicoSalvo);
-
-            // 4. Atualizar histórico com endereços (se necessário)
             historicoSalvo = historicoComparecimentoRepository.save(historicoSalvo);
         }
 
-        // 5. Atualizar dados do custodiado
         atualizarDadosCustodiado(custodiado, dto);
 
         log.info("Comparecimento registrado com sucesso - ID: {}, Custodiado: {}, Mudança endereço: {}",
@@ -72,9 +63,6 @@ public class ComparecimentoService {
         return historicoSalvo;
     }
 
-    /**
-     * Busca histórico de comparecimentos de um custodiado
-     */
     @Transactional(readOnly = true)
     public List<HistoricoComparecimento> buscarHistoricoPorCustodiado(Long custodiadoId) {
         log.info("Buscando histórico de comparecimentos - Custodiado ID: {}", custodiadoId);
@@ -86,9 +74,6 @@ public class ComparecimentoService {
         return historicoComparecimentoRepository.findByCustodiadoIdOrderByDataComparecimentoDesc(custodiadoId);
     }
 
-    /**
-     * Busca comparecimentos por período
-     */
     @Transactional(readOnly = true)
     public List<HistoricoComparecimento> buscarComparecimentosPorPeriodo(LocalDate inicio, LocalDate fim) {
         log.info("Buscando comparecimentos por período: {} a {}", inicio, fim);
@@ -104,9 +89,6 @@ public class ComparecimentoService {
         return historicoComparecimentoRepository.findByDataComparecimentoBetween(inicio, fim);
     }
 
-    /**
-     * Busca comparecimentos com mudança de endereço
-     */
     @Transactional(readOnly = true)
     public List<HistoricoComparecimento> buscarComparecimentosComMudancaEndereco(Long custodiadoId) {
         log.info("Buscando comparecimentos com mudança de endereço - Custodiado ID: {}", custodiadoId);
@@ -118,18 +100,61 @@ public class ComparecimentoService {
         return historicoComparecimentoRepository.findByCustodiadoIdAndMudancaEnderecoTrue(custodiadoId);
     }
 
-    /**
-     * Busca comparecimentos de hoje
-     */
     @Transactional(readOnly = true)
     public List<HistoricoComparecimento> buscarComparecimentosHoje() {
         log.info("Buscando comparecimentos de hoje");
         return historicoComparecimentoRepository.findByDataComparecimento(LocalDate.now());
     }
 
-    /**
-     * Atualiza observações de um comparecimento
-     */
+    // NOVO: Buscar todos os comparecimentos com paginação
+    @Transactional(readOnly = true)
+    public Page<HistoricoComparecimento> buscarTodosComparecimentos(int page, int size) {
+        log.info("Buscando todos os comparecimentos - Página: {}, Size: {}", page, size);
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by("dataComparecimento").descending());
+        return historicoComparecimentoRepository.findAllByOrderByDataComparecimentoDesc(pageable);
+    }
+
+    // NOVO: Buscar comparecimentos com filtros
+    @Transactional(readOnly = true)
+    public Page<HistoricoComparecimento> buscarComparecimentosComFiltros(
+            LocalDate dataInicio,
+            LocalDate dataFim,
+            String tipoValidacao,
+            int page,
+            int size) {
+
+        log.info("Buscando comparecimentos com filtros - Início: {}, Fim: {}, Tipo: {}",
+                dataInicio, dataFim, tipoValidacao);
+
+        Pageable pageable = PageRequest.of(page, size);
+        return historicoComparecimentoRepository.findComFiltros(
+                dataInicio, dataFim, tipoValidacao, pageable);
+    }
+
+    // NOVO: Estatísticas detalhadas
+    @Transactional(readOnly = true)
+    public Map<String, Object> buscarEstatisticasDetalhadas() {
+        long totalComparecimentos = historicoComparecimentoRepository.countTotal();
+        long totalPresencial = historicoComparecimentoRepository.countByTipoValidacao("PRESENCIAL");
+        long totalOnline = historicoComparecimentoRepository.countByTipoValidacao("ONLINE");
+        long totalComMudancaEndereco = historicoComparecimentoRepository.countComMudancaEndereco();
+
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("totalComparecimentos", totalComparecimentos);
+        stats.put("totalPresencial", totalPresencial);
+        stats.put("totalOnline", totalOnline);
+        stats.put("totalComMudancaEndereco", totalComMudancaEndereco);
+        stats.put("percentualPresencial", totalComparecimentos > 0 ?
+                (totalPresencial * 100.0 / totalComparecimentos) : 0);
+        stats.put("percentualOnline", totalComparecimentos > 0 ?
+                (totalOnline * 100.0 / totalComparecimentos) : 0);
+        stats.put("percentualComMudanca", totalComparecimentos > 0 ?
+                (totalComMudancaEndereco * 100.0 / totalComparecimentos) : 0);
+
+        return stats;
+    }
+
     @Transactional
     public HistoricoComparecimento atualizarObservacoes(Long historicoId, String observacoes) {
         log.info("Atualizando observações do comparecimento ID: {}", historicoId);
@@ -142,9 +167,6 @@ public class ComparecimentoService {
         return historicoComparecimentoRepository.save(historico);
     }
 
-    /**
-     * Busca estatísticas de comparecimentos por período
-     */
     @Transactional(readOnly = true)
     public EstatisticasComparecimento buscarEstatisticas(LocalDate inicio, LocalDate fim) {
         log.info("Buscando estatísticas de comparecimentos: {} a {}", inicio, fim);
@@ -180,17 +202,11 @@ public class ComparecimentoService {
                 .build();
     }
 
-    /**
-     * Busca estatísticas gerais de todos os comparecimentos
-     */
     @Transactional(readOnly = true)
     public EstatisticasGerais buscarEstatisticasGerais() {
         log.info("Buscando estatísticas gerais de comparecimentos");
 
-        // Total de comparecimentos
         long totalComparecimentos = historicoComparecimentoRepository.count();
-
-        // Comparecimentos por tipo
         List<HistoricoComparecimento> todosComparecimentos = historicoComparecimentoRepository.findAll();
 
         long comparecimentosPresenciais = todosComparecimentos.stream()
@@ -203,22 +219,18 @@ public class ComparecimentoService {
                 .filter(h -> h.getTipoValidacao() == TipoValidacao.CADASTRO_INICIAL)
                 .count();
 
-        // Mudanças de endereço
         long totalMudancasEndereco = todosComparecimentos.stream()
                 .filter(HistoricoComparecimento::houveMudancaEndereco)
                 .count();
 
-        // Comparecimentos hoje
         long comparecimentosHoje = historicoComparecimentoRepository
                 .findByDataComparecimento(LocalDate.now()).size();
 
-        // Comparecimentos este mês
         LocalDate inicioMes = LocalDate.now().withDayOfMonth(1);
         LocalDate fimMes = LocalDate.now();
         long comparecimentosEsteMes = historicoComparecimentoRepository
                 .findByDataComparecimentoBetween(inicioMes, fimMes).size();
 
-        // Custodiados únicos com comparecimento
         long custodiadosComComparecimento = todosComparecimentos.stream()
                 .map(h -> h.getCustodiado().getId())
                 .distinct()
@@ -242,71 +254,40 @@ public class ComparecimentoService {
                 .build();
     }
 
-    /**
-     * Busca resumo completo do sistema com análises avançadas
-     */
     @Transactional(readOnly = true)
     public ResumoSistema buscarResumoSistema() {
         log.info("Buscando resumo completo do sistema com análises avançadas");
 
         LocalDate hoje = LocalDate.now();
 
-        // === DADOS BÁSICOS ===
-
-        // Totais de custodiados
         long totalCustodiados = custodiadoRepository.count();
         long custodiadosEmConformidade = custodiadoRepository.countByStatus(StatusComparecimento.EM_CONFORMIDADE);
         long custodiadosInadimplentes = custodiadoRepository.countByStatus(StatusComparecimento.INADIMPLENTE);
 
-        // Custodiados com comparecimento hoje
         long comparecimentosHoje = custodiadoRepository.findComparecimentosHoje().size();
-
-        // Total de comparecimentos
         long totalComparecimentos = historicoComparecimentoRepository.count();
 
-        // Comparecimentos este mês
         LocalDate inicioMes = hoje.withDayOfMonth(1);
         long comparecimentosEsteMes = historicoComparecimentoRepository
                 .findByDataComparecimentoBetween(inicioMes, hoje).size();
 
-        // Mudanças de endereço
-        long totalMudancasEndereco = historicoComparecimentoRepository
-                .count();
-
-        // Endereços ativos
+        long totalMudancasEndereco = historicoComparecimentoRepository.count();
         long enderecosAtivos = historicoEnderecoRepository.findAllEnderecosAtivos().size();
-
-        // Custodiados sem histórico
         long custodiadosSemHistorico = custodiadoRepository.findCustodiadosSemHistorico().size();
-
-        // Custodiados sem endereço ativo
         long custodiadosSemEnderecoAtivo = historicoEnderecoRepository.countCustodiadosSemEnderecoAtivo();
 
-        // Percentuais básicos
         double percentualConformidade = totalCustodiados > 0 ?
                 (double) custodiadosEmConformidade / totalCustodiados * 100 : 0.0;
         double percentualInadimplencia = totalCustodiados > 0 ?
                 (double) custodiadosInadimplentes / totalCustodiados * 100 : 0.0;
 
-        // === NOVOS DADOS SOLICITADOS ===
-
-        // 1. Relatório dos últimos 6 meses
         RelatorioUltimosMeses relatorioMeses = calcularRelatorioUltimosMeses(6);
-
-        // 2. Tendência de conformidade (últimos 6 meses)
         List<TendenciaMensal> tendenciaConformidade = calcularTendenciaConformidade(6);
-
-        // 3. Comparecimentos próximos 7 dias
         ProximosComparecimentos proximosComparecimentos = calcularProximosComparecimentos(7);
-
-        // 4. Análises adicionais
         AnaliseComparecimentos analiseComparecimentos = calcularAnaliseComparecimentos();
-
-        // 5. NOVO: Análise de atrasos superiores a 30 dias
         AnaliseAtrasos analiseAtrasos = calcularAnaliseAtrasos();
 
         return ResumoSistema.builder()
-                // Dados básicos
                 .totalCustodiados(totalCustodiados)
                 .custodiadosEmConformidade(custodiadosEmConformidade)
                 .custodiadosInadimplentes(custodiadosInadimplentes)
@@ -320,18 +301,14 @@ public class ComparecimentoService {
                 .percentualConformidade(percentualConformidade)
                 .percentualInadimplencia(percentualInadimplencia)
                 .dataConsulta(hoje)
-                // Novos dados
                 .relatorioUltimosMeses(relatorioMeses)
                 .tendenciaConformidade(tendenciaConformidade)
                 .proximosComparecimentos(proximosComparecimentos)
                 .analiseComparecimentos(analiseComparecimentos)
-                .analiseAtrasos(analiseAtrasos) // NOVO campo adicionado
+                .analiseAtrasos(analiseAtrasos)
                 .build();
     }
 
-    /**
-     * Calcula relatório dos últimos N meses
-     */
     private RelatorioUltimosMeses calcularRelatorioUltimosMeses(int meses) {
         LocalDate hoje = LocalDate.now();
         LocalDate inicioPeríodo = hoje.minusMonths(meses).withDayOfMonth(1);
@@ -350,7 +327,6 @@ public class ComparecimentoService {
                 .filter(HistoricoComparecimento::houveMudancaEndereco)
                 .count();
 
-        // Calcular média mensal
         double mediaComparecimentosMensal = totalComparecimentosPeriodo / (double) meses;
 
         return RelatorioUltimosMeses.builder()
@@ -369,9 +345,6 @@ public class ComparecimentoService {
                 .build();
     }
 
-    /**
-     * Calcula tendência de conformidade mensal
-     */
     private List<TendenciaMensal> calcularTendenciaConformidade(int meses) {
         List<TendenciaMensal> tendencias = new ArrayList<>();
         LocalDate hoje = LocalDate.now();
@@ -381,15 +354,11 @@ public class ComparecimentoService {
             LocalDate inicioMes = mesAnalise.atDay(1);
             LocalDate fimMes = mesAnalise.atEndOfMonth();
 
-            // Se o mês é o atual, usar até hoje
             if (mesAnalise.equals(YearMonth.now())) {
                 fimMes = hoje;
             }
 
-            // Buscar snapshot do status no final do mês
-            long totalCustodiadosNoMes = custodiadoRepository.count(); // Simplificado
-
-            // Contar custodiados em conformidade baseado em comparecimentos do mês
+            long totalCustodiadosNoMes = custodiadoRepository.count();
             List<HistoricoComparecimento> comparecimentosMes =
                     historicoComparecimentoRepository.findByDataComparecimentoBetween(inicioMes, fimMes);
 
@@ -420,9 +389,6 @@ public class ComparecimentoService {
         return tendencias;
     }
 
-    /**
-     * Calcula comparecimentos previstos para os próximos dias
-     */
     private ProximosComparecimentos calcularProximosComparecimentos(int dias) {
         LocalDate hoje = LocalDate.now();
         LocalDate dataLimite = hoje.plusDays(dias);
@@ -430,14 +396,12 @@ public class ComparecimentoService {
         List<Custodiado> custodiadosComComparecimento =
                 custodiadoRepository.findByProximoComparecimentoBetween(hoje, dataLimite);
 
-        // Agrupar por data
         Map<LocalDate, List<Custodiado>> comparecimentosPorDia = new TreeMap<>();
         for (Custodiado custodiado : custodiadosComComparecimento) {
             LocalDate dataComparecimento = custodiado.getProximoComparecimento();
             comparecimentosPorDia.computeIfAbsent(dataComparecimento, k -> new ArrayList<>()).add(custodiado);
         }
 
-        // Criar lista de detalhes por dia
         List<ComparecimentoDiario> detalhesPorDia = new ArrayList<>();
         for (Map.Entry<LocalDate, List<Custodiado>> entry : comparecimentosPorDia.entrySet()) {
             LocalDate data = entry.getKey();
@@ -459,7 +423,6 @@ public class ComparecimentoService {
                     .build());
         }
 
-        // Identificar custodiados em atraso que deveriam comparecer
         List<Custodiado> custodiadosAtrasados = custodiadoRepository.findByProximoComparecimentoBefore(hoje);
 
         return ProximosComparecimentos.builder()
@@ -470,7 +433,7 @@ public class ComparecimentoService {
                 .comparecimentosAmanha(comparecimentosPorDia.getOrDefault(hoje.plusDays(1), new ArrayList<>()).size())
                 .detalhesPorDia(detalhesPorDia)
                 .custodiadosAtrasados(custodiadosAtrasados.stream()
-                        .limit(10) // Limitar para não ficar muito grande
+                        .limit(10)
                         .map(c -> DetalheCustodiado.builder()
                                 .id(c.getId())
                                 .nome(c.getNome())
@@ -482,13 +445,8 @@ public class ComparecimentoService {
                 .build();
     }
 
-    /**
-     * Calcula análises adicionais de comparecimentos
-     */
     private AnaliseComparecimentos calcularAnaliseComparecimentos() {
         LocalDate hoje = LocalDate.now();
-
-        // Taxa de comparecimento online vs presencial nos últimos 30 dias
         LocalDate inicio30Dias = hoje.minusDays(30);
         List<HistoricoComparecimento> comparecimentos30Dias =
                 historicoComparecimentoRepository.findByDataComparecimentoBetween(inicio30Dias, hoje);
@@ -500,14 +458,12 @@ public class ComparecimentoService {
                 .filter(h -> h.getTipoValidacao() == TipoValidacao.PRESENCIAL)
                 .count();
 
-        // Picos de comparecimento (dias da semana com mais comparecimentos)
         Map<String, Long> comparecimentosPorDiaSemana = comparecimentos30Dias.stream()
                 .collect(Collectors.groupingBy(
                         h -> h.getDataComparecimento().getDayOfWeek().toString(),
                         Collectors.counting()
                 ));
 
-        // Horários mais comuns (se houver registro de hora)
         Map<Integer, Long> comparecimentosPorHora = comparecimentos30Dias.stream()
                 .filter(h -> h.getHoraComparecimento() != null)
                 .collect(Collectors.groupingBy(
@@ -526,16 +482,10 @@ public class ComparecimentoService {
                 .build();
     }
 
-    /**
-     * NOVO MÉTODO: Calcula análise de atrasos superiores a 30 dias
-     */
     private AnaliseAtrasos calcularAnaliseAtrasos() {
         LocalDate hoje = LocalDate.now();
-
-        // Buscar todos os custodiados inadimplentes
         List<Custodiado> custodiadosInadimplentes = custodiadoRepository.findInadimplentes();
 
-        // Categorizar por período de atraso
         List<DetalheCustodiadoAtrasado> atrasados30Dias = new ArrayList<>();
         List<DetalheCustodiadoAtrasado> atrasados60Dias = new ArrayList<>();
         List<DetalheCustodiadoAtrasado> atrasados90Dias = new ArrayList<>();
@@ -546,7 +496,6 @@ public class ComparecimentoService {
         long totalAtrasados90Dias = 0;
         long totalAtrasadosMais90Dias = 0;
 
-        // Estatísticas por faixa de atraso
         Map<String, Long> distribuicaoAtrasos = new HashMap<>();
         distribuicaoAtrasos.put("1-7 dias", 0L);
         distribuicaoAtrasos.put("8-15 dias", 0L);
@@ -575,7 +524,6 @@ public class ComparecimentoService {
                         .enderecoAtual(custodiado.getEnderecoResumido())
                         .build();
 
-                // Categorizar por período
                 if (diasAtraso <= 7) {
                     distribuicaoAtrasos.merge("1-7 dias", 1L, Long::sum);
                 } else if (diasAtraso <= 15) {
@@ -585,7 +533,7 @@ public class ComparecimentoService {
                 } else if (diasAtraso <= 60) {
                     distribuicaoAtrasos.merge("31-60 dias", 1L, Long::sum);
                     totalAtrasados30Dias++;
-                    if (atrasados30Dias.size() < 20) { // Limitar lista para não ficar muito grande
+                    if (atrasados30Dias.size() < 20) {
                         atrasados30Dias.add(detalhe);
                     }
                 } else if (diasAtraso <= 90) {
@@ -602,7 +550,6 @@ public class ComparecimentoService {
                     }
                 }
 
-                // Adicionar aos atrasados > 30 dias
                 if (diasAtraso > 30) {
                     if (diasAtraso > 90) {
                         totalAtrasados90Dias++;
@@ -614,7 +561,6 @@ public class ComparecimentoService {
             }
         }
 
-        // Calcular custodiado com maior atraso
         DetalheCustodiadoAtrasado maiorAtraso = custodiadosInadimplentes.stream()
                 .filter(c -> c.getProximoComparecimento() != null && c.getProximoComparecimento().isBefore(hoje))
                 .map(c -> {
@@ -631,7 +577,6 @@ public class ComparecimentoService {
                 .max(Comparator.comparingLong(DetalheCustodiadoAtrasado::getDiasAtraso))
                 .orElse(null);
 
-        // Calcular média de dias de atraso
         double mediaDiasAtraso = custodiadosInadimplentes.stream()
                 .filter(c -> c.getProximoComparecimento() != null && c.getProximoComparecimento().isBefore(hoje))
                 .mapToLong(c -> ChronoUnit.DAYS.between(c.getProximoComparecimento(), hoje))
@@ -655,9 +600,6 @@ public class ComparecimentoService {
                 .build();
     }
 
-    /**
-     * Migra custodiados existentes criando seus comparecimentos iniciais
-     */
     @Transactional
     public Map<String, Object> migrarCadastrosIniciais(String validadoPor) {
         log.info("Iniciando migração de cadastros iniciais");
@@ -679,12 +621,10 @@ public class ComparecimentoService {
 
         for (Custodiado custodiado : todosCustodiados) {
             try {
-                // Verificar se já tem cadastro inicial
                 boolean jaTemComparecimento = historicoComparecimentoRepository
                         .existsCadastroInicialPorCustodiado(custodiado.getId());
 
                 if (!jaTemComparecimento) {
-                    // Criar comparecimento inicial
                     HistoricoComparecimento cadastroInicial = HistoricoComparecimento.builder()
                             .custodiado(custodiado)
                             .dataComparecimento(custodiado.getDataComparecimentoInicial())
@@ -699,9 +639,6 @@ public class ComparecimentoService {
                     custodiadosMigrados++;
 
                     log.debug("Cadastro inicial criado para custodiado: {} (ID: {})",
-                            custodiado.getNome(), custodiado.getId());
-                } else {
-                    log.debug("Custodiado já possui cadastro inicial: {} (ID: {})",
                             custodiado.getNome(), custodiado.getId());
                 }
 
@@ -728,13 +665,9 @@ public class ComparecimentoService {
         return resultado;
     }
 
-    // ========== MÉTODOS PRIVADOS ==========
+    // MÉTODOS PRIVADOS
 
-    /**
-     * ✅ MÉTODO CRIADO: Limpa e formata dados do DTO
-     */
     private void limparEFormatarDadosDTO(ComparecimentoDTO dto) {
-        // Limpar strings básicas
         if (dto.getValidadoPor() != null) {
             dto.setValidadoPor(dto.getValidadoPor().trim());
         }
@@ -753,13 +686,11 @@ public class ComparecimentoService {
             }
         }
 
-        // Validar e converter datas se necessário
         if (dto.getDataComparecimento() != null && dto.getDataComparecimento().isAfter(LocalDate.now())) {
             log.warn("Data de comparecimento futura ajustada para hoje: {}", dto.getDataComparecimento());
             dto.setDataComparecimento(LocalDate.now());
         }
 
-        // Limpar dados do novo endereço se houver
         if (dto.houveMudancaEndereco() && dto.getNovoEndereco() != null) {
             var endereco = dto.getNovoEndereco();
 
@@ -778,7 +709,6 @@ public class ComparecimentoService {
     }
 
     private void validarComparecimento(ComparecimentoDTO dto) {
-        // Validar dados básicos
         if (dto.getCustodiadoId() == null || dto.getCustodiadoId() <= 0) {
             throw new IllegalArgumentException("ID do custodiado deve ser um número positivo");
         }
@@ -799,7 +729,6 @@ public class ComparecimentoService {
             throw new IllegalArgumentException("Validado por é obrigatório");
         }
 
-        // Validar mudança de endereço
         if (dto.houveMudancaEndereco()) {
             if (dto.getNovoEndereco() == null) {
                 throw new IllegalArgumentException("Dados do novo endereço são obrigatórios quando há mudança");
@@ -810,7 +739,6 @@ public class ComparecimentoService {
             }
         }
 
-        // Validar duplicidade de comparecimento na mesma data
         validarDuplicidadeComparecimento(dto);
     }
 
@@ -820,12 +748,10 @@ public class ComparecimentoService {
                         dto.getCustodiadoId(), dto.getDataComparecimento());
 
         if (!comparecimentosMesmaData.isEmpty()) {
-            // Permitir apenas se for cadastro inicial
             boolean temCadastroInicial = comparecimentosMesmaData.stream()
                     .anyMatch(h -> h.getTipoValidacao() == TipoValidacao.CADASTRO_INICIAL);
 
             if (temCadastroInicial && dto.getTipoValidacao() != TipoValidacao.CADASTRO_INICIAL) {
-                // OK - pode ter cadastro inicial + comparecimento regular no mesmo dia
                 return;
             }
 
@@ -863,22 +789,7 @@ public class ComparecimentoService {
         criarNovoHistoricoEndereco(custodiado, dto, historico);
     }
 
-    private void finalizarEnderecoAnterior(Custodiado custodiado, LocalDate dataFim) {
-        Optional<HistoricoEndereco> enderecoAtivo =
-                historicoEnderecoRepository.findEnderecoAtivoPorCustodiado(custodiado.getId());
-
-        enderecoAtivo.ifPresent(endereco -> {
-            endereco.finalizarEndereco(dataFim);
-            historicoEnderecoRepository.save(endereco);
-            log.info("Endereço anterior finalizado - ID: {}, Data fim: {}", endereco.getId(), dataFim);
-        });
-    }
-
-    /**
-     * CORREÇÃO: Cria novo histórico garantindo que será o único ativo
-     */
     private void criarNovoHistoricoEndereco(Custodiado custodiado, ComparecimentoDTO dto, HistoricoComparecimento historico) {
-        // Verificação adicional: garantir que não há endereços ativos antes de criar
         long enderecosAtivos = historicoEnderecoRepository.countEnderecosAtivosPorCustodiado(custodiado.getId());
 
         if (enderecosAtivos > 0) {
@@ -897,7 +808,7 @@ public class ComparecimentoService {
                 .cidade(dto.getNovoEndereco().getCidade())
                 .estado(dto.getNovoEndereco().getEstado())
                 .dataInicio(dto.getDataComparecimento())
-                .dataFim(null) // Endereço ativo não tem data fim
+                .dataFim(null)
                 .ativo(Boolean.TRUE)
                 .motivoAlteracao(dto.getMotivoMudancaEndereco())
                 .validadoPor(dto.getValidadoPor())
@@ -905,31 +816,20 @@ public class ComparecimentoService {
                 .build();
 
         HistoricoEndereco enderecoSalvo = historicoEnderecoRepository.save(novoHistorico);
-
-        // Verificação final: garantir que apenas este endereço está ativo
         historicoEnderecoRepository.desativarOutrosEnderecosAtivos(custodiado.getId(), enderecoSalvo.getId());
-
         adicionarEnderecoAoHistorico(historico, enderecoSalvo);
 
         log.info("Novo histórico de endereço criado - ID: {}, Endereço: {}, É o único ativo: true",
                 enderecoSalvo.getId(), enderecoSalvo.getEnderecoResumido());
     }
-    /**
-     * Substitui o método que estava faltando na entidade
-     */
+
     private void adicionarEnderecoAoHistorico(HistoricoComparecimento historico, HistoricoEndereco endereco) {
-        // Inicializar lista se necessário
         if (historico.getEnderecosAlterados() == null) {
             historico.setEnderecosAlterados(new ArrayList<>());
         }
 
-        // Adicionar endereço à lista
         historico.getEnderecosAlterados().add(endereco);
-
-        // Configurar relacionamento bidirecional
         endereco.setHistoricoComparecimento(historico);
-
-        // Marcar que houve mudança de endereço
         historico.setMudancaEndereco(Boolean.TRUE);
 
         log.debug("Endereço adicionado ao histórico - Histórico ID: {}, Endereço ID: {}",
@@ -937,31 +837,21 @@ public class ComparecimentoService {
     }
 
     private void atualizarDadosCustodiado(Custodiado custodiado, ComparecimentoDTO dto) {
-        // Não atualizar para cadastro inicial
         if (dto.getTipoValidacao() == TipoValidacao.CADASTRO_INICIAL) {
             return;
         }
 
-        // Atualizar último comparecimento
         custodiado.setUltimoComparecimento(dto.getDataComparecimento());
-
-        // Calcular próximo comparecimento
         custodiado.calcularProximoComparecimento();
-
-        // Atualizar status baseado na data atual
         custodiado.atualizarStatusBaseadoEmData();
-
         custodiadoRepository.save(custodiado);
 
         log.info("Dados do custodiado atualizados - Último comparecimento: {}, Próximo: {}, Status: {}",
                 custodiado.getUltimoComparecimento(), custodiado.getProximoComparecimento(), custodiado.getStatus());
     }
 
-    // ========== CLASSES INTERNAS - DTOs ==========
+    // DTOs
 
-    /**
-     * DTO para estatísticas de comparecimentos por período
-     */
     @lombok.Data
     @lombok.Builder
     public static class EstatisticasComparecimento {
@@ -975,9 +865,6 @@ public class ComparecimentoService {
         private double percentualOnline;
     }
 
-    /**
-     * DTO para estatísticas gerais do sistema
-     */
     @lombok.Data
     @lombok.Builder
     public static class EstatisticasGerais {
@@ -994,13 +881,9 @@ public class ComparecimentoService {
         private double mediaComparecimentosPorCustodiado;
     }
 
-    /**
-     * DTO para resumo completo do sistema
-     */
     @lombok.Data
     @lombok.Builder
     public static class ResumoSistema {
-        // Dados básicos
         private long totalCustodiados;
         private long custodiadosEmConformidade;
         private long custodiadosInadimplentes;
@@ -1014,18 +897,13 @@ public class ComparecimentoService {
         private double percentualConformidade;
         private double percentualInadimplencia;
         private LocalDate dataConsulta;
-
-        // Novos dados
         private RelatorioUltimosMeses relatorioUltimosMeses;
         private List<TendenciaMensal> tendenciaConformidade;
         private ProximosComparecimentos proximosComparecimentos;
         private AnaliseComparecimentos analiseComparecimentos;
-        private AnaliseAtrasos analiseAtrasos; // NOVO campo
+        private AnaliseAtrasos analiseAtrasos;
     }
 
-    /**
-     * DTO para relatório dos últimos meses
-     */
     @lombok.Data
     @lombok.Builder
     public static class RelatorioUltimosMeses {
@@ -1041,14 +919,11 @@ public class ComparecimentoService {
         private double percentualOnline;
     }
 
-    /**
-     * DTO para tendência mensal
-     */
     @lombok.Data
     @lombok.Builder
     public static class TendenciaMensal {
-        private String mes; // formato: yyyy-MM
-        private String mesNome; // formato: "Janeiro/2024"
+        private String mes;
+        private String mesNome;
         private long totalCustodiados;
         private long emConformidade;
         private long inadimplentes;
@@ -1057,9 +932,6 @@ public class ComparecimentoService {
         private long totalComparecimentos;
     }
 
-    /**
-     * DTO para próximos comparecimentos
-     */
     @lombok.Data
     @lombok.Builder
     public static class ProximosComparecimentos {
@@ -1072,9 +944,6 @@ public class ComparecimentoService {
         private List<DetalheCustodiado> custodiadosAtrasados;
     }
 
-    /**
-     * DTO para comparecimentos diários
-     */
     @lombok.Data
     @lombok.Builder
     public static class ComparecimentoDiario {
@@ -1084,9 +953,6 @@ public class ComparecimentoService {
         private List<DetalheCustodiado> custodiados;
     }
 
-    /**
-     * DTO para detalhe de custodiado
-     */
     @lombok.Data
     @lombok.Builder
     public static class DetalheCustodiado {
@@ -1097,9 +963,6 @@ public class ComparecimentoService {
         private long diasAtraso;
     }
 
-    /**
-     * DTO para análise de comparecimentos
-     */
     @lombok.Data
     @lombok.Builder
     public static class AnaliseComparecimentos {
@@ -1111,19 +974,16 @@ public class ComparecimentoService {
         private Map<Integer, Long> comparecimentosPorHora;
     }
 
-    /**
-     * NOVO DTO para análise de atrasos
-     */
     @lombok.Data
     @lombok.Builder
     public static class AnaliseAtrasos {
         private long totalCustodiadosAtrasados;
-        private long totalAtrasados30Dias; // Atrasados entre 31-60 dias
-        private long totalAtrasados60Dias; // Atrasados entre 61-90 dias
-        private long totalAtrasados90Dias; // Atrasados há mais de 90 dias
-        private long totalAtrasadosMais90Dias; // Atrasados há mais de 90 dias
+        private long totalAtrasados30Dias;
+        private long totalAtrasados60Dias;
+        private long totalAtrasados90Dias;
+        private long totalAtrasadosMais90Dias;
         private double mediaDiasAtraso;
-        private Map<String, Long> distribuicaoAtrasos; // Distribuição por faixas
+        private Map<String, Long> distribuicaoAtrasos;
         private List<DetalheCustodiadoAtrasado> custodiadosAtrasados30Dias;
         private List<DetalheCustodiadoAtrasado> custodiadosAtrasados60Dias;
         private List<DetalheCustodiadoAtrasado> custodiadosAtrasados90Dias;
@@ -1132,9 +992,6 @@ public class ComparecimentoService {
         private LocalDate dataAnalise;
     }
 
-    /**
-     *  DTO para detalhe de custodiado atrasado
-     */
     @lombok.Data
     @lombok.Builder
     public static class DetalheCustodiadoAtrasado {

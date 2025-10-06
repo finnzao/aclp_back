@@ -33,7 +33,7 @@ public class ConviteController {
      * ADMIN: Criar novo convite
      */
     @PostMapping
-    @PreAuthorize("hasAuthority('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN')")
     @SecurityRequirement(name = "bearer-auth")
     @Operation(summary = "Criar convite",
             description = "Cria novo convite para usuário (apenas ADMIN)")
@@ -109,7 +109,7 @@ public class ConviteController {
      * ADMIN: Listar todos os convites
      */
     @GetMapping
-    @PreAuthorize("hasAuthority('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN')")
     @SecurityRequirement(name = "bearer-auth")
     @Operation(summary = "Listar convites",
             description = "Lista todos os convites (apenas ADMIN)")
@@ -131,7 +131,7 @@ public class ConviteController {
      * ADMIN: Buscar convite por ID
      */
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN')")
     @SecurityRequirement(name = "bearer-auth")
     @Operation(summary = "Buscar convite",
             description = "Busca convite por ID (apenas ADMIN)")
@@ -154,7 +154,7 @@ public class ConviteController {
      * ADMIN: Cancelar convite
      */
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN')")
     @SecurityRequirement(name = "bearer-auth")
     @Operation(summary = "Cancelar convite",
             description = "Cancela um convite (apenas ADMIN)")
@@ -178,7 +178,7 @@ public class ConviteController {
      * ADMIN: Reenviar convite
      */
     @PostMapping("/{id}/reenviar")
-    @PreAuthorize("hasAuthority('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN')")
     @SecurityRequirement(name = "bearer-auth")
     @Operation(summary = "Reenviar convite",
             description = "Reenvia email de convite (apenas ADMIN)")
@@ -206,7 +206,7 @@ public class ConviteController {
      * ADMIN: Estatísticas de convites
      */
     @GetMapping("/stats")
-    @PreAuthorize("hasAuthority('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN')")
     @SecurityRequirement(name = "bearer-auth")
     @Operation(summary = "Estatísticas",
             description = "Retorna estatísticas de convites (apenas ADMIN)")
