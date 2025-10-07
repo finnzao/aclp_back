@@ -71,7 +71,7 @@ public class ComparecimentoService {
             throw new IllegalArgumentException("ID do custodiado deve ser um número positivo");
         }
 
-        return historicoComparecimentoRepository.findByCustodiadoIdOrderByDataComparecimentoDesc(custodiadoId);
+        return historicoComparecimentoRepository.findByCustodiado_IdOrderByDataComparecimentoDesc(custodiadoId);
     }
 
     @Transactional(readOnly = true)
@@ -97,7 +97,7 @@ public class ComparecimentoService {
             throw new IllegalArgumentException("ID do custodiado deve ser um número positivo");
         }
 
-        return historicoComparecimentoRepository.findByCustodiadoIdAndMudancaEnderecoTrue(custodiadoId);
+        return historicoComparecimentoRepository.findByCustodiado_IdAndMudancaEnderecoTrue(custodiadoId);
     }
 
     @Transactional(readOnly = true)
@@ -744,7 +744,7 @@ public class ComparecimentoService {
 
     private void validarDuplicidadeComparecimento(ComparecimentoDTO dto) {
         List<HistoricoComparecimento> comparecimentosMesmaData =
-                historicoComparecimentoRepository.findByCustodiadoIdAndDataComparecimento(
+                historicoComparecimentoRepository.  findByCustodiado_IdAndDataComparecimento(
                         dto.getCustodiadoId(), dto.getDataComparecimento());
 
         if (!comparecimentosMesmaData.isEmpty()) {

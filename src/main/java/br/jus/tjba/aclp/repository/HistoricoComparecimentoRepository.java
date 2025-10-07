@@ -15,15 +15,18 @@ import java.util.List;
 @Repository
 public interface HistoricoComparecimentoRepository extends JpaRepository<HistoricoComparecimento, Long> {
 
-    List<HistoricoComparecimento> findByCustodiadoIdOrderByDataComparecimentoDesc(Long custodiadoId);
+    // CORRIGIDO: custodiado.id com underscore
+    List<HistoricoComparecimento> findByCustodiado_IdOrderByDataComparecimentoDesc(Long custodiadoId);
 
     List<HistoricoComparecimento> findByDataComparecimentoBetween(LocalDate inicio, LocalDate fim);
 
     List<HistoricoComparecimento> findByDataComparecimento(LocalDate data);
 
-    List<HistoricoComparecimento> findByCustodiadoIdAndMudancaEnderecoTrue(Long custodiadoId);
+    // CORRIGIDO: custodiado.id com underscore
+    List<HistoricoComparecimento> findByCustodiado_IdAndMudancaEnderecoTrue(Long custodiadoId);
 
-    List<HistoricoComparecimento> findByCustodiadoIdAndDataComparecimento(Long custodiadoId, LocalDate data);
+    // CORRIGIDO: custodiado.id com underscore
+    List<HistoricoComparecimento> findByCustodiado_IdAndDataComparecimento(Long custodiadoId, LocalDate data);
 
     @Query("SELECT CASE WHEN COUNT(h) > 0 THEN true ELSE false END FROM HistoricoComparecimento h " +
             "WHERE h.custodiado.id = :custodiadoId AND h.tipoValidacao = 'CADASTRO_INICIAL'")

@@ -106,7 +106,6 @@ public class CustodiadoService {
         return custodiadoReativado;
     }
 
-    // ========== MÉTODOS EXISTENTES (COMPORTAMENTO MANTIDO) ==========
 
     @Transactional(readOnly = true)
     public List<Custodiado> findByProcesso(String processo) {
