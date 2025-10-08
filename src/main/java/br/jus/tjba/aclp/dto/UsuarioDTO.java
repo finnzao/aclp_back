@@ -31,6 +31,10 @@ public class UsuarioDTO {
     private TipoUsuario tipo;
 
     private String departamento;
-    private String telefone;
+
+    private String comarca;
+
+    private String cargo;
+
     private Boolean ativo;
 }

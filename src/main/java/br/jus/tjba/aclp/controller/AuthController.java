@@ -338,7 +338,6 @@ public class AuthController {
                             "email", usuario.getEmail(),
                             "tipo", usuario.getTipo(),
                             "departamento", usuario.getDepartamento() != null ? usuario.getDepartamento() : "",
-                            "telefone", usuario.getTelefone() != null ? usuario.getTelefone() : "",
                             "ultimoLogin", usuario.getUltimoLogin() != null ? usuario.getUltimoLogin() : "",
                             "isAdmin", usuario.isAdmin()
                     )

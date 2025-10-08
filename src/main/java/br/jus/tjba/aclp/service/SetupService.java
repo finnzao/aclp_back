@@ -87,7 +87,6 @@ public class SetupService {
                     .tipo(TipoUsuario.ADMIN)
                     .departamento(dto.getDepartamento() != null && !dto.getDepartamento().trim().isEmpty()
                             ? dto.getDepartamento() : "Administração do Sistema")
-                    .telefone(dto.getTelefone())
                     .ativo(true)
                     .build();
 

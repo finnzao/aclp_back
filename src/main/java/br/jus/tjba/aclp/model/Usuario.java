@@ -56,15 +56,12 @@ public class Usuario {
     @Column(name = "departamento", length = 100)
     private String departamento;
 
-    @Size(max = 20, message = "Telefone deve ter no máximo 20 caracteres")
-    @Column(name = "telefone", length = 20)
-    private String telefone;
-
     @Column(name = "comarca", length = 100)
     private String comarca;
 
     @Column(name = "cargo", length = 100)
     private String cargo;
+
     @Column(name = "avatar")
     private String avatar;
 

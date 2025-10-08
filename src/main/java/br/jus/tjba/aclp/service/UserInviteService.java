@@ -206,7 +206,6 @@ public class UserInviteService {
                 .senha(passwordEncoder.encode(dto.getSenha()))
                 .tipo(invite.getTipoUsuario())
                 .departamento(invite.getDepartamento())
-                .telefone(invite.getTelefone())
                 .statusUsuario(StatusUsuario.ACTIVE) // Ativo após definir senha
                 .ativo(true)
                 .mfaEnabled(dto.getHabilitarMFA() != null ? dto.getHabilitarMFA() : false)

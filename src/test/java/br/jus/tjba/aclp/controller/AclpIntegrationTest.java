@@ -72,7 +72,6 @@ class AclpIntegrationTest {
                 .senha("Admin@2024!")
                 .tipo(TipoUsuario.ADMIN)
                 .departamento("TI")
-                .telefone("(71) 99999-9999")
                 .build();
 
         MvcResult result = mockMvc.perform(post("/api/usuarios")

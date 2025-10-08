@@ -670,7 +670,6 @@ public class AuthService {
                 .email(usuario.getEmail())
                 .tipo(usuario.getTipo())
                 .departamento(usuario.getDepartamento())
-                .telefone(usuario.getTelefone())
                 .ultimoLogin(usuario.getUltimoLogin())
                 .mfaEnabled(usuario.getMfaEnabled())
                 .build();

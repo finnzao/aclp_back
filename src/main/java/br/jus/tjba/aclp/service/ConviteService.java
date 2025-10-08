@@ -147,6 +147,7 @@ public class ConviteService {
                 .mensagem("Convite válido")
                 .build();
     }
+
     /**
      * Ativa convite criando usuário com comarca e departamento do convite
      */
@@ -175,9 +176,8 @@ public class ConviteService {
                 .email(convite.getEmail())
                 .senha(passwordEncoder.encode(request.getSenha()))
                 .tipo(convite.getTipoUsuario())
-                .comarca(convite.getComarca())           // HERDA comarca
-                .departamento(convite.getDepartamento()) // HERDA departamento
-                .telefone(request.getTelefone())
+                .comarca(convite.getComarca())
+                .departamento(convite.getDepartamento())
                 .cargo(request.getCargo())
                 .ativo(true)
                 .statusUsuario(StatusUsuario.ACTIVE)
@@ -207,6 +207,7 @@ public class ConviteService {
                         .build())
                 .build();
     }
+
     /**
      * Lista todos os convites
      */
@@ -332,25 +333,25 @@ public class ConviteService {
         String assunto = "Convite para Sistema ACLP - TJBA";
 
         String conteudo = String.format("""
-            Olá!
-            
-            Você foi convidado para acessar o Sistema ACLP do Tribunal de Justiça da Bahia.
-            
-            Perfil: %s
-            Comarca: %s
-            Departamento: %s
-            Email: %s
-            
-            Para criar sua conta, acesse o link abaixo:
-            %s
-            
-            Este link é válido até: %s
-            
-            Após criar sua conta, você poderá fazer login com seu email e a senha que escolher.
-            
-            Atenciosamente,
-            Sistema ACLP - TJBA
-            """,
+                        Olá!
+                        
+                        Você foi convidado para acessar o Sistema ACLP do Tribunal de Justiça da Bahia.
+                        
+                        Perfil: %s
+                        Comarca: %s
+                        Departamento: %s
+                        Email: %s
+                        
+                        Para criar sua conta, acesse o link abaixo:
+                        %s
+                        
+                        Este link é válido até: %s
+                        
+                        Após criar sua conta, você poderá fazer login com seu email e a senha que escolher.
+                        
+                        Atenciosamente,
+                        Sistema ACLP - TJBA
+                        """,
                 convite.getTipoUsuario().getLabel(),
                 convite.getComarca() != null ? convite.getComarca() : "Não definida",
                 convite.getDepartamento() != null ? convite.getDepartamento() : "Não definido",
@@ -361,6 +362,7 @@ public class ConviteService {
 
         emailService.enviarEmail(convite.getEmail(), assunto, conteudo);
     }
+
     private ConviteListItem toListItem(Convite convite) {
         return ConviteListItem.builder()
                 .id(convite.getId())

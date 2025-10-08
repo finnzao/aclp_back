@@ -46,7 +46,8 @@ public class UsuarioService {
                 .senha(passwordEncoder.encode(dto.getSenha()))
                 .tipo(dto.getTipo() != null ? dto.getTipo() : TipoUsuario.USUARIO)
                 .departamento(dto.getDepartamento())
-                .telefone(dto.getTelefone())
+                .comarca(dto.getComarca())
+                .cargo(dto.getCargo())
                 .ativo(true)
                 .build();
 
@@ -71,7 +72,8 @@ public class UsuarioService {
         }
         usuario.setTipo(dto.getTipo());
         usuario.setDepartamento(dto.getDepartamento());
-        usuario.setTelefone(dto.getTelefone());
+        usuario.setComarca(dto.getComarca());
+        usuario.setCargo(dto.getCargo());
 
         return usuarioRepository.save(usuario);
     }

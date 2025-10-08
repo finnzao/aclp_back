@@ -84,7 +84,8 @@ public class AuthDTO {
         private String email;
         private TipoUsuario tipo;
         private String departamento;
-        private String telefone;
+        private String comarca;
+        private String cargo;
         private String avatar;
         private LocalDateTime ultimoLogin;
         private boolean mfaEnabled;

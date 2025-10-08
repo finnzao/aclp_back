@@ -52,7 +52,6 @@ class UsuarioControllerTest {
                 .senha("senhaEncriptada")
                 .tipo(TipoUsuario.USUARIO)
                 .departamento("Vara Criminal")
-                .telefone("(71) 98888-8888")
                 .ativo(true)
                 .criadoEm(LocalDateTime.now())
                 .build();
@@ -64,7 +63,6 @@ class UsuarioControllerTest {
                 .senha("Senha@123")
                 .tipo(TipoUsuario.USUARIO)
                 .departamento("Vara Criminal")
-                .telefone("(71) 98888-8888")
                 .ativo(true)
                 .build();
     }
