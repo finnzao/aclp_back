@@ -1,380 +1,566 @@
 package br.jus.tjba.aclp.service;
 
-import br.jus.tjba.aclp.dto.EmailVerificationDTO.*;
-import br.jus.tjba.aclp.model.EmailVerification;
-import br.jus.tjba.aclp.repository.EmailVerificationRepository;
+import br.jus.tjba.aclp.dto.ConviteDTO.*;
+import br.jus.tjba.aclp.model.Convite;
+import br.jus.tjba.aclp.model.PreCadastro;
+import br.jus.tjba.aclp.model.Usuario;
+import br.jus.tjba.aclp.model.enums.StatusConvite;
+import br.jus.tjba.aclp.model.enums.StatusUsuario;
+import br.jus.tjba.aclp.model.enums.TipoUsuario;
+import br.jus.tjba.aclp.repository.ConviteRepository;
+import br.jus.tjba.aclp.repository.PreCadastroRepository;
 import br.jus.tjba.aclp.repository.UsuarioRepository;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.security.MessageDigest;
-import java.security.SecureRandom;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+import java.security.SecureRandom;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
- * Serviço responsável pela verificação de email com códigos de segurança
- * Gerencia todo o fluxo: solicitação → envio → verificação → token
+ * Serviço para gerenciar verificação de email em duas etapas
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class EmailVerificationService {
 
-    private final EmailVerificationRepository emailVerificationRepository;
+    private final PreCadastroRepository preCadastroRepository;
+    private final ConviteRepository conviteRepository;
     private final UsuarioRepository usuarioRepository;
-    private final EmailService emailService; // Será implementado na próxima resposta
+    private final PasswordEncoder passwordEncoder;
+    private final EmailService emailService;
+
+    @Value("${aclp.frontend.url:http://localhost:3000}")
+    private String frontendUrl;
 
     private final SecureRandom secureRandom = new SecureRandom();
-    private static final int CODIGO_LENGTH = 6;
-    private static final int VALIDADE_MINUTOS = 10;
-    private static final int MAX_TENTATIVAS = 5;
-    private static final int MAX_CODIGOS_POR_HORA_IP = 10;
-    private static final int MAX_CODIGOS_POR_HORA_EMAIL = 3;
+
+    // ========== DTOs INTERNOS PARA COMPATIBILIDADE ==========
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class SolicitarCodigoDTO {
+        @NotBlank(message = "Email é obrigatório")
+        @Email(message = "Email inválido")
+        private String email;
+        private String nome;
+        private TipoUsuario tipoUsuario;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class SolicitarCodigoResponseDTO {
+        private Boolean success;
+        private String message;
+        private String email;
+        private LocalDateTime expiraEm;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class VerificarCodigoDTO {
+        @NotBlank(message = "Email é obrigatório")
+        @Email(message = "Email inválido")
+        private String email;
+        @NotBlank(message = "Código é obrigatório")
+        private String codigo;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class VerificarCodigoResponseDTO {
+        private Boolean success;
+        private Boolean emailVerificado;
+        private String message;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class StatusVerificacaoDTO {
+        private String email;
+        private Boolean emailVerificado;
+        private Boolean codigoEnviado;
+        private LocalDateTime expiraEm;
+        private Integer tentativasRestantes;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ReenviarCodigoDTO {
+        @NotBlank(message = "Email é obrigatório")
+        @Email(message = "Email inválido")
+        private String email;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class TokenValidoDTO {
+        private Boolean valido;
+        private String email;
+        private String mensagem;
+    }
+
+    // ========== MÉTODOS PRINCIPAIS DO FLUXO DE CONVITES ==========
 
     /**
-     * Solicita um novo código de verificação
+     * ETAPA 1: Cria pré-cadastro e envia email de verificação
+     * Usado no fluxo de convites
      */
     @Transactional
-    public SolicitarCodigoResponseDTO solicitarCodigo(SolicitarCodigoDTO dto, String clientIp) {
-        log.info("Solicitando código de verificação - Email: {}, Tipo: {}, IP: {}",
-                dto.getEmail(), dto.getTipoUsuario(), clientIp);
+    public PreCadastroResponse criarPreCadastro(PreCadastroRequest request, HttpServletRequest httpRequest) {
+        log.info("Iniciando pré-cadastro - Token: {}", request.getToken());
 
-        // Limpar e validar dados
-        dto.limparEFormatarDados();
-        validarSolicitacaoCodigo(dto, clientIp);
+        // Validar convite
+        Convite convite = conviteRepository.findByToken(request.getToken())
+                .orElseThrow(() -> new IllegalArgumentException("Convite não encontrado"));
 
-        // Invalidar códigos anteriores do mesmo email
-        invalidarCodigosAnteriores(dto.getEmail());
+        if (!convite.isValido()) {
+            throw new IllegalArgumentException("Convite inválido ou expirado");
+        }
 
-        // Gerar novo código
-        String codigo = gerarCodigo();
-        LocalDateTime expiraEm = LocalDateTime.now().plusMinutes(VALIDADE_MINUTOS);
+        // Validar email
+        String email = request.getEmail().toLowerCase().trim();
 
-        // Criar registro de verificação
-        EmailVerification verification = EmailVerification.builder()
-                .email(dto.getEmail())
-                .codigo(codigo)
-                .expiraEm(expiraEm)
-                .ipSolicitacao(clientIp)
-                .tipoUsuario(dto.getTipoUsuario())
-                .maxTentativas(MAX_TENTATIVAS)
+        if (usuarioRepository.existsByEmail(email)) {
+            throw new IllegalArgumentException("Este email já está cadastrado");
+        }
+
+        if (preCadastroRepository.existsByEmailAndVerificadoFalse(email)) {
+            throw new IllegalArgumentException("Já existe um cadastro pendente para este email. Verifique sua caixa de entrada.");
+        }
+
+        // Validar senhas
+        if (!request.senhasCoincidentes()) {
+            throw new IllegalArgumentException("As senhas não coincidem");
+        }
+
+        // Criar pré-cadastro
+        PreCadastro preCadastro = PreCadastro.builder()
+                .tokenConvite(convite.getToken())
+                .email(email)
+                .nome(request.getNome())
+                .senha(passwordEncoder.encode(request.getSenha()))
+                .tipoUsuario(convite.getTipoUsuario())
+                .comarca(convite.getComarca())
+                .departamento(convite.getDepartamento())
+                .cargo(request.getCargo())
+                .ipCadastro(extractIpAddress(httpRequest))
                 .build();
 
-        EmailVerification saved = emailVerificationRepository.save(verification);
+        preCadastro = preCadastroRepository.save(preCadastro);
 
-        // Enviar email com código
-        enviarEmailComCodigo(dto.getEmail(), codigo, dto.getTipoUsuario());
+        // Enviar email de verificação
+        try {
+            enviarEmailVerificacao(preCadastro);
+            log.info("Email de verificação enviado para: {}", email);
+        } catch (Exception e) {
+            log.error("Erro ao enviar email de verificação: {}", e.getMessage());
+            // Não falhar o processo se o email não for enviado
+        }
 
-        log.info("Código de verificação gerado - Email: {}, ID: {}, Expira em: {}",
-                dto.getEmail(), saved.getId(), expiraEm);
+        return PreCadastroResponse.builder()
+                .success(true)
+                .message("Cadastro iniciado! Verifique seu email para confirmar a conta.")
+                .email(email)
+                .expiracaoVerificacao(preCadastro.getExpiraEm())
+                .build();
+    }
+
+    /**
+     * ETAPA 2: Verifica email e cria usuário definitivo
+     */
+    @Transactional
+    public VerificarEmailResponse verificarEmail(String token, HttpServletRequest httpRequest) {
+        log.info("Verificando email - Token: {}", token);
+
+        // Buscar pré-cadastro
+        PreCadastro preCadastro = preCadastroRepository.findByTokenVerificacao(token)
+                .orElseThrow(() -> new IllegalArgumentException("Token de verificação inválido"));
+
+        // Validar status
+        if (preCadastro.isVerificado()) {
+            throw new IllegalArgumentException("Este email já foi verificado");
+        }
+
+        if (preCadastro.isExpirado()) {
+            throw new IllegalArgumentException("Token de verificação expirado. Faça um novo cadastro.");
+        }
+
+        if (preCadastro.excedeuTentativas()) {
+            throw new IllegalArgumentException("Muitas tentativas de verificação. Token bloqueado.");
+        }
+
+        // Incrementar tentativas
+        preCadastro.incrementarTentativas();
+
+        // Verificar novamente se email já existe (dupla verificação)
+        if (usuarioRepository.existsByEmail(preCadastro.getEmail())) {
+            throw new IllegalArgumentException("Este email já está cadastrado");
+        }
+
+        // Criar usuário definitivo
+        Usuario usuario = Usuario.builder()
+                .nome(preCadastro.getNome())
+                .email(preCadastro.getEmail())
+                .senha(preCadastro.getSenha()) // Já está criptografada
+                .tipo(preCadastro.getTipoUsuario())
+                .comarca(preCadastro.getComarca())
+                .departamento(preCadastro.getDepartamento())
+                .cargo(preCadastro.getCargo())
+                .ativo(true)
+                .statusUsuario(StatusUsuario.ACTIVE)
+                .emailVerificado(true)
+                .dataVerificacaoEmail(LocalDateTime.now())
+                .deveTrocarSenha(false)
+                .build();
+
+        usuario = usuarioRepository.save(usuario);
+
+        // Marcar pré-cadastro como verificado
+        preCadastro.marcarVerificado(extractIpAddress(httpRequest), usuario.getId());
+        preCadastroRepository.save(preCadastro);
+
+        // Atualizar convite original
+        Convite convite = conviteRepository.findByToken(preCadastro.getTokenConvite()).orElse(null);
+        if (convite != null && convite.getStatus() == StatusConvite.PENDENTE) {
+            convite.registrarUso();
+            conviteRepository.save(convite);
+        }
+
+        // Enviar email de boas-vindas
+        try {
+            enviarEmailBoasVindas(usuario);
+        } catch (Exception e) {
+            log.error("Erro ao enviar email de boas-vindas: {}", e.getMessage());
+        }
+
+        log.info("Usuário criado com sucesso - Email: {}, ID: {}", usuario.getEmail(), usuario.getId());
+
+        return VerificarEmailResponse.builder()
+                .success(true)
+                .message("Email verificado com sucesso! Sua conta foi ativada.")
+                .usuario(UsuarioInfoDTO.builder()
+                        .id(usuario.getId())
+                        .nome(usuario.getNome())
+                        .email(usuario.getEmail())
+                        .tipo(usuario.getTipo())
+                        .comarca(usuario.getComarca())
+                        .departamento(usuario.getDepartamento())
+                        .cargo(usuario.getCargo())
+                        .build())
+                .loginUrl("/login")
+                .build();
+    }
+
+    /**
+     * Reenvia email de verificação
+     */
+    @Transactional
+    public void reenviarEmailVerificacao(String email) {
+        log.info("Reenviando email de verificação para: {}", email);
+
+        PreCadastro preCadastro = preCadastroRepository.findByEmail(email.toLowerCase().trim())
+                .orElseThrow(() -> new IllegalArgumentException("Pré-cadastro não encontrado"));
+
+        if (preCadastro.isVerificado()) {
+            throw new IllegalArgumentException("Este email já foi verificado");
+        }
+
+        if (preCadastro.isExpirado()) {
+            throw new IllegalArgumentException("Pré-cadastro expirado. Faça um novo cadastro.");
+        }
+
+        // Enviar email
+        enviarEmailVerificacao(preCadastro);
+        log.info("Email de verificação reenviado");
+    }
+
+    // ========== MÉTODOS ADICIONAIS PARA COMPATIBILIDADE ==========
+
+    /**
+     * Solicita código de verificação (método alternativo)
+     * Compatibilidade com EmailVerificationController existente
+     */
+    @Transactional
+    public SolicitarCodigoResponseDTO solicitarCodigo(SolicitarCodigoDTO request, String ipAddress) {
+        log.info("Solicitando código de verificação - Email: {}", request.getEmail());
+
+        String email = request.getEmail().toLowerCase().trim();
+
+        // Verificar se email já existe
+        if (usuarioRepository.existsByEmail(email)) {
+            throw new IllegalArgumentException("Este email já está cadastrado");
+        }
+
+        // Criar ou atualizar pré-cadastro simplificado
+        PreCadastro preCadastro = preCadastroRepository.findByEmail(email)
+                .orElse(PreCadastro.builder()
+                        .email(email)
+                        .nome(request.getNome() != null ? request.getNome() : "Usuário")
+                        .tokenConvite("temp-" + UUID.randomUUID())
+                        .tokenVerificacao("ver-" + UUID.randomUUID())
+                        .senha(passwordEncoder.encode(UUID.randomUUID().toString())) // Senha temporária
+                        .tipoUsuario(request.getTipoUsuario() != null ? request.getTipoUsuario() : TipoUsuario.USUARIO)
+                        .ipCadastro(ipAddress)
+                        .build());
+
+        // Gerar novo token se expirou
+        if (preCadastro.isExpirado() || preCadastro.isVerificado()) {
+            preCadastro.setTokenVerificacao("ver-" + UUID.randomUUID());
+            preCadastro.setExpiraEm(LocalDateTime.now().plusHours(24));
+            preCadastro.setVerificado(false);
+            preCadastro.setTentativasVerificacao(0);
+        }
+
+        preCadastroRepository.save(preCadastro);
+
+        // Enviar email
+        enviarEmailVerificacao(preCadastro);
 
         return SolicitarCodigoResponseDTO.builder()
-                .status("success")
-                .message("Código de verificação enviado para " + mascarEmail(dto.getEmail()))
-                .email(mascarEmail(dto.getEmail()))
-                .validadePorMinutos(VALIDADE_MINUTOS)
-                .tentativasPermitidas(MAX_TENTATIVAS)
-                .codigoId(gerarHashPublico(saved.getId()))
+                .success(true)
+                .message("Código de verificação enviado para " + email)
+                .email(email)
+                .expiraEm(preCadastro.getExpiraEm())
                 .build();
     }
 
     /**
-     * Verifica um código enviado pelo usuário
+     * Verifica código (compatibilidade)
      */
     @Transactional
-    public VerificarCodigoResponseDTO verificarCodigo(VerificarCodigoDTO dto, String clientIp) {
-        log.info("Verificando código - Email: {}, IP: {}", dto.getEmail(), clientIp);
+    public VerificarCodigoResponseDTO verificarCodigo(VerificarCodigoDTO request, String ipAddress) {
+        log.info("Verificando código - Email: {}", request.getEmail());
 
-        // Limpar dados
-        dto.limparEFormatarDados();
+        PreCadastro preCadastro = preCadastroRepository.findByEmail(request.getEmail().toLowerCase())
+                .orElseThrow(() -> new IllegalArgumentException("Código inválido"));
 
-        // Buscar código ativo
-        Optional<EmailVerification> optVerification = emailVerificationRepository
-                .findByEmailAndCodigo(dto.getEmail(), dto.getCodigo(), LocalDateTime.now());
-
-        if (optVerification.isEmpty()) {
-            log.warn("Código inválido ou expirado - Email: {}, Código: {}, IP: {}",
-                    dto.getEmail(), dto.getCodigo(), clientIp);
-
-            // Verificar se existe código ativo para incrementar tentativas
-            emailVerificationRepository.findActiveByEmail(dto.getEmail(), LocalDateTime.now())
-                    .ifPresent(verification -> {
-                        verification.incrementarTentativas();
-                        emailVerificationRepository.save(verification);
-                    });
-
-            return VerificarCodigoResponseDTO.builder()
-                    .status("error")
-                    .message("Código inválido ou expirado")
-                    .email(mascarEmail(dto.getEmail()))
-                    .verificado(false)
-                    .build();
+        // Aqui você poderia implementar verificação de código numérico
+        // Por enquanto, vamos usar o token
+        if (!preCadastro.getTokenVerificacao().endsWith(request.getCodigo())) {
+            throw new IllegalArgumentException("Código incorreto");
         }
 
-        EmailVerification verification = optVerification.get();
-
-        // Verificar se ainda pode tentar
-        if (!verification.podeTentar()) {
-            log.warn("Muitas tentativas para código - Email: {}, Tentativas: {}, IP: {}",
-                    dto.getEmail(), verification.getTentativas(), clientIp);
-
-            return VerificarCodigoResponseDTO.builder()
-                    .status("error")
-                    .message("Muitas tentativas. Solicite um novo código.")
-                    .email(mascarEmail(dto.getEmail()))
-                    .verificado(false)
-                    .tentativasRestantes(0)
-                    .build();
-        }
-
-        // Código correto! Marcar como verificado
-        verification.marcarComoVerificado(clientIp);
-        emailVerificationRepository.save(verification);
-
-        // Gerar token temporário para criação do usuário
-        String tokenVerificacao = gerarTokenVerificacao(verification);
-
-        log.info("Código verificado com sucesso - Email: {}, IP: {}", dto.getEmail(), clientIp);
+        preCadastro.setVerificado(true);
+        preCadastro.setVerificadoEm(LocalDateTime.now());
+        preCadastroRepository.save(preCadastro);
 
         return VerificarCodigoResponseDTO.builder()
-                .status("success")
+                .success(true)
+                .emailVerificado(true)
                 .message("Email verificado com sucesso")
-                .email(mascarEmail(dto.getEmail()))
-                .verificado(true)
-                .tokenVerificacao(tokenVerificacao)
-                .validoAte(LocalDateTime.now().plusMinutes(30).format(DateTimeFormatter.ofPattern("HH:mm")))
                 .build();
     }
 
     /**
-     * Consulta status de verificação sem fazer nova verificação
+     * Consulta status de verificação
      */
     @Transactional(readOnly = true)
     public StatusVerificacaoDTO consultarStatus(String email) {
-        log.debug("Consultando status de verificação - Email: {}", email);
+        Optional<PreCadastro> preCadastroOpt = preCadastroRepository.findByEmail(email.toLowerCase());
 
-        email = email.trim().toLowerCase();
-
-        Optional<EmailVerification> optActive = emailVerificationRepository
-                .findActiveByEmail(email, LocalDateTime.now());
-
-        if (optActive.isEmpty()) {
+        if (preCadastroOpt.isEmpty()) {
             return StatusVerificacaoDTO.builder()
-                    .email(mascarEmail(email))
-                    .possuiCodigoAtivo(false)
-                    .verificado(false)
-                    .podeReenviar(true)
+                    .email(email)
+                    .emailVerificado(false)
+                    .codigoEnviado(false)
                     .build();
         }
 
-        EmailVerification verification = optActive.get();
+        PreCadastro preCadastro = preCadastroOpt.get();
 
         return StatusVerificacaoDTO.builder()
-                .email(mascarEmail(email))
-                .possuiCodigoAtivo(true)
-                .verificado(verification.getVerificado())
-                .tentativasRestantes(verification.getTentativasRestantes())
-                .minutosRestantes((int) verification.getMinutosRestantes())
-                .podeReenviar(verification.getTentativas() >= MAX_TENTATIVAS || verification.isExpirado())
+                .email(email)
+                .emailVerificado(preCadastro.isVerificado())
+                .codigoEnviado(!preCadastro.isExpirado())
+                .expiraEm(preCadastro.getExpiraEm())
+                .tentativasRestantes(5 - preCadastro.getTentativasVerificacao())
                 .build();
     }
 
     /**
-     * Reenvia código (invalida anterior e cria novo)
+     * Reenvia código (compatibilidade)
      */
     @Transactional
-    public SolicitarCodigoResponseDTO reenviarCodigo(ReenviarCodigoDTO dto, String clientIp) {
-        log.info("Reenviando código - Email: {}, IP: {}", dto.getEmail(), clientIp);
-
-        dto.limparEFormatarDados();
-
-        // Verificar rate limiting
-        validarRateLimiting(dto.getEmail(), clientIp);
-
-        // Buscar verificação anterior para manter tipo de usuário
-        String tipoUsuario = emailVerificationRepository
-                .findActiveByEmail(dto.getEmail(), LocalDateTime.now())
-                .map(EmailVerification::getTipoUsuario)
-                .orElse("USUARIO");
-
-        // Criar nova solicitação
-        SolicitarCodigoDTO novasolicitacao = SolicitarCodigoDTO.builder()
-                .email(dto.getEmail())
-                .tipoUsuario(tipoUsuario)
-                .build();
-
-        return solicitarCodigo(novasolicitacao, clientIp);
+    public void reenviarCodigo(ReenviarCodigoDTO request, String ipAddress) {
+        reenviarEmailVerificacao(request.getEmail());
     }
 
     /**
-     * Valida token de verificação (usado ao criar usuário)
+     * Valida token de verificação (compatibilidade)
      */
-    public boolean validarTokenVerificacao(String email, String token) {
-        log.debug("Validando token de verificação - Email: {}", email);
+    @Transactional
+    public TokenValidoDTO validarTokenVerificacao(String token, String ipAddress) {
+        Optional<PreCadastro> preCadastroOpt = preCadastroRepository.findByTokenVerificacao(token);
 
-        // Buscar último código verificado
-        Optional<EmailVerification> optVerification = emailVerificationRepository
-                .findLastVerifiedByEmail(email.trim().toLowerCase());
-
-        if (optVerification.isEmpty()) {
-            log.warn("Nenhuma verificação encontrada para email: {}", email);
-            return false;
+        if (preCadastroOpt.isEmpty()) {
+            return TokenValidoDTO.builder()
+                    .valido(false)
+                    .mensagem("Token inválido")
+                    .build();
         }
 
-        EmailVerification verification = optVerification.get();
+        PreCadastro preCadastro = preCadastroOpt.get();
 
-        // Token deve ter sido gerado nos últimos 30 minutos
-        if (verification.getVerificadoEm().isBefore(LocalDateTime.now().minusMinutes(30))) {
-            log.warn("Token expirado para email: {}", email);
-            return false;
+        if (preCadastro.isExpirado()) {
+            return TokenValidoDTO.builder()
+                    .valido(false)
+                    .mensagem("Token expirado")
+                    .build();
         }
 
-        // Validar token
-        String tokenEsperado = gerarTokenVerificacao(verification);
-        boolean tokenValido = tokenEsperado.equals(token);
-
-        if (!tokenValido) {
-            log.warn("Token inválido para email: {}", email);
+        if (preCadastro.isVerificado()) {
+            return TokenValidoDTO.builder()
+                    .valido(false)
+                    .mensagem("Token já utilizado")
+                    .build();
         }
 
-        return tokenValido;
+        return TokenValidoDTO.builder()
+                .valido(true)
+                .email(preCadastro.getEmail())
+                .mensagem("Token válido")
+                .build();
     }
 
-    // ========== MÉTODOS PRIVADOS ==========
+    /**
+     * Job para limpar pré-cadastros expirados
+     * Executa diariamente às 3h da manhã
+     */
+    @Scheduled(cron = "0 0 3 * * ?")
+    @Transactional
+    public void limparPreCadastrosExpirados() {
+        log.info("Iniciando limpeza de pré-cadastros expirados");
 
-    private void validarSolicitacaoCodigo(SolicitarCodigoDTO dto, String clientIp) {
-        // Validar email para tipo de usuário
-        if (!dto.isEmailValidoParaTipo()) {
-            if ("ADMIN".equals(dto.getTipoUsuario())) {
-                throw new IllegalArgumentException("Administradores devem usar email institucional (@tjba.jus.br)");
-            } else {
-                throw new IllegalArgumentException("Email inválido");
-            }
-        }
+        LocalDateTime dataLimite = LocalDateTime.now().minusDays(7); // Remove após 7 dias
+        preCadastroRepository.deleteExpirados(dataLimite);
 
-        // Verificar se email já está em uso
-        if (usuarioRepository.existsByEmail(dto.getEmail())) {
-            throw new IllegalArgumentException("Email já está cadastrado no sistema");
-        }
-
-        // Verificar rate limiting
-        validarRateLimiting(dto.getEmail(), clientIp);
+        log.info("Limpeza de pré-cadastros concluída");
     }
 
-    private void validarRateLimiting(String email, String clientIp) {
-        LocalDateTime umaHoraAtras = LocalDateTime.now().minusHours(1);
+    // ========== MÉTODOS AUXILIARES ==========
 
-        // Verificar limite por IP
-        long codigosPorIp = emailVerificationRepository
-                .countByIpSolicitacaoAndCriadoEmAfter(clientIp, umaHoraAtras);
+    private void enviarEmailVerificacao(PreCadastro preCadastro) {
+        String linkVerificacao = String.format("%s/verificar-email/%s",
+                frontendUrl, preCadastro.getTokenVerificacao());
 
-        if (codigosPorIp >= MAX_CODIGOS_POR_HORA_IP) {
-            throw new IllegalArgumentException("Muitas solicitações deste IP. Tente novamente mais tarde.");
-        }
+        String assunto = "Confirme seu Email - Sistema ACLP";
 
-        // Verificar limite por email
-        long codigosPorEmail = emailVerificationRepository
-                .countByEmailAndCriadoEmAfter(email, umaHoraAtras);
-
-        if (codigosPorEmail >= MAX_CODIGOS_POR_HORA_EMAIL) {
-            throw new IllegalArgumentException("Muitas solicitações para este email. Tente novamente mais tarde.");
-        }
-    }
-
-    private void invalidarCodigosAnteriores(String email) {
-        emailVerificationRepository.invalidateAllByEmail(email, LocalDateTime.now());
-    }
-
-    private String gerarCodigo() {
-        // Gerar código de 6 dígitos
-        int codigo = secureRandom.nextInt(900000) + 100000;
-        return String.valueOf(codigo);
-    }
-
-    private void enviarEmailComCodigo(String email, String codigo, String tipoUsuario) {
-        try {
-            String assunto = "Código de Verificação - Sistema ACLP TJBA";
-            String conteudo = String.format("""
-                Olá,
+        String conteudo = String.format("""
+                Olá %s,
                 
-                Seu código de verificação para o Sistema ACLP é: %s
+                Você está quase lá! Clique no botão abaixo para confirmar seu email e ativar sua conta no Sistema ACLP:
                 
-                Este código é válido por %d minutos.
-                Tipo de usuário: %s
+                %s
                 
-                Se você não solicitou este código, ignore este email.
+                Ou copie e cole este link no seu navegador:
+                %s
+                
+                Seus dados de cadastro:
+                ━━━━━━━━━━━━━━━━━━━━━
+                Email: %s
+                Tipo de acesso: %s
+                Comarca: %s
+                Departamento: %s
+                Cargo: %s
+                ━━━━━━━━━━━━━━━━━━━━━
+                
+                ⚠️ Este link expira em 24 horas (%s)
+                
+                Após confirmar, você poderá fazer login com seu email e senha cadastrados.
+                
+                Se você não solicitou este cadastro, ignore este email.
                 
                 Atenciosamente,
                 Sistema ACLP - TJBA
-                """, codigo, VALIDADE_MINUTOS, tipoUsuario.equals("ADMIN") ? "Administrador" : "Usuário");
+                """,
+                preCadastro.getNome(),
+                linkVerificacao,
+                linkVerificacao,
+                preCadastro.getEmail(),
+                preCadastro.getTipoUsuario() != null ? preCadastro.getTipoUsuario().getLabel() : "Usuário",
+                preCadastro.getComarca() != null ? preCadastro.getComarca() : "Não definida",
+                preCadastro.getDepartamento() != null ? preCadastro.getDepartamento() : "Não definido",
+                preCadastro.getCargo() != null ? preCadastro.getCargo() : "Não definido",
+                preCadastro.getExpiraEm()
+        );
 
-            emailService.enviarEmail(email, assunto, conteudo);
-
-        } catch (Exception e) {
-            log.error("Erro ao enviar email para: " + email, e);
-            throw new RuntimeException("Erro ao enviar código por email. Tente novamente.");
-        }
+        emailService.enviarEmail(preCadastro.getEmail(), assunto, conteudo);
     }
 
-    private String mascarEmail(String email) {
-        if (email == null || !email.contains("@")) {
-            return email;
-        }
+    private void enviarEmailBoasVindas(Usuario usuario) {
+        String assunto = "Bem-vindo ao Sistema ACLP - TJBA";
 
-        String[] parts = email.split("@");
-        String local = parts[0];
-        String domain = parts[1];
+        String conteudo = String.format("""
+                Olá %s,
+                
+                Sua conta no Sistema ACLP foi ativada com sucesso!
+                
+                Seus dados de acesso:
+                ━━━━━━━━━━━━━━━━━━━━━
+                Email (login): %s
+                Tipo de acesso: %s
+                Comarca: %s
+                Departamento: %s
+                ━━━━━━━━━━━━━━━━━━━━━
+                
+                Você já pode acessar o sistema em:
+                %s
+                
+                Use seu email e a senha que você cadastrou para fazer login.
+                
+                Em caso de dúvidas, entre em contato com o suporte.
+                
+                Atenciosamente,
+                Sistema ACLP - TJBA
+                """,
+                usuario.getNome(),
+                usuario.getEmail(),
+                usuario.getTipo().getLabel(),
+                usuario.getComarca() != null ? usuario.getComarca() : "Não definida",
+                usuario.getDepartamento() != null ? usuario.getDepartamento() : "Não definido",
+                frontendUrl
+        );
 
-        if (local.length() <= 3) {
-            return local.charAt(0) + "***@" + domain;
-        }
-
-        return local.substring(0, 2) + "***" + local.substring(local.length() - 1) + "@" + domain;
+        emailService.enviarEmail(usuario.getEmail(), assunto, conteudo);
     }
 
-    private String gerarHashPublico(Long id) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            String input = id + "_" + System.currentTimeMillis();
-            byte[] hash = md.digest(input.getBytes());
-            return java.util.Base64.getEncoder().encodeToString(hash).substring(0, 16);
-        } catch (Exception e) {
-            return String.valueOf(id.hashCode());
+    private String extractIpAddress(HttpServletRequest request) {
+        if (request == null) {
+            return "unknown";
         }
-    }
-
-    private String gerarTokenVerificacao(EmailVerification verification) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            String input = verification.getId() + "_" + verification.getEmail() + "_" +
-                    verification.getVerificadoEm() + "_" + "ACLP_SECRET";
-            byte[] hash = md.digest(input.getBytes());
-            return java.util.Base64.getEncoder().encodeToString(hash);
-        } catch (Exception e) {
-            throw new RuntimeException("Erro ao gerar token de verificação");
+        String xForwardedFor = request.getHeader("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
+            return xForwardedFor.split(",")[0].trim();
         }
-    }
-
-    /**
-     * Limpeza automática de códigos expirados (executar periodicamente)
-     */
-    @Transactional
-    public void limparCodigosExpirados() {
-        log.debug("Executando limpeza de códigos expirados");
-
-        LocalDateTime agora = LocalDateTime.now();
-        LocalDateTime limiteLimpeza = agora.minusDays(7); // Remove verificados há mais de 7 dias
-
-        int expirados = emailVerificationRepository.deleteExpiredCodes(agora);
-        int verificadosAntigos = emailVerificationRepository.deleteOldVerifiedCodes(limiteLimpeza);
-
-        if (expirados > 0 || verificadosAntigos > 0) {
-            log.info("Limpeza concluída - Removidos: {} expirados, {} verificados antigos",
-                    expirados, verificadosAntigos);
-        }
+        return request.getRemoteAddr();
     }
 }

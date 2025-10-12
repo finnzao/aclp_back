@@ -10,10 +10,13 @@ import java.time.LocalDateTime;
 @Builder
 public class ValidarConviteResponse {
     private Boolean valido;
-    private String email;
     private TipoUsuario tipoUsuario;
     private LocalDateTime expiraEm;
     private String mensagem;
-    private String comarca;        // Pré-preenchido
-    private String departamento;   // Pré-preenchido
+    private String comarca;        // Pré-preenchido do admin
+    private String departamento;   // Pré-preenchido do admin
+
+    public boolean isValido() {
+        return Boolean.TRUE.equals(valido);
+    }
 }

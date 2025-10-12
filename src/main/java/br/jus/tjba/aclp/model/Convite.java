@@ -25,8 +25,9 @@ public class Convite {
 
     /**
      * Email do convidado - será o login dele no sistema
+     * No novo fluxo pode ser nulo (preenchido depois)
      */
-    @Column(nullable = false)
+    @Column(nullable = true)
     private String email;
 
     /**
@@ -89,10 +90,25 @@ public class Convite {
     @Column(name = "ip_criacao", length = 45)
     private String ipCriacao;
 
-
+    /**
+     * IP de onde o convite foi ativado
+     */
     @Column(name = "ip_ativacao", length = 45)
     private String ipAtivacao;
 
+    /**
+     * Quantidade de vezes que o link pode ser usado (novo campo)
+     */
+    @Column(name = "quantidade_usos")
+    @Builder.Default
+    private Integer quantidadeUsos = 1;
+
+    /**
+     * Quantidade de vezes que o link já foi usado (novo campo)
+     */
+    @Column(name = "usos_realizados")
+    @Builder.Default
+    private Integer usosRealizados = 0;
 
     @Column(name = "criado_em", nullable = false)
     private LocalDateTime criadoEm;
@@ -108,10 +124,24 @@ public class Convite {
      */
     @PrePersist
     protected void onCreate() {
-        this.criadoEm = LocalDateTime.now();
-        this.expiraEm = LocalDateTime.now().plusDays(7); // 7 dias de validade
-        this.token = UUID.randomUUID().toString();
-        this.status = StatusConvite.PENDENTE;
+        if (this.criadoEm == null) {
+            this.criadoEm = LocalDateTime.now();
+        }
+        if (this.expiraEm == null) {
+            this.expiraEm = LocalDateTime.now().plusDays(7); // 7 dias de validade
+        }
+        if (this.token == null) {
+            this.token = UUID.randomUUID().toString();
+        }
+        if (this.status == null) {
+            this.status = StatusConvite.PENDENTE;
+        }
+        if (this.quantidadeUsos == null) {
+            this.quantidadeUsos = 1;
+        }
+        if (this.usosRealizados == null) {
+            this.usosRealizados = 0;
+        }
     }
 
     /**
@@ -119,7 +149,9 @@ public class Convite {
      * @return true se está pendente e não expirou
      */
     public boolean isValido() {
-        return status == StatusConvite.PENDENTE && !isExpirado();
+        return status == StatusConvite.PENDENTE &&
+                !isExpirado() &&
+                (quantidadeUsos == null || usosRealizados < quantidadeUsos);
     }
 
     /**
@@ -140,6 +172,33 @@ public class Convite {
         this.status = StatusConvite.ATIVADO;
         this.ativadoEm = LocalDateTime.now();
         this.ipAtivacao = ip;
+    }
+
+    /**
+     * Registra uso do convite (para convites com múltiplos usos)
+     */
+    public void registrarUso() {
+        if (this.usosRealizados == null) {
+            this.usosRealizados = 0;
+        }
+        this.usosRealizados++;
+
+        // SEMPRE marca como ativado após o primeiro uso
+        this.status = StatusConvite.ATIVADO;
+        this.ativadoEm = LocalDateTime.now();
+    }
+
+    /**
+     * Retorna quantos usos ainda estão disponíveis
+     */
+    public int getUsosRestantes() {
+        if (quantidadeUsos == null) {
+            return Integer.MAX_VALUE; // Ilimitado
+        }
+        if (usosRealizados == null) {
+            return quantidadeUsos;
+        }
+        return Math.max(0, quantidadeUsos - usosRealizados);
     }
 
     /**

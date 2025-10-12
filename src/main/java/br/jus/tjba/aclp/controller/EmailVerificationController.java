@@ -1,7 +1,7 @@
 package br.jus.tjba.aclp.controller;
 
-import br.jus.tjba.aclp.dto.EmailVerificationDTO.*;
 import br.jus.tjba.aclp.service.EmailVerificationService;
+import br.jus.tjba.aclp.service.EmailVerificationService.*;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -92,7 +92,7 @@ public class EmailVerificationController {
         try {
             VerificarCodigoResponseDTO response = emailVerificationService.verificarCodigo(dto, clientIp);
 
-            if (response.getVerificado()) {
+            if (Boolean.TRUE.equals(response.getSuccess())) {
                 log.info("Código verificado com sucesso - Email: {}, IP: {}", dto.getEmail(), clientIp);
                 return ResponseEntity.ok(response);
             } else {
@@ -130,9 +130,9 @@ public class EmailVerificationController {
 
             StatusVerificacaoDTO errorStatus = StatusVerificacaoDTO.builder()
                     .email(email)
-                    .possuiCodigoAtivo(false)
-                    .verificado(false)
-                    .podeReenviar(true)
+                    .emailVerificado(false)
+                    .codigoEnviado(false)
+                    .tentativasRestantes(0)
                     .build();
 
             return ResponseEntity.ok(errorStatus);
@@ -155,8 +155,13 @@ public class EmailVerificationController {
         log.info("Reenvio de código solicitado - Email: {}, IP: {}", dto.getEmail(), clientIp);
 
         try {
-            SolicitarCodigoResponseDTO response = emailVerificationService.reenviarCodigo(dto, clientIp);
-            return ResponseEntity.ok(response);
+            emailVerificationService.reenviarCodigo(dto, clientIp);
+
+            return ResponseEntity.ok(Map.of(
+                    "status", "success",
+                    "message", "Código reenviado com sucesso",
+                    "email", dto.getEmail()
+            ));
 
         } catch (IllegalArgumentException e) {
             log.warn("Erro ao reenviar código - Email: {}, Erro: {}, IP: {}",
@@ -186,30 +191,70 @@ public class EmailVerificationController {
             description = "Valida token gerado após verificação do código - usado internamente pelo sistema")
     @ApiResponse(responseCode = "200", description = "Token validado")
     public ResponseEntity<Map<String, Object>> validarToken(
-            @RequestParam String email,
             @RequestParam String token,
             HttpServletRequest request) {
 
         String clientIp = getClientIpAddress(request);
-        log.debug("Validação de token - Email: {}, IP: {}", email, clientIp);
+        log.debug("Validação de token - Token: {}, IP: {}", token, clientIp);
 
         try {
-            boolean tokenValido = emailVerificationService.validarTokenVerificacao(email, token);
+            TokenValidoDTO resultado = emailVerificationService.validarTokenVerificacao(token, clientIp);
 
             return ResponseEntity.ok(Map.of(
-                    "status", tokenValido ? "success" : "error",
-                    "valid", tokenValido,
-                    "message", tokenValido ? "Token válido" : "Token inválido ou expirado"
+                    "status", Boolean.TRUE.equals(resultado.getValido()) ? "success" : "error",
+                    "valid", Boolean.TRUE.equals(resultado.getValido()),
+                    "email", resultado.getEmail() != null ? resultado.getEmail() : "",
+                    "message", resultado.getMensagem() != null ? resultado.getMensagem() : "Token processado"
             ));
 
         } catch (Exception e) {
-            log.error("Erro ao validar token - Email: " + email + ", IP: " + clientIp, e);
+            log.error("Erro ao validar token - IP: " + clientIp, e);
 
             return ResponseEntity.ok(Map.of(
                     "status", "error",
                     "valid", false,
                     "message", "Erro ao validar token"
             ));
+        }
+    }
+
+    @GetMapping("/validar-token/{token}")
+    @Operation(summary = "Validar token via GET",
+            description = "Valida token de verificação via GET - usado para links de email")
+    @ApiResponse(responseCode = "200", description = "Token validado")
+    public ResponseEntity<Map<String, Object>> validarTokenGet(
+            @PathVariable String token,
+            HttpServletRequest request) {
+
+        String clientIp = getClientIpAddress(request);
+        log.debug("Validação de token via GET - Token: {}, IP: {}", token, clientIp);
+
+        try {
+            TokenValidoDTO resultado = emailVerificationService.validarTokenVerificacao(token, clientIp);
+
+            if (Boolean.TRUE.equals(resultado.getValido())) {
+                return ResponseEntity.ok(Map.of(
+                        "status", "success",
+                        "valid", true,
+                        "email", resultado.getEmail() != null ? resultado.getEmail() : "",
+                        "message", "Token válido. Redirecionando..."
+                ));
+            } else {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "status", "error",
+                        "valid", false,
+                        "message", resultado.getMensagem() != null ? resultado.getMensagem() : "Token inválido"
+                ));
+            }
+
+        } catch (Exception e) {
+            log.error("Erro ao validar token via GET", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of(
+                            "status", "error",
+                            "valid", false,
+                            "message", "Erro ao processar token"
+                    ));
         }
     }
 
