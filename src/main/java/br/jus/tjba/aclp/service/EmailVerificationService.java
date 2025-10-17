@@ -248,10 +248,11 @@ public class EmailVerificationService {
         preCadastro.marcarVerificado(extractIpAddress(httpRequest), usuario.getId());
         preCadastroRepository.save(preCadastro);
 
-        // Atualizar convite original
+        // Atualizar convite original - CORRIGIDO
         Convite convite = conviteRepository.findByToken(preCadastro.getTokenConvite()).orElse(null);
         if (convite != null && convite.getStatus() == StatusConvite.PENDENTE) {
-            convite.registrarUso();
+            // Usar o método ativar() ao invés de registrarUso()
+            convite.ativar(usuario, extractIpAddress(httpRequest));
             conviteRepository.save(convite);
         }
 

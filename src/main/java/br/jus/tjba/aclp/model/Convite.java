@@ -12,7 +12,12 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "convites")
+@Table(name = "convites", indexes = {
+        @Index(name = "idx_convites_token", columnList = "token"),
+        @Index(name = "idx_convites_status", columnList = "status"),
+        @Index(name = "idx_convites_email", columnList = "email"),
+        @Index(name = "idx_convites_expira_status", columnList = "expira_em, status")
+})
 @Data
 @Builder
 @NoArgsConstructor
@@ -25,16 +30,17 @@ public class Convite {
 
     /**
      * Email do convidado - será o login dele no sistema
-     * No novo fluxo pode ser nulo (preenchido depois)
+     * PODE SER NULL para convites genéricos/reutilizáveis
+     * Quando NULL, o usuário deverá informar o email ao ativar o convite
      */
-    @Column(nullable = true)
+    @Column(nullable = true, length = 255)
     private String email;
 
     /**
      * Tipo de usuário que será criado (USUARIO ou ADMIN)
      */
     @Enumerated(EnumType.STRING)
-    @Column(name = "tipo_usuario", nullable = false)
+    @Column(name = "tipo_usuario", nullable = false, length = 20)
     private TipoUsuario tipoUsuario;
 
     /**
@@ -52,7 +58,7 @@ public class Convite {
      * CANCELADO: admin cancelou o convite
      */
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 20)
     private StatusConvite status;
 
     /**
@@ -97,14 +103,16 @@ public class Convite {
     private String ipAtivacao;
 
     /**
-     * Quantidade de vezes que o link pode ser usado (novo campo)
+     * Quantidade de vezes que o link pode ser usado
+     * SEMPRE 1 = uso único (não permite reutilização)
      */
     @Column(name = "quantidade_usos")
     @Builder.Default
     private Integer quantidadeUsos = 1;
 
     /**
-     * Quantidade de vezes que o link já foi usado (novo campo)
+     * Quantidade de vezes que o link já foi usado
+     * 0 = não usado, 1 = já usado
      */
     @Column(name = "usos_realizados")
     @Builder.Default
@@ -145,25 +153,53 @@ public class Convite {
     }
 
     /**
+     * Verifica se é um convite genérico (sem email específico)
+     */
+    public boolean isGenerico() {
+        return this.email == null || this.email.trim().isEmpty();
+    }
+
+    /**
      * Verifica se o convite pode ser usado
-     * @return true se está pendente e não expirou
      */
     public boolean isValido() {
         return status == StatusConvite.PENDENTE &&
                 !isExpirado() &&
-                (quantidadeUsos == null || usosRealizados < quantidadeUsos);
+                usosRealizados == 0; // Só válido se nunca foi usado
     }
 
     /**
      * Verifica se o convite já expirou
-     * @return true se a data atual passou da data de expiração
      */
     public boolean isExpirado() {
         return LocalDateTime.now().isAfter(expiraEm);
     }
 
     /**
-     * Ativa o convite após criação do usuário
+     * Verifica se ainda há usos disponíveis (sempre 1 uso)
+     */
+    public boolean temUsosDisponiveis() {
+        return usosRealizados == 0;
+    }
+
+    /**
+     * Retorna quantos usos ainda estão disponíveis (0 ou 1)
+     */
+    public int getUsosRestantes() {
+        return usosRealizados == 0 ? 1 : 0;
+    }
+
+    /**
+     * Registra uso do convite (marca como usado)
+     */
+    public void registrarUso() {
+        this.usosRealizados = 1;
+        this.status = StatusConvite.ATIVADO;
+        this.ativadoEm = LocalDateTime.now();
+    }
+
+    /**
+     * Ativa o convite após criação do usuário (uso único)
      * @param usuario Usuário criado
      * @param ip IP de onde foi ativado
      */
@@ -172,33 +208,7 @@ public class Convite {
         this.status = StatusConvite.ATIVADO;
         this.ativadoEm = LocalDateTime.now();
         this.ipAtivacao = ip;
-    }
-
-    /**
-     * Registra uso do convite (para convites com múltiplos usos)
-     */
-    public void registrarUso() {
-        if (this.usosRealizados == null) {
-            this.usosRealizados = 0;
-        }
-        this.usosRealizados++;
-
-        // SEMPRE marca como ativado após o primeiro uso
-        this.status = StatusConvite.ATIVADO;
-        this.ativadoEm = LocalDateTime.now();
-    }
-
-    /**
-     * Retorna quantos usos ainda estão disponíveis
-     */
-    public int getUsosRestantes() {
-        if (quantidadeUsos == null) {
-            return Integer.MAX_VALUE; // Ilimitado
-        }
-        if (usosRealizados == null) {
-            return quantidadeUsos;
-        }
-        return Math.max(0, quantidadeUsos - usosRealizados);
+        this.usosRealizados = 1;
     }
 
     /**
@@ -213,5 +223,33 @@ public class Convite {
      */
     public void expirar() {
         this.status = StatusConvite.EXPIRADO;
+    }
+
+    /**
+     * Valida se o email pode ser usado com este convite
+     */
+    public boolean validarEmail(String emailParaValidar) {
+        if (emailParaValidar == null || emailParaValidar.trim().isEmpty()) {
+            return false;
+        }
+
+        // Se convite tem email específico, deve coincidir
+        if (!isGenerico()) {
+            return this.email.equalsIgnoreCase(emailParaValidar.trim());
+        }
+
+        // Se é genérico, qualquer email válido é aceito
+        return true;
+    }
+
+    /**
+     * Retorna descrição do tipo de convite
+     */
+    public String getTipoConviteDescricao() {
+        if (isGenerico()) {
+            return "Link Genérico (Uso Único)";
+        } else {
+            return "Convite Específico (Uso Único)";
+        }
     }
 }

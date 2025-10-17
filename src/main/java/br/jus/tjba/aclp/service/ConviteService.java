@@ -22,6 +22,10 @@ import java.util.stream.Collectors;
 
 /**
  * Serviço para gerenciamento de convites
+ * TODOS OS CONVITES SÃO DE USO ÚNICO
+ * Suporta dois tipos de convites:
+ * 1. Convite Específico: com email definido, enviado por email
+ * 2. Convite Genérico: sem email, link compartilhável (uso único)
  */
 @Slf4j
 @Service
@@ -38,35 +42,32 @@ public class ConviteService {
     private String frontendUrl;
 
     /**
-     * NOVO MÉTODO: Gera link de convite genérico (sem email específico)
-     * O link pode ser compartilhado pelo admin da forma que preferir
+     * Gera link de convite genérico (sem email específico)
+     * USO ÚNICO - após ser usado uma vez, não pode ser reutilizado
      */
     @Transactional
     public LinkConviteResponse gerarLinkConvite(GerarLinkConviteRequest request, HttpServletRequest httpRequest) {
-        log.info("Gerando link de convite genérico - Tipo: {}", request.getTipoUsuario());
+        log.info("Gerando link de convite genérico (uso único) - Tipo: {}", request.getTipoUsuario());
 
-        // Pegar admin atual
+        // Validar admin atual
         Usuario admin = authService.getUsuarioAtual();
         if (admin == null) {
             throw new IllegalArgumentException("Usuário não autenticado");
         }
 
-        // Validar request
-        if (request.getQuantidadeUsos() == null || request.getQuantidadeUsos() < 1) {
-            request.setQuantidadeUsos(1);
-        }
-
+        // Validar parâmetros
         if (request.getDiasValidade() == null || request.getDiasValidade() < 1) {
-            request.setDiasValidade(30); // 30 dias por padrão
+            request.setDiasValidade(30); // 30 dias padrão
         }
 
-        // Criar convite SEM email específico
+        // Criar convite genérico (SEM email) - USO ÚNICO
         Convite convite = Convite.builder()
-                .email(null)  // Sem email específico
+                .email(null)  // NULL = convite genérico
                 .tipoUsuario(request.getTipoUsuario())
-                .comarca(admin.getComarca())           // COPIA comarca do admin
-                .departamento(admin.getDepartamento()) // COPIA departamento do admin
-                .quantidadeUsos(request.getQuantidadeUsos())
+                .comarca(admin.getComarca())
+                .departamento(admin.getDepartamento())
+                .quantidadeUsos(1)  // SEMPRE 1 - uso único
+                .usosRealizados(0)
                 .criadoPor(admin)
                 .ipCriacao(extractIpAddress(httpRequest))
                 .expiraEm(LocalDateTime.now().plusDays(request.getDiasValidade()))
@@ -74,11 +75,11 @@ public class ConviteService {
 
         convite = conviteRepository.save(convite);
 
+        // Link usa /cadastro para convites genéricos
         String linkConvite = String.format("%s/cadastro/%s", frontendUrl, convite.getToken());
 
-        log.info("Link de convite gerado - ID: {}, Token: {}, Usos: {}, Validade: {} dias",
-                convite.getId(), convite.getToken(),
-                request.getQuantidadeUsos(), request.getDiasValidade());
+        log.info("Link genérico criado (uso único) - ID: {}, Token: {}, Validade: {}",
+                convite.getId(), convite.getToken(), convite.getExpiraEm());
 
         return LinkConviteResponse.builder()
                 .id(convite.getId())
@@ -87,19 +88,19 @@ public class ConviteService {
                 .tipoUsuario(convite.getTipoUsuario())
                 .comarca(convite.getComarca())
                 .departamento(convite.getDepartamento())
-                .usosRestantes(convite.getUsosRestantes())
                 .expiraEm(convite.getExpiraEm())
                 .criadoPorNome(admin.getNome())
+                .usado(false)
                 .build();
     }
 
     /**
-     * Cria convite copiando comarca e departamento do admin logado
-     * MÉTODO ANTIGO - Mantido para compatibilidade
+     * Cria convite específico (com email) e envia por email
+     * USO ÚNICO
      */
     @Transactional
     public ConviteResponse criarConvite(CriarConviteRequest request, HttpServletRequest httpRequest) {
-        log.info("Criando convite para: {}", request.getEmail());
+        log.info("Criando convite específico (uso único) para: {}", request.getEmail());
 
         String email = request.getEmail().toLowerCase().trim();
 
@@ -113,18 +114,20 @@ public class ConviteService {
             throw new IllegalArgumentException("Já existe um convite pendente para este email");
         }
 
-        // Pegar admin atual
+        // Obter admin atual
         Usuario admin = authService.getUsuarioAtual();
         if (admin == null) {
             throw new IllegalArgumentException("Usuário não autenticado");
         }
 
-        // Criar convite COPIANDO dados do admin
+        // Criar convite específico (COM email) - USO ÚNICO
         Convite convite = Convite.builder()
                 .email(email)
                 .tipoUsuario(request.getTipoUsuario())
-                .comarca(admin.getComarca())           // COPIA comarca do admin
-                .departamento(admin.getDepartamento()) // COPIA departamento do admin
+                .comarca(admin.getComarca())
+                .departamento(admin.getDepartamento())
+                .quantidadeUsos(1)  // SEMPRE 1 - uso único
+                .usosRealizados(0)
                 .criadoPor(admin)
                 .ipCriacao(extractIpAddress(httpRequest))
                 .build();
@@ -134,14 +137,16 @@ public class ConviteService {
         // Enviar email
         try {
             enviarEmailConvite(convite);
+            log.info("Email de convite enviado para: {}", email);
         } catch (Exception e) {
-            log.error("Erro ao enviar email de convite: {}", e.getMessage());
+            log.error("Erro ao enviar email de convite: {}", e.getMessage(), e);
         }
 
+        // Link usa /invite para convites específicos
         String linkConvite = String.format("%s/invite/%s", frontendUrl, convite.getToken());
 
-        log.info("Convite criado - ID: {}, Comarca: {}, Departamento: {}",
-                convite.getId(), convite.getComarca(), convite.getDepartamento());
+        log.info("Convite específico criado (uso único) - ID: {}, Email: {}",
+                convite.getId(), convite.getEmail());
 
         return ConviteResponse.builder()
                 .id(convite.getId())
@@ -156,11 +161,12 @@ public class ConviteService {
                 .expiraEm(convite.getExpiraEm())
                 .criadoPorNome(admin.getNome())
                 .criadoPorId(admin.getId())
+                .isGenerico(false)
                 .build();
     }
 
     /**
-     * Valida convite retornando comarca e departamento para pré-preencher
+     * Valida convite retornando informações para pré-preencher formulário
      */
     @Transactional(readOnly = true)
     public ValidarConviteResponse validarConvite(String token) {
@@ -175,6 +181,15 @@ public class ConviteService {
                     .build();
         }
 
+        // Verificar se já foi usado
+        if (convite.getUsosRealizados() > 0) {
+            return ValidarConviteResponse.builder()
+                    .valido(false)
+                    .mensagem("Este convite já foi utilizado e não pode ser reutilizado")
+                    .build();
+        }
+
+        // Verificar expiração
         if (convite.isExpirado()) {
             return ValidarConviteResponse.builder()
                     .valido(false)
@@ -182,7 +197,8 @@ public class ConviteService {
                     .build();
         }
 
-        if (!convite.isValido()) {
+        // Verificar status
+        if (convite.getStatus() != StatusConvite.PENDENTE) {
             String msg;
             if (convite.getStatus() == StatusConvite.ATIVADO) {
                 msg = "Este convite já foi utilizado";
@@ -198,53 +214,76 @@ public class ConviteService {
                     .build();
         }
 
+        // Definir campos editáveis
+        String[] camposEditaveis;
+        if (convite.isGenerico()) {
+            // Convite genérico: usuário pode preencher email, nome, senha, cargo
+            camposEditaveis = new String[]{"email", "nome", "senha", "cargo"};
+        } else {
+            // Convite específico: email já definido
+            camposEditaveis = new String[]{"nome", "senha", "cargo"};
+        }
+
+        log.info("Convite válido - Tipo: {}, Genérico: {}",
+                convite.getTipoConviteDescricao(), convite.isGenerico());
+
         return ValidarConviteResponse.builder()
                 .valido(true)
                 .tipoUsuario(convite.getTipoUsuario())
+                .comarca(convite.getComarca())
+                .departamento(convite.getDepartamento())
                 .expiraEm(convite.getExpiraEm())
-                .comarca(convite.getComarca())           // Retorna para pré-preencher
-                .departamento(convite.getDepartamento()) // Retorna para pré-preencher
+                .camposEditaveis(camposEditaveis)
                 .mensagem("Convite válido")
                 .build();
     }
 
     /**
-     * Ativa convite criando usuário com comarca e departamento do convite
-     * MÉTODO ANTIGO - Será substituído pelo fluxo de verificação de email
+     * Ativa convite criando novo usuário
+     * USO ÚNICO - após ativação, convite não pode ser reutilizado
      */
     @Transactional
     public AtivarConviteResponse ativarConvite(AtivarConviteRequest request, HttpServletRequest httpRequest) {
-        log.info("Ativando convite - Token: {}", request.getToken());
+        log.info("Ativando convite (uso único) - Token: {}", request.getToken());
 
+        // Buscar convite
         Convite convite = conviteRepository.findByToken(request.getToken())
                 .orElseThrow(() -> new IllegalArgumentException("Convite não encontrado"));
 
+        // Verificar se já foi usado
+        if (convite.getUsosRealizados() > 0) {
+            throw new IllegalArgumentException("Este convite já foi utilizado e não pode ser reutilizado");
+        }
+
+        // Validar convite
         if (!convite.isValido()) {
             throw new IllegalArgumentException("Convite inválido ou expirado");
         }
 
-        // Se o convite tem email específico, verificar
-        if (convite.getEmail() != null && usuarioRepository.existsByEmail(convite.getEmail())) {
-            throw new IllegalArgumentException("Este email já está em uso");
-        }
-
+        // Validar senhas
         if (!request.senhasCoincidentes()) {
             throw new IllegalArgumentException("As senhas não coincidem");
         }
 
-        // Email vem do convite ou do request (novo fluxo)
-        String emailFinal = convite.getEmail() != null ? convite.getEmail() : request.getEmail();
-
-        if (emailFinal == null || emailFinal.trim().isEmpty()) {
-            throw new IllegalArgumentException("Email é obrigatório");
+        // Determinar email final
+        String emailFinal;
+        if (convite.isGenerico()) {
+            // Convite genérico: email vem do request
+            if (request.getEmail() == null || request.getEmail().trim().isEmpty()) {
+                throw new IllegalArgumentException("Email é obrigatório");
+            }
+            emailFinal = request.getEmail().toLowerCase().trim();
+        } else {
+            // Convite específico: email vem do convite
+            emailFinal = convite.getEmail();
         }
 
         // Verificar se email já existe
         if (usuarioRepository.existsByEmail(emailFinal)) {
-            throw new IllegalArgumentException("Este email já está cadastrado");
+            throw new IllegalArgumentException("Este email já está cadastrado no sistema");
         }
 
-        // Criar usuário HERDANDO comarca e departamento do convite
+        // Criar usuário herdando dados do convite
         Usuario usuario = Usuario.builder()
                 .nome(request.getNome())
                 .email(emailFinal)
@@ -255,18 +294,18 @@ public class ConviteService {
                 .cargo(request.getCargo())
                 .ativo(true)
                 .statusUsuario(StatusUsuario.ACTIVE)
-                .emailVerificado(true)  // No fluxo antigo, marca como verificado
+                .emailVerificado(true)
                 .deveTrocarSenha(false)
                 .build();
 
         usuario = usuarioRepository.save(usuario);
 
-        // Registrar uso do convite
-        convite.registrarUso();
+        // Ativar convite (marca como usado - USO ÚNICO)
+        convite.ativar(usuario, extractIpAddress(httpRequest));
         conviteRepository.save(convite);
 
-        log.info("Convite ativado - Usuario: {}, Comarca: {}, Departamento: {}",
-                usuario.getEmail(), usuario.getComarca(), usuario.getDepartamento());
+        log.info("Convite ativado com sucesso (uso único) - Usuario: {}, Email: {}, Convite ID: {}",
+                usuario.getId(), usuario.getEmail(), convite.getId());
 
         return AtivarConviteResponse.builder()
                 .success(true)
@@ -301,9 +340,10 @@ public class ConviteService {
         Convite convite = conviteRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Convite não encontrado"));
 
-        String linkConvite = convite.getEmail() != null
-                ? String.format("%s/invite/%s", frontendUrl, convite.getToken())
-                : String.format("%s/cadastro/%s", frontendUrl, convite.getToken());
+        // Determinar URL apropriada
+        String linkConvite = convite.isGenerico()
+                ? String.format("%s/cadastro/%s", frontendUrl, convite.getToken())
+                : String.format("%s/invite/%s", frontendUrl, convite.getToken());
 
         return ConviteResponse.builder()
                 .id(convite.getId())
@@ -317,6 +357,8 @@ public class ConviteService {
                 .criadoEm(convite.getCriadoEm())
                 .expiraEm(convite.getExpiraEm())
                 .criadoPorNome(convite.getCriadoPor() != null ? convite.getCriadoPor().getNome() : null)
+                .criadoPorId(convite.getCriadoPor() != null ? convite.getCriadoPor().getId() : null)
+                .isGenerico(convite.isGenerico())
                 .build();
     }
 
@@ -335,11 +377,11 @@ public class ConviteService {
         convite.cancelar();
         conviteRepository.save(convite);
 
-        log.info("Convite cancelado - ID: {}", id);
+        log.info("Convite cancelado - ID: {}, Tipo: {}", id, convite.getTipoConviteDescricao());
     }
 
     /**
-     * Reenvia convite
+     * Reenvia email de convite (apenas para convites específicos)
      */
     @Transactional
     public void reenviarConvite(Long id) {
@@ -354,19 +396,25 @@ public class ConviteService {
             throw new IllegalArgumentException("Convite expirado. Crie um novo convite.");
         }
 
-        // Só envia email se convite tem email específico
-        if (convite.getEmail() != null) {
-            try {
-                enviarEmailConvite(convite);
-                log.info("Convite reenviado - ID: {}", id);
-            } catch (Exception e) {
-                log.error("Erro ao reenviar convite: {}", e.getMessage());
-                throw new RuntimeException("Erro ao enviar email");
-            }
-        } else {
-            log.info("Convite genérico - não há email para reenviar. ID: {}", id);
+        if (convite.getUsosRealizados() > 0) {
+            throw new IllegalArgumentException("Este convite já foi utilizado");
+        }
+
+        // Só envia email se for convite específico
+        if (convite.isGenerico()) {
+            throw new IllegalArgumentException("Convites genéricos não possuem email para reenvio. Compartilhe o link diretamente.");
+        }
+
+        try {
+            enviarEmailConvite(convite);
+            log.info("Convite reenviado - ID: {}, Email: {}", id, convite.getEmail());
+        } catch (Exception e) {
+            log.error("Erro ao reenviar convite: {}", e.getMessage(), e);
+            throw new RuntimeException("Erro ao enviar email");
         }
     }
+
+
 
     /**
      * Retorna estatísticas de convites
@@ -405,14 +453,17 @@ public class ConviteService {
             conviteRepository.save(convite);
         }
 
-        log.info("Convites expirados: {}", convitesExpirados.size());
+        log.info("Convites expirados automaticamente: {}", convitesExpirados.size());
     }
 
     // ========== MÉTODOS AUXILIARES ==========
 
+    /**
+     * Envia email de convite (apenas para convites específicos)
+     */
     private void enviarEmailConvite(Convite convite) {
-        if (convite.getEmail() == null) {
-            log.warn("Convite sem email específico - ID: {}", convite.getId());
+        if (convite.isGenerico()) {
+            log.warn("Tentativa de enviar email para convite genérico - ID: {}", convite.getId());
             return;
         }
 
@@ -433,7 +484,8 @@ public class ConviteService {
                         Para criar sua conta, acesse o link abaixo:
                         %s
                         
-                        Este link é válido até: %s
+                        ⚠️ IMPORTANTE: Este link é de uso único e válido até: %s
+                        Após criar sua conta, o link será invalidado automaticamente.
                         
                         Após criar sua conta, você poderá fazer login com seu email e a senha que escolher.
                         
@@ -451,6 +503,9 @@ public class ConviteService {
         emailService.enviarEmail(convite.getEmail(), assunto, conteudo);
     }
 
+    /**
+     * Converte Convite para ConviteListItem
+     */
     private ConviteListItem toListItem(Convite convite) {
         return ConviteListItem.builder()
                 .id(convite.getId())
@@ -461,13 +516,18 @@ public class ConviteService {
                 .departamento(convite.getDepartamento())
                 .criadoEm(convite.getCriadoEm())
                 .expiraEm(convite.getExpiraEm())
+                .ativadoEm(convite.getAtivadoEm())
                 .expirado(convite.isExpirado())
                 .criadoPorNome(convite.getCriadoPor() != null ? convite.getCriadoPor().getNome() : null)
-                .usosRestantes(convite.getUsosRestantes())
-                .totalUsos(convite.getQuantidadeUsos())
+                .usuarioCriadoNome(convite.getUsuario() != null ? convite.getUsuario().getNome() : null)
+                .isGenerico(convite.isGenerico())
+                .usado(convite.getUsosRealizados() > 0)
                 .build();
     }
 
+    /**
+     * Extrai endereço IP da requisição
+     */
     private String extractIpAddress(HttpServletRequest request) {
         String xForwardedFor = request.getHeader("X-Forwarded-For");
         if (xForwardedFor != null && !xForwardedFor.isEmpty()) {

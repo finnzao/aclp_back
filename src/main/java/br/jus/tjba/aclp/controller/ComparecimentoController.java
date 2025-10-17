@@ -33,7 +33,7 @@ public class ComparecimentoController {
     private final ComparecimentoService comparecimentoService;
     private final StatusSchedulerService statusSchedulerService;
 
-    @PostMapping
+    @PostMapping("/registrar")  // ← MUDANÇA APLICADA AQUI
     @Operation(summary = "Registrar comparecimento",
             description = "Registra um novo comparecimento (presencial ou online) com possível mudança de endereço")
     @ApiResponses(value = {

@@ -23,7 +23,6 @@ public class UsuarioService {
     public List<Usuario> findAll() {
         return usuarioRepository.findByAtivoTrue();
     }
-
     @Transactional(readOnly = true)
     public Optional<Usuario> findById(Long id) {
         return usuarioRepository.findById(id);
