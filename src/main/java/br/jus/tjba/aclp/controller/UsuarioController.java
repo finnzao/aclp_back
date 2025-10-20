@@ -1,6 +1,7 @@
 package br.jus.tjba.aclp.controller;
 
 import br.jus.tjba.aclp.dto.ApiResponse;
+import br.jus.tjba.aclp.dto.AtualizarUsuarioDTO;
 import br.jus.tjba.aclp.dto.UsuarioDTO;
 import br.jus.tjba.aclp.model.Usuario;
 import br.jus.tjba.aclp.model.enums.TipoUsuario;
@@ -10,10 +11,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * Controller administrativo para gerenciamento de usuários
+ * Requer permissões de administrador
+ */
 @RestController
 @RequestMapping("/api/usuarios")
 @RequiredArgsConstructor
@@ -23,6 +29,7 @@ public class UsuarioController {
     private final UsuarioService usuarioService;
 
     @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<List<Usuario>>> findAll() {
         log.info("Buscando todos os usuários");
         List<Usuario> usuarios = usuarioService.findAll();
@@ -32,6 +39,7 @@ public class UsuarioController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<Usuario>> findById(@PathVariable Long id) {
         log.info("Buscando usuário por ID: {}", id);
         return usuarioService.findById(id)
@@ -44,6 +52,7 @@ public class UsuarioController {
     }
 
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<Usuario>> save(@Valid @RequestBody UsuarioDTO dto) {
         log.info("Cadastrando novo usuário: {}", dto.getEmail());
 
@@ -60,8 +69,16 @@ public class UsuarioController {
         }
     }
 
+    /**
+     * Atualização administrativa (PARCIAL)
+     * Apenas campos enviados são atualizados
+     */
     @PutMapping("/{id}")
-    public ResponseEntity<ApiResponse<Usuario>> update(@PathVariable Long id, @Valid @RequestBody UsuarioDTO dto) {
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<Usuario>> update(
+            @PathVariable Long id,
+            @Valid @RequestBody AtualizarUsuarioDTO dto) {
+
         log.info("Atualizando usuário ID: {}", id);
 
         try {
@@ -78,6 +95,7 @@ public class UsuarioController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
         log.info("Desativando usuário ID: {}", id);
 
@@ -95,6 +113,7 @@ public class UsuarioController {
     }
 
     @GetMapping("/tipo/{tipo}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<List<Usuario>>> findByTipo(@PathVariable TipoUsuario tipo) {
         log.info("Buscando usuários por tipo: {}", tipo);
         try {

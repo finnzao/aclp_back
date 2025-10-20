@@ -13,6 +13,7 @@ import java.util.List;
 
 /**
  * Configuração global de CORS para permitir requisições do frontend
+ * IMPORTANTE: Esta é a ÚNICA configuração de CORS - não configure em WebConfig também!
  */
 @Configuration
 public class CorsConfig {
@@ -27,15 +28,12 @@ public class CorsConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        // Origens permitidas (adicione aqui as URLs do seu frontend)
-        configuration.setAllowedOrigins(Arrays.asList(
-                "http://localhost:3000:*",
+        // Origens permitidas (permitir qualquer porta no localhost para desenvolvimento)
+        configuration.setAllowedOriginPatterns(Arrays.asList(
+                "http://localhost:*",
+                "http://127.0.0.1:*",
                 frontendUrl
-
         ));
-
-        // Ou permitir todas as origens (NÃO RECOMENDADO EM PRODUÇÃO)
-        // configuration.setAllowedOriginPatterns(Arrays.asList("*"));
 
         // Métodos HTTP permitidos
         configuration.setAllowedMethods(Arrays.asList(
@@ -44,7 +42,8 @@ public class CorsConfig {
                 "PUT",
                 "DELETE",
                 "PATCH",
-                "OPTIONS"
+                "OPTIONS",
+                "HEAD"
         ));
 
         // Headers permitidos

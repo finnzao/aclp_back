@@ -34,18 +34,25 @@ public class CustodiadoService {
     private final HistoricoComparecimentoRepository historicoComparecimentoRepository;
     private final HistoricoEnderecoRepository historicoEnderecoRepository;
 
-    // ========== MÉTODOS PRINCIPAIS (COMPORTAMENTO ALTERADO) ==========
+    // ========== MÉTODOS PRINCIPAIS (OTIMIZADOS) ==========
 
+    /**
+     *  Busca todos os custodiados ATIVOS com endereços carregados (SEM N+1)
+     * USA: findAllWithEnderecosAtivos() que faz JOIN FETCH
+     */
     @Transactional(readOnly = true)
     public List<Custodiado> findAll() {
-        log.info("Buscando todos os custodiados ATIVOS");
-        return custodiadoRepository.findAll();
+        log.info("Buscando todos os custodiados ATIVOS (otimizado com JOIN FETCH)");
+        return custodiadoRepository.findAllWithEnderecosAtivos();
     }
 
+    /**
+     *  Busca todos incluindo arquivados com endereços carregados (SEM N+1)
+     */
     @Transactional(readOnly = true)
     public List<Custodiado> findAllIncludingArchived() {
-        log.info("Buscando todos os custodiados (ATIVOS + ARQUIVADOS)");
-        return custodiadoRepository.findAllIncludingArchived();
+        log.info("Buscando todos os custodiados (ATIVOS + ARQUIVADOS) - otimizado");
+        return custodiadoRepository.findAllIncludingArchivedWithEnderecos();
     }
 
     @Transactional(readOnly = true)
@@ -106,7 +113,6 @@ public class CustodiadoService {
         return custodiadoReativado;
     }
 
-
     @Transactional(readOnly = true)
     public List<Custodiado> findByProcesso(String processo) {
         log.info("Buscando custodiados ATIVOS por processo: {}", processo);
@@ -115,7 +121,6 @@ public class CustodiadoService {
             throw new IllegalArgumentException("Número do processo é obrigatório");
         }
 
-        // Formatar processo antes de buscar
         String processoFormatado = formatarProcesso(processo.trim());
         return custodiadoRepository.findByProcesso(processoFormatado);
     }
@@ -138,12 +143,9 @@ public class CustodiadoService {
                 dto.getProcesso(), dto.getNome());
 
         try {
-            dto.setId(null); // Forçar null para garantir auto-increment
-
-            // Limpar e formatar dados
+            dto.setId(null);
             dto.limparEFormatarDados();
 
-            // Formatar CPF e processo
             if (dto.getCpf() != null && !dto.getCpf().trim().isEmpty()) {
                 dto.setCpf(formatarCpf(dto.getCpf().trim()));
             }
@@ -159,7 +161,6 @@ public class CustodiadoService {
                         LocalDate.now());
             }
 
-            // Validações
             validarDadosObrigatorios(dto);
             log.debug("Dados obrigatórios validados");
 
@@ -177,10 +178,10 @@ public class CustodiadoService {
 
             Custodiado custodiado = Custodiado.builder()
                     .nome(dto.getNome().trim())
-                    .cpf(dto.getCpf()) // Já formatado
+                    .cpf(dto.getCpf())
                     .rg(dto.getRg())
                     .contato(dto.getContato())
-                    .processo(dto.getProcesso()) // Já formatado
+                    .processo(dto.getProcesso())
                     .vara(dto.getVara().trim())
                     .comarca(dto.getComarca().trim())
                     .dataDecisao(dto.getDataDecisao())
@@ -198,11 +199,9 @@ public class CustodiadoService {
             Custodiado custodiadoSalvo = custodiadoRepository.save(custodiado);
             log.info("Custodiado salvo no banco - ID gerado: {}", custodiadoSalvo.getId());
 
-            // Criar histórico de endereço inicial
             criarHistoricoEnderecoInicial(custodiadoSalvo, dto);
             log.debug("Histórico de endereço inicial criado");
 
-            // Criar primeiro comparecimento no histórico (CADASTRO_INICIAL)
             criarPrimeiroComparecimento(custodiadoSalvo);
             log.debug("Primeiro comparecimento criado");
 
@@ -233,10 +232,8 @@ public class CustodiadoService {
             throw new IllegalArgumentException("Não é possível atualizar custodiado arquivado. Reative-o primeiro.");
         }
 
-        // Limpar e formatar dados antes das validações
         dto.limparEFormatarDados();
 
-        // Formatar CPF e processo
         if (dto.getCpf() != null && !dto.getCpf().trim().isEmpty()) {
             dto.setCpf(formatarCpf(dto.getCpf().trim()));
         }
@@ -244,18 +241,16 @@ public class CustodiadoService {
             dto.setProcesso(formatarProcesso(dto.getProcesso().trim()));
         }
 
-        // Validações (excluindo duplicidades do próprio registro e considerando apenas ATIVOS)
         validarDadosObrigatorios(dto);
         validarFormatos(dto);
         validarDuplicidadesDocumentosParaUpdate(dto, id);
         validarDatasLogicas(dto);
 
-        // Atualizar dados básicos
         custodiado.setNome(dto.getNome().trim());
-        custodiado.setCpf(dto.getCpf()); // Já formatado
+        custodiado.setCpf(dto.getCpf());
         custodiado.setRg(dto.getRg());
         custodiado.setContato(dto.getContato());
-        custodiado.setProcesso(dto.getProcesso()); // Já formatado
+        custodiado.setProcesso(dto.getProcesso());
         custodiado.setVara(dto.getVara().trim());
         custodiado.setComarca(dto.getComarca().trim());
         custodiado.setDataDecisao(dto.getDataDecisao());
@@ -263,7 +258,6 @@ public class CustodiadoService {
         custodiado.setDataComparecimentoInicial(dto.getDataComparecimentoInicial());
         custodiado.setObservacoes(dto.getObservacoes() != null ? dto.getObservacoes().trim() : null);
 
-        // Recalcular próximo comparecimento se necessário
         custodiado.calcularProximoComparecimento();
 
         Custodiado custodiadoAtualizado = custodiadoRepository.save(custodiado);
@@ -273,17 +267,20 @@ public class CustodiadoService {
         return custodiadoAtualizado;
     }
 
-    // ========== MÉTODOS DE BUSCA (APENAS ATIVOS) ==========
+    // ==========  MÉTODOS DE BUSCA OTIMIZADOS ==========
 
+    /**
+     *  Busca por status com endereços carregados (SEM N+1)
+     */
     @Transactional(readOnly = true)
     public List<Custodiado> findByStatus(StatusComparecimento status) {
-        log.info("Buscando custodiados ATIVOS por status: {}", status);
+        log.info("Buscando custodiados ATIVOS por status: {} (otimizado)", status);
 
         if (status == null) {
             throw new IllegalArgumentException("Status é obrigatório. Use: EM_CONFORMIDADE ou INADIMPLENTE");
         }
 
-        return custodiadoRepository.findByStatus(status);
+        return custodiadoRepository.findByStatusWithEnderecos(status);
     }
 
     @Transactional(readOnly = true)
@@ -292,15 +289,21 @@ public class CustodiadoService {
         return custodiadoRepository.findComparecimentosHoje();
     }
 
+    /**
+     *  Busca inadimplentes com endereços carregados (SEM N+1)
+     */
     @Transactional(readOnly = true)
     public List<Custodiado> findInadimplentes() {
-        log.info("Buscando custodiados ATIVOS inadimplentes");
-        return custodiadoRepository.findInadimplentes();
+        log.info("Buscando custodiados ATIVOS inadimplentes (otimizado)");
+        return custodiadoRepository.findInadimplentesWithEnderecos();
     }
 
+    /**
+     *  Busca por nome ou processo com endereços carregados (SEM N+1)
+     */
     @Transactional(readOnly = true)
     public List<Custodiado> buscarPorNomeOuProcesso(String termo) {
-        log.info("Buscando custodiados ATIVOS por termo: {}", termo);
+        log.info("Buscando custodiados ATIVOS por termo: {} (otimizado)", termo);
 
         if (termo == null || termo.trim().isEmpty()) {
             throw new IllegalArgumentException("Termo de busca é obrigatório");
@@ -311,21 +314,19 @@ public class CustodiadoService {
             throw new IllegalArgumentException("Termo de busca deve ter pelo menos 2 caracteres");
         }
 
-        // Tentar formatar como processo se parecer um
         String termoProcesso = termoLimpo;
         if (termoLimpo.replaceAll("[^\\d]", "").length() >= 10) {
             try {
                 termoProcesso = formatarProcesso(termoLimpo);
             } catch (Exception e) {
-                // Se não conseguir formatar, usar como está
                 termoProcesso = termoLimpo;
             }
         }
 
-        return custodiadoRepository.buscarPorNomeOuProcesso(termoLimpo, termoProcesso);
+        return custodiadoRepository.buscarPorNomeOuProcessoWithEnderecos(termoLimpo, termoProcesso);
     }
 
-    // ========== NOVOS MÉTODOS PARA CONTROLE DE SITUAÇÃO ==========
+    // ========== MÉTODOS PARA CONTROLE DE SITUAÇÃO ==========
 
     @Transactional(readOnly = true)
     public List<Custodiado> findBySituacao(SituacaoCustodiado situacao) {
@@ -379,7 +380,7 @@ public class CustodiadoService {
         return "Não informado";
     }
 
-    // ========== MÉTODOS PRIVADOS ==========
+    // ========== MÉTODOS PRIVADOS (mantidos sem alterações) ==========
 
     private void criarHistoricoEnderecoInicial(Custodiado custodiado, CustodiadoDTO dto) {
         try {
@@ -462,7 +463,7 @@ public class CustodiadoService {
         }
     }
 
-    // ========== MÉTODOS DE VALIDAÇÃO ==========
+    // ========== MÉTODOS DE VALIDAÇÃO (mantidos sem alterações) ==========
 
     private void validarDadosObrigatorios(CustodiadoDTO dto) {
         if (dto.getNome() == null || dto.getNome().trim().isEmpty()) {
@@ -493,7 +494,6 @@ public class CustodiadoService {
             throw new IllegalArgumentException("Periodicidade deve ser um número positivo (em dias)");
         }
 
-        // Pelo menos CPF ou RG deve estar preenchido
         if ((dto.getCpf() == null || dto.getCpf().trim().isEmpty()) &&
                 (dto.getRg() == null || dto.getRg().trim().isEmpty())) {
             throw new IllegalArgumentException("Pelo menos um documento (CPF ou RG) deve ser informado");
@@ -527,43 +527,35 @@ public class CustodiadoService {
     }
 
     private void validarFormatos(CustodiadoDTO dto) {
-        // Validar nome
         if (dto.getNome() != null && dto.getNome().trim().length() > 150) {
             throw new IllegalArgumentException("Nome deve ter no máximo 150 caracteres");
         }
 
-        // Validar CPF se fornecido
         if (dto.getCpf() != null && !dto.getCpf().trim().isEmpty()) {
             String cpf = dto.getCpf().trim();
-            // CPF já foi formatado, agora validar algoritmo
             if (!validarCpfAlgoritmo(cpf)) {
                 throw new IllegalArgumentException("CPF inválido. Verifique os dígitos verificadores");
             }
         }
 
-        // Validar processo - já formatado
         if (dto.getProcesso() != null && !validarFormatoProcesso(dto.getProcesso().trim())) {
             throw new IllegalArgumentException("Processo deve ter formato válido (0000000-00.0000.0.00.0000)");
         }
 
-        // Validar periodicidade
         if (dto.getPeriodicidade() != null && (dto.getPeriodicidade() < 1 || dto.getPeriodicidade() > 365)) {
             throw new IllegalArgumentException("Periodicidade deve estar entre 1 e 365 dias");
         }
 
-        // Validar contato
         if (dto.getContato() != null && !validarFormatoContatoFlexivel(dto.getContato().trim())) {
             throw new IllegalArgumentException("Contato deve ter formato válido de telefone");
         }
 
-        // Validar CEP
         if (dto.getCep() != null && !dto.getCep().trim().isEmpty()) {
             if (!validarFormatoCep(dto.getCep().trim())) {
                 throw new IllegalArgumentException("CEP deve ter formato válido (00000-000 ou apenas números)");
             }
         }
 
-        // Validar estado usando o enum
         if (dto.getEstado() != null && !dto.getEstado().trim().isEmpty()) {
             try {
                 EstadoBrasil.fromString(dto.getEstado().trim());
@@ -576,9 +568,8 @@ public class CustodiadoService {
     private void validarDuplicidadesDocumentos(CustodiadoDTO dto) {
         log.debug("Validando duplicidade de documentos - CPF: {}, RG: {}", dto.getCpf(), dto.getRg());
 
-        // Verificar CPF duplicado entre ATIVOS (se fornecido)
         if (dto.getCpf() != null && !dto.getCpf().trim().isEmpty()) {
-            String cpfFormatado = dto.getCpf(); // Já formatado
+            String cpfFormatado = dto.getCpf();
 
             log.debug("Verificando CPF formatado: {}", cpfFormatado);
             boolean cpfExiste = custodiadoRepository.existsByCpfAndSituacaoAtivo(cpfFormatado);
@@ -589,7 +580,6 @@ public class CustodiadoService {
             }
         }
 
-        // Verificar RG duplicado entre ATIVOS (se fornecido)
         if (dto.getRg() != null && !dto.getRg().trim().isEmpty()) {
             log.debug("Verificando RG: {}", dto.getRg().trim());
             boolean rgExiste = custodiadoRepository.existsByRgAndSituacaoAtivo(dto.getRg().trim());
@@ -606,9 +596,8 @@ public class CustodiadoService {
     private void validarDuplicidadesDocumentosParaUpdate(CustodiadoDTO dto, Long idAtual) {
         log.debug("Validando duplicidade para update - ID: {}, CPF: {}, RG: {}", idAtual, dto.getCpf(), dto.getRg());
 
-        // Verificar CPF duplicado em outro registro ATIVO
         if (dto.getCpf() != null && !dto.getCpf().trim().isEmpty()) {
-            String cpfFormatado = dto.getCpf(); // Já formatado
+            String cpfFormatado = dto.getCpf();
 
             log.debug("Verificando CPF formatado para update: {}", cpfFormatado);
             boolean cpfExiste = custodiadoRepository.existsByCpfAndSituacaoAtivoAndIdNot(cpfFormatado, idAtual);
@@ -619,7 +608,6 @@ public class CustodiadoService {
             }
         }
 
-        // Verificar RG duplicado em outro registro ATIVO
         if (dto.getRg() != null && !dto.getRg().trim().isEmpty()) {
             log.debug("Verificando RG para update: {}", dto.getRg().trim());
             boolean rgExiste = custodiadoRepository.existsByRgAndSituacaoAtivoAndIdNot(dto.getRg().trim(), idAtual);
@@ -637,7 +625,6 @@ public class CustodiadoService {
         log.debug("Validando duplicidade para reativação - ID: {}, CPF: {}, RG: {}",
                 custodiado.getId(), custodiado.getCpf(), custodiado.getRg());
 
-        // Verificar CPF duplicado entre ATIVOS
         if (custodiado.getCpf() != null && !custodiado.getCpf().trim().isEmpty()) {
             boolean cpfExiste = custodiadoRepository.existsByCpfAndSituacaoAtivoAndIdNot(
                     custodiado.getCpf(), custodiado.getId());
@@ -649,7 +636,6 @@ public class CustodiadoService {
             }
         }
 
-        // Verificar RG duplicado entre ATIVOS
         if (custodiado.getRg() != null && !custodiado.getRg().trim().isEmpty()) {
             boolean rgExiste = custodiadoRepository.existsByRgAndSituacaoAtivoAndIdNot(
                     custodiado.getRg(), custodiado.getId());
@@ -677,7 +663,6 @@ public class CustodiadoService {
             }
         }
 
-        // Validação mais flexível para datas antigas
         if (dto.getDataComparecimentoInicial() != null &&
                 dto.getDataComparecimentoInicial().isBefore(hoje.minusYears(5))) {
             throw new IllegalArgumentException("Data do comparecimento inicial não pode ser anterior a 5 anos");
@@ -686,31 +671,23 @@ public class CustodiadoService {
 
     // ========== MÉTODOS UTILITÁRIOS ==========
 
-    /**
-     * Valida CPF usando o algoritmo oficial da Receita Federal
-     */
     private boolean validarCpfAlgoritmo(String cpf) {
-        // Remove formatação se houver
         String cpfLimpo = limparCpf(cpf);
 
-        // Deve ter 11 dígitos
         if (cpfLimpo.length() != 11) {
             return false;
         }
 
-        // Rejeita CPFs com todos os dígitos iguais (00000000000, 11111111111, etc.)
         if (cpfLimpo.matches("(\\d)\\1{10}")) {
             return false;
         }
 
         try {
-            // Converter para array de inteiros
             int[] digitos = new int[11];
             for (int i = 0; i < 11; i++) {
                 digitos[i] = Character.getNumericValue(cpfLimpo.charAt(i));
             }
 
-            // Calcular primeiro dígito verificador
             int soma1 = 0;
             for (int i = 0; i < 9; i++) {
                 soma1 += digitos[i] * (10 - i);
@@ -718,13 +695,11 @@ public class CustodiadoService {
             int resto1 = soma1 % 11;
             int dv1 = (resto1 < 2) ? 0 : (11 - resto1);
 
-            // Verificar primeiro dígito
             if (digitos[9] != dv1) {
                 log.debug("CPF inválido - primeiro dígito verificador incorreto. Esperado: {}, Encontrado: {}", dv1, digitos[9]);
                 return false;
             }
 
-            // Calcular segundo dígito verificador
             int soma2 = 0;
             for (int i = 0; i < 10; i++) {
                 soma2 += digitos[i] * (11 - i);
@@ -732,7 +707,6 @@ public class CustodiadoService {
             int resto2 = soma2 % 11;
             int dv2 = (resto2 < 2) ? 0 : (11 - resto2);
 
-            // Verificar segundo dígito
             if (digitos[10] != dv2) {
                 log.debug("CPF inválido - segundo dígito verificador incorreto. Esperado: {}, Encontrado: {}", dv2, digitos[10]);
                 return false;
@@ -746,37 +720,26 @@ public class CustodiadoService {
         }
     }
 
-    /**
-     * Valida formato do processo judicial
-     */
     private boolean validarFormatoProcesso(String processo) {
-        // Formato esperado: 0000000-00.0000.0.00.0000
         return processo.matches("\\d{7}-\\d{2}\\.\\d{4}\\.\\d{1}\\.\\d{2}\\.\\d{4}");
     }
 
-    /**
-     * Formata número do processo para o padrão CNJ
-     */
     private String formatarProcesso(String processo) {
-        // Remove tudo que não for dígito
         String numeros = processo.replaceAll("[^\\d]", "");
 
-        // Deve ter 20 dígitos
         if (numeros.length() != 20) {
             log.debug("Processo com número de dígitos incorreto: {} (esperado 20)", numeros.length());
-            // Se não conseguir formatar, retorna como está
             return processo.trim();
         }
 
-        // Formatar: 0000000-00.0000.0.00.0000
         try {
             return String.format("%s-%s.%s.%s.%s.%s",
-                    numeros.substring(0, 7),   // 0000000
-                    numeros.substring(7, 9),   // 00
-                    numeros.substring(9, 13),  // 0000
-                    numeros.substring(13, 14), // 0
-                    numeros.substring(14, 16), // 00
-                    numeros.substring(16, 20)  // 0000
+                    numeros.substring(0, 7),
+                    numeros.substring(7, 9),
+                    numeros.substring(9, 13),
+                    numeros.substring(13, 14),
+                    numeros.substring(14, 16),
+                    numeros.substring(16, 20)
             );
         } catch (Exception e) {
             log.warn("Não foi possível formatar processo: {}", processo);
@@ -785,9 +748,7 @@ public class CustodiadoService {
     }
 
     private boolean validarFormatoContatoFlexivel(String contato) {
-        // Remove todos os caracteres não numéricos
         String numeros = contato.replaceAll("[^\\d]", "");
-        // Aceita telefones com 10 ou 11 dígitos (com ou sem DDD)
         return numeros.length() >= 8 && numeros.length() <= 11;
     }
 
@@ -800,23 +761,17 @@ public class CustodiadoService {
         return cpf != null ? cpf.replaceAll("[^\\d]", "") : "";
     }
 
-    /**
-     * Formata CPF para o padrão 000.000.000-00
-     */
     private String formatarCpf(String cpf) {
         String cpfLimpo = limparCpf(cpf);
 
         if (cpfLimpo.length() != 11) {
-            // Se não tem 11 dígitos, retorna como está
             return cpf.trim();
         }
 
-        // Validar CPF antes de formatar
         if (!validarCpfAlgoritmo(cpfLimpo)) {
             throw new IllegalArgumentException("CPF inválido. Verifique os dígitos verificadores");
         }
 
-        // Formatar: 000.000.000-00
         return cpfLimpo.substring(0, 3) + "." +
                 cpfLimpo.substring(3, 6) + "." +
                 cpfLimpo.substring(6, 9) + "-" +
