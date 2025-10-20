@@ -250,7 +250,7 @@ public class HistoricoEndereco {
 
     public String getPeriodoResidencia() {
         String inicio = dataInicio.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"));
-        if (isEnderecoAtivo()) {
+        if (isEnderecoAtivo() || dataFim == null) {
             return "Desde " + inicio + " (atual)";
         } else {
             String fim = dataFim.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"));
