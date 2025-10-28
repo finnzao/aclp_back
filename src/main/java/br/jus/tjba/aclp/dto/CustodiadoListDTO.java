@@ -11,8 +11,9 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDate;
 
 /**
- * DTO simplificado para listagens de custodiados
- * Inclui apenas os campos essenciais para melhor performance
+ * DTO otimizado para listagens de custodiados
+ * Inclui todos os campos necessários para a tabela de listagem
+ * NÃO inclui endereço para evitar N+1 queries
  */
 @Data
 @NoArgsConstructor
@@ -20,41 +21,72 @@ import java.time.LocalDate;
 @Builder
 public class CustodiadoListDTO {
 
+    // Identificação
     private Long id;
     private String nome;
     private String cpf;
+    private String rg;
+    private String documentoExibicao; // CPF ou RG para exibição
+
+    // Processo
     private String processo;
+    private String vara;
     private String comarca;
 
-    // Status de comparecimento (EM_CONFORMIDADE/INADIMPLENTE)
+    // Status e Situação
     private StatusComparecimento status;
-
-    // Situação no sistema (ATIVO/ARQUIVADO)
     private SituacaoCustodiado situacao;
 
+    // Datas de comparecimento
+    private LocalDate ultimoComparecimento;
     private LocalDate proximoComparecimento;
+
+    // Controle de atraso
     private Long diasAtraso;
-    private String enderecoResumido;
+    private Integer periodicidade;
     private boolean inadimplente;
     private boolean comparecimentoHoje;
+    private boolean urgente; // ✅ NOVO: Urgente quando dias de atraso >= periodicidade
 
     /**
      * Converte entidade para DTO de listagem
+     * ✅ NÃO acessa relacionamentos lazy (sem endereço)
+     * ✅ Calcula se é urgente baseado na periodicidade
      */
     public static CustodiadoListDTO fromEntity(Custodiado custodiado) {
+        // Determinar qual documento exibir (prioriza CPF)
+        String documentoExibicao;
+        if (custodiado.getCpf() != null && !custodiado.getCpf().trim().isEmpty()) {
+            documentoExibicao = custodiado.getCpf();
+        } else if (custodiado.getRg() != null && !custodiado.getRg().trim().isEmpty()) {
+            documentoExibicao = custodiado.getRg();
+        } else {
+            documentoExibicao = "Sem documento";
+        }
+
+        // Calcular se é urgente (dias de atraso >= periodicidade)
+        long diasAtraso = custodiado.getDiasAtraso();
+        Integer periodicidade = custodiado.getPeriodicidade();
+        boolean urgente = periodicidade != null && diasAtraso >= periodicidade;
+
         return CustodiadoListDTO.builder()
                 .id(custodiado.getId())
                 .nome(custodiado.getNome())
                 .cpf(custodiado.getCpf())
+                .rg(custodiado.getRg())
+                .documentoExibicao(documentoExibicao)
                 .processo(custodiado.getProcesso())
+                .vara(custodiado.getVara())
                 .comarca(custodiado.getComarca())
                 .status(custodiado.getStatus())
                 .situacao(custodiado.getSituacao())
+                .ultimoComparecimento(custodiado.getUltimoComparecimento())
                 .proximoComparecimento(custodiado.getProximoComparecimento())
-                .diasAtraso(custodiado.getDiasAtraso())
-                .enderecoResumido(custodiado.getEnderecoResumido())
+                .diasAtraso(diasAtraso)
+                .periodicidade(periodicidade)
                 .inadimplente(custodiado.isInadimplente())
                 .comparecimentoHoje(custodiado.isComparecimentoHoje())
+                .urgente(urgente)
                 .build();
     }
 
@@ -87,6 +119,14 @@ public class CustodiadoListDTO {
     }
 
     /**
+     * Retorna se o caso é urgente (atraso >= periodicidade)
+     * Exemplo: Periodicidade 15 dias + 15 dias de atraso = URGENTE
+     */
+    public boolean isUrgente() {
+        return urgente;
+    }
+
+    /**
      * Retorna descrição do status de comparecimento
      */
     public String getStatusDescricao() {
@@ -112,5 +152,45 @@ public class CustodiadoListDTO {
      */
     public String getSituacaoCssClass() {
         return situacao != null ? situacao.getCssClass() : "secondary";
+    }
+
+    /**
+     * Retorna CSS class baseado na urgência
+     */
+    public String getUrgenciaCssClass() {
+        return urgente ? "danger" : "";
+    }
+
+    /**
+     * Retorna texto de urgência formatado
+     */
+    public String getUrgenciaTexto() {
+        if (urgente) {
+            return "⚠ Urgente";
+        }
+        return "";
+    }
+
+    /**
+     * Retorna descrição completa dos dias de atraso
+     */
+    public String getDiasAtrasoDescricao() {
+        if (diasAtraso == null || diasAtraso == 0) {
+            return "Em dia";
+        }
+        if (diasAtraso == 1) {
+            return "1 dia atraso";
+        }
+        return diasAtraso + " dias atraso";
+    }
+
+    /**
+     * Retorna informação sobre o processo formatada
+     */
+    public String getProcessoVara() {
+        if (processo != null && vara != null) {
+            return processo + " - " + vara;
+        }
+        return processo != null ? processo : "Processo não informado";
     }
 }

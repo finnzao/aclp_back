@@ -2,8 +2,8 @@ package br.jus.tjba.aclp.controller;
 
 import br.jus.tjba.aclp.dto.ApiResponse;
 import br.jus.tjba.aclp.dto.CustodiadoDTO;
+import br.jus.tjba.aclp.dto.CustodiadoListDTO;
 import br.jus.tjba.aclp.model.Custodiado;
-import br.jus.tjba.aclp.model.HistoricoEndereco;
 import br.jus.tjba.aclp.model.enums.StatusComparecimento;
 import br.jus.tjba.aclp.service.CustodiadoService;
 import br.jus.tjba.aclp.service.HistoricoEnderecoService;
@@ -18,13 +18,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.*;
 
-import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Optional;
@@ -71,6 +68,7 @@ public class CustodiadoController {
 
     /**
      * DTO melhorado para resposta do custodiado com endereço detalhado
+     * Usado APENAS para consultas individuais (findById)
      */
     @lombok.Data
     @lombok.Builder
@@ -105,6 +103,7 @@ public class CustodiadoController {
 
         /**
          * Converte entidade para DTO com endereço detalhado
+         * Usado APENAS para consultas individuais
          */
         public static CustodiadoResponseDTO fromEntity(Custodiado custodiado, HistoricoEnderecoService enderecoService) {
             // Buscar endereço ativo do custodiado
@@ -235,21 +234,24 @@ public class CustodiadoController {
         return "Violação de integridade dos dados. Verifique se não há duplicação de informações";
     }
 
+    // ENDPOINTS DE LISTAGEM (SEM ENDEREÇO)
+
     @GetMapping
     @Operation(summary = "Listar todos os custodiados",
-            description = "Retorna uma lista com todos os custodiados cadastrados com endereços detalhados")
+            description = "Retorna uma lista resumida de todos os custodiados cadastrados (sem endereço detalhado para melhor performance)")
     @ApiResponses(value = {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
                     description = "Lista de custodiados retornada com sucesso")
     })
-    public ResponseEntity<ApiResponse<List<CustodiadoResponseDTO>>> findAll() {
-        log.info("Listando todos os custodiados com endereços detalhados");
+    public ResponseEntity<ApiResponse<List<CustodiadoListDTO>>> findAll() {
+        log.info("Listando todos os custodiados (resumido - sem endereço)");
 
         try {
-            List<Custodiado> custodiados = custodiadoService.findAll();
+            // Usa query SEM JOIN FETCH - muito mais rápida
+            List<Custodiado> custodiados = custodiadoService.findAllActive();
 
-            List<CustodiadoResponseDTO> response = custodiados.stream()
-                    .map(custodiado -> CustodiadoResponseDTO.fromEntity(custodiado, historicoEnderecoService))
+            List<CustodiadoListDTO> response = custodiados.stream()
+                    .map(CustodiadoListDTO::fromEntity)
                     .collect(Collectors.toList());
 
             return ResponseEntity.ok(
@@ -262,6 +264,195 @@ public class CustodiadoController {
             );
         }
     }
+
+    @GetMapping("/status/{status}")
+    @Operation(summary = "Buscar custodiados por status",
+            description = "Retorna custodiados filtrados por status de comparecimento (sem endereço detalhado)")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "Lista de custodiados retornada com sucesso"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "Status inválido")
+    })
+    public ResponseEntity<ApiResponse<List<CustodiadoListDTO>>> findByStatus(
+            @Parameter(description = "Status do comparecimento") @PathVariable StatusComparecimento status) {
+        log.info("Buscando custodiados por status: {} (resumido)", status);
+
+        try {
+            List<Custodiado> custodiados = custodiadoService.findByStatus(status);
+
+            List<CustodiadoListDTO> response = custodiados.stream()
+                    .map(CustodiadoListDTO::fromEntity)
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(
+                    ApiResponse.success("Custodiados encontrados com sucesso", response)
+            );
+        } catch (IllegalArgumentException e) {
+            String valoresValidos = String.join(", ",
+                    StatusComparecimento.EM_CONFORMIDADE.getCode(),
+                    StatusComparecimento.INADIMPLENTE.getCode());
+
+            return ResponseEntity.badRequest().body(
+                    ApiResponse.error("Status inválido. Use um dos valores: " + valoresValidos)
+            );
+        } catch (Exception e) {
+            log.error("Erro ao buscar custodiados por status: {}", status, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                    ApiResponse.error("Erro ao buscar custodiados por status. Tente novamente")
+            );
+        }
+    }
+
+    @GetMapping("/comparecimentos/hoje")
+    @Operation(summary = "Comparecimentos de hoje",
+            description = "Retorna custodiados que devem comparecer hoje (sem endereço detalhado)")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+            description = "Lista de custodiados retornada com sucesso")
+    public ResponseEntity<ApiResponse<List<CustodiadoListDTO>>> findComparecimentosHoje() {
+        log.info("Buscando custodiados com comparecimento hoje (resumido)");
+
+        try {
+            List<Custodiado> custodiados = custodiadoService.findComparecimentosHoje();
+
+            List<CustodiadoListDTO> response = custodiados.stream()
+                    .map(CustodiadoListDTO::fromEntity)
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(
+                    ApiResponse.success("Custodiados com comparecimento hoje listados com sucesso", response)
+            );
+        } catch (Exception e) {
+            log.error("Erro ao buscar comparecimentos de hoje", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                    ApiResponse.error("Erro ao buscar comparecimentos de hoje. Tente novamente")
+            );
+        }
+    }
+
+    @GetMapping("/inadimplentes")
+    @Operation(summary = "Custodiados inadimplentes",
+            description = "Retorna custodiados inadimplentes (sem endereço detalhado)")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+            description = "Lista de custodiados retornada com sucesso")
+    public ResponseEntity<ApiResponse<List<CustodiadoListDTO>>> findInadimplentes() {
+        log.info("Buscando custodiados inadimplentes (resumido)");
+
+        try {
+            List<Custodiado> custodiados = custodiadoService.findInadimplentes();
+
+            List<CustodiadoListDTO> response = custodiados.stream()
+                    .map(CustodiadoListDTO::fromEntity)
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(
+                    ApiResponse.success("Custodiados inadimplentes listados com sucesso", response)
+            );
+        } catch (Exception e) {
+            log.error("Erro ao buscar custodiados inadimplentes", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                    ApiResponse.error("Erro ao buscar custodiados inadimplentes. Tente novamente")
+            );
+        }
+    }
+
+    @GetMapping("/buscar")
+    @Operation(summary = "Buscar custodiados",
+            description = "Busca custodiados por nome ou número do processo (sem endereço detalhado)")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "Lista de custodiados retornada com sucesso"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "Termo de busca inválido")
+    })
+    public ResponseEntity<ApiResponse<List<CustodiadoListDTO>>> buscar(
+            @Parameter(description = "Termo de busca") @RequestParam String termo) {
+        log.info("Buscando custodiados por termo: {} (resumido)", termo);
+
+        try {
+            if (termo == null || termo.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(
+                        ApiResponse.error("Termo de busca não pode ser vazio")
+                );
+            }
+
+            if (termo.trim().length() < 2) {
+                return ResponseEntity.badRequest().body(
+                        ApiResponse.error("Termo de busca deve ter pelo menos 2 caracteres")
+                );
+            }
+
+            List<Custodiado> custodiados = custodiadoService.buscarPorNomeOuProcesso(termo);
+
+            List<CustodiadoListDTO> response = custodiados.stream()
+                    .map(CustodiadoListDTO::fromEntity)
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(
+                    ApiResponse.success("Busca realizada com sucesso", response)
+            );
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(
+                    ApiResponse.error("Termo de busca inválido: " + e.getMessage())
+            );
+        } catch (Exception e) {
+            log.error("Erro ao buscar custodiados por termo: {}", termo, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                    ApiResponse.error("Erro ao realizar busca. Tente novamente")
+            );
+        }
+    }
+
+    @GetMapping("/processo/{processo}")
+    @Operation(summary = "Buscar custodiados por processo",
+            description = "Retorna todos os custodiados de um processo (sem endereço detalhado)")
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                    description = "Custodiados encontrados"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "Nenhum custodiado encontrado para este processo"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
+                    description = "Número do processo inválido")
+    })
+    public ResponseEntity<ApiResponse<List<CustodiadoListDTO>>> findByProcesso(
+            @Parameter(description = "Número do processo") @PathVariable String processo) {
+        log.info("Buscando custodiados por processo: {} (resumido)", processo);
+
+        try {
+            if (processo == null || processo.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(
+                        ApiResponse.error("Número do processo não pode ser vazio")
+                );
+            }
+
+            List<Custodiado> custodiados = custodiadoService.findByProcesso(processo);
+
+            if (custodiados.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+                        ApiResponse.error("Nenhum custodiado encontrado com processo: " + processo)
+                );
+            }
+
+            List<CustodiadoListDTO> response = custodiados.stream()
+                    .map(CustodiadoListDTO::fromEntity)
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(
+                    ApiResponse.success("Custodiados encontrados com sucesso", response)
+            );
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(
+                    ApiResponse.error("Número do processo com formato inválido: " + e.getMessage())
+            );
+        } catch (Exception e) {
+            log.error("Erro ao buscar custodiados por processo: {}", processo, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                    ApiResponse.error("Erro ao buscar custodiados por processo. Tente novamente")
+            );
+        }
+    }
+
+    // ENDPOINTS COM DETALHES (COM ENDEREÇO)
 
     @GetMapping("/{id}")
     @Operation(summary = "Buscar custodiado por ID",
@@ -301,54 +492,7 @@ public class CustodiadoController {
         }
     }
 
-    @GetMapping("/processo/{processo}")
-    @Operation(summary = "Buscar custodiados por processo",
-            description = "Retorna todos os custodiados de um processo com endereços detalhados")
-    @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
-                    description = "Custodiados encontrados"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
-                    description = "Nenhum custodiado encontrado para este processo"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "Número do processo inválido")
-    })
-    public ResponseEntity<ApiResponse<List<CustodiadoResponseDTO>>> findByProcesso(
-            @Parameter(description = "Número do processo") @PathVariable String processo) {
-        log.info("Buscando custodiados por processo: {} com endereços detalhados", processo);
-
-        try {
-            if (processo == null || processo.trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(
-                        ApiResponse.error("Número do processo não pode ser vazio")
-                );
-            }
-
-            List<Custodiado> custodiados = custodiadoService.findByProcesso(processo);
-
-            if (custodiados.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
-                        ApiResponse.error("Nenhum custodiado encontrado com processo: " + processo)
-                );
-            }
-
-            List<CustodiadoResponseDTO> response = custodiados.stream()
-                    .map(custodiado -> CustodiadoResponseDTO.fromEntity(custodiado, historicoEnderecoService))
-                    .collect(Collectors.toList());
-
-            return ResponseEntity.ok(
-                    ApiResponse.success("Custodiados encontrados com sucesso", response)
-            );
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error("Número do processo com formato inválido: " + e.getMessage())
-            );
-        } catch (Exception e) {
-            log.error("Erro ao buscar custodiados por processo: {}", processo, e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                    ApiResponse.error("Erro ao buscar custodiados por processo. Tente novamente")
-            );
-        }
-    }
+    // CRUD
 
     @PostMapping
     @Operation(summary = "Cadastrar novo custodiado",
@@ -552,144 +696,7 @@ public class CustodiadoController {
         }
     }
 
-    @GetMapping("/status/{status}")
-    @Operation(summary = "Buscar custodiados por status",
-            description = "Retorna custodiados filtrados por status de comparecimento com endereços detalhados")
-    @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
-                    description = "Lista de custodiados retornada com sucesso"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "Status inválido")
-    })
-    public ResponseEntity<ApiResponse<List<CustodiadoResponseDTO>>> findByStatus(
-            @Parameter(description = "Status do comparecimento") @PathVariable StatusComparecimento status) {
-        log.info("Buscando custodiados por status: {}", status);
-
-        try {
-            List<Custodiado> custodiados = custodiadoService.findByStatus(status);
-
-            List<CustodiadoResponseDTO> response = custodiados.stream()
-                    .map(custodiado -> CustodiadoResponseDTO.fromEntity(custodiado, historicoEnderecoService))
-                    .collect(Collectors.toList());
-
-            return ResponseEntity.ok(
-                    ApiResponse.success("Custodiados encontrados com sucesso", response)
-            );
-        } catch (IllegalArgumentException e) {
-            // Criar lista com os códigos dos valores válidos do enum
-            String valoresValidos = String.join(", ",
-                    StatusComparecimento.EM_CONFORMIDADE.getCode(),
-                    StatusComparecimento.INADIMPLENTE.getCode());
-
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error("Status inválido. Use um dos valores: " + valoresValidos)
-            );
-        } catch (Exception e) {
-            log.error("Erro ao buscar custodiados por status: {}", status, e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                    ApiResponse.error("Erro ao buscar custodiados por status. Tente novamente")
-            );
-        }
-    }
-
-    @GetMapping("/comparecimentos/hoje")
-    @Operation(summary = "Comparecimentos de hoje",
-            description = "Retorna custodiados que devem comparecer hoje com endereços detalhados")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
-            description = "Lista de custodiados retornada com sucesso")
-    public ResponseEntity<ApiResponse<List<CustodiadoResponseDTO>>> findComparecimentosHoje() {
-        log.info("Buscando custodiados com comparecimento hoje");
-
-        try {
-            List<Custodiado> custodiados = custodiadoService.findComparecimentosHoje();
-
-            List<CustodiadoResponseDTO> response = custodiados.stream()
-                    .map(custodiado -> CustodiadoResponseDTO.fromEntity(custodiado, historicoEnderecoService))
-                    .collect(Collectors.toList());
-
-            return ResponseEntity.ok(
-                    ApiResponse.success("Custodiados com comparecimento hoje listados com sucesso", response)
-            );
-        } catch (Exception e) {
-            log.error("Erro ao buscar comparecimentos de hoje", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                    ApiResponse.error("Erro ao buscar comparecimentos de hoje. Tente novamente")
-            );
-        }
-    }
-
-    @GetMapping("/inadimplentes")
-    @Operation(summary = "Custodiados inadimplentes",
-            description = "Retorna custodiados inadimplentes com endereços detalhados")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
-            description = "Lista de custodiados retornada com sucesso")
-    public ResponseEntity<ApiResponse<List<CustodiadoResponseDTO>>> findInadimplentes() {
-        log.info("Buscando custodiados inadimplentes");
-
-        try {
-            List<Custodiado> custodiados = custodiadoService.findInadimplentes();
-
-            List<CustodiadoResponseDTO> response = custodiados.stream()
-                    .map(custodiado -> CustodiadoResponseDTO.fromEntity(custodiado, historicoEnderecoService))
-                    .collect(Collectors.toList());
-
-            return ResponseEntity.ok(
-                    ApiResponse.success("Custodiados inadimplentes listados com sucesso", response)
-            );
-        } catch (Exception e) {
-            log.error("Erro ao buscar custodiados inadimplentes", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                    ApiResponse.error("Erro ao buscar custodiados inadimplentes. Tente novamente")
-            );
-        }
-    }
-
-    @GetMapping("/buscar")
-    @Operation(summary = "Buscar custodiados",
-            description = "Busca custodiados por nome ou número do processo com endereços detalhados")
-    @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
-                    description = "Lista de custodiados retornada com sucesso"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "Termo de busca inválido")
-    })
-    public ResponseEntity<ApiResponse<List<CustodiadoResponseDTO>>> buscar(
-            @Parameter(description = "Termo de busca") @RequestParam String termo) {
-        log.info("Buscando custodiados por termo: {}", termo);
-
-        try {
-            if (termo == null || termo.trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(
-                        ApiResponse.error("Termo de busca não pode ser vazio")
-                );
-            }
-
-            if (termo.trim().length() < 2) {
-                return ResponseEntity.badRequest().body(
-                        ApiResponse.error("Termo de busca deve ter pelo menos 2 caracteres")
-                );
-            }
-
-            List<Custodiado> custodiados = custodiadoService.buscarPorNomeOuProcesso(termo);
-
-            List<CustodiadoResponseDTO> response = custodiados.stream()
-                    .map(custodiado -> CustodiadoResponseDTO.fromEntity(custodiado, historicoEnderecoService))
-                    .collect(Collectors.toList());
-
-            return ResponseEntity.ok(
-                    ApiResponse.success("Busca realizada com sucesso", response)
-            );
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error("Termo de busca inválido: " + e.getMessage())
-            );
-        } catch (Exception e) {
-            log.error("Erro ao buscar custodiados por termo: {}", termo, e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                    ApiResponse.error("Erro ao realizar busca. Tente novamente")
-            );
-        }
-    }
+    // UTILITÁRIOS
 
     @GetMapping("/processo/{processo}/count")
     @Operation(summary = "Contar custodiados por processo",

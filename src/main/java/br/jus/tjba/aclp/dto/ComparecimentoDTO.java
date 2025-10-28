@@ -26,8 +26,10 @@ public class ComparecimentoDTO {
     @Schema(description = "ID do custodiado", example = "1", required = true)
     private Long custodiadoId;
 
+    // CORRIGIDO: Removido shape e timezone para evitar conversão
+    @JsonFormat(pattern = "yyyy-MM-dd")
     @NotNull(message = "Data do comparecimento é obrigatória")
-    @Schema(description = "Data do comparecimento", example = "2025-09-15", required = true)
+    @Schema(description = "Data do comparecimento", example = "2025-10-27", required = true)
     private LocalDate dataComparecimento;
 
     @JsonFormat(pattern = "HH:mm:ss")
@@ -56,8 +58,6 @@ public class ComparecimentoDTO {
     @Schema(description = "Lista de anexos ou documentos relacionados", example = "doc1.pdf, foto.jpg")
     private String anexos;
 
-    // === CONTROLE DE MUDANÇA DE ENDEREÇO ===
-
     @Builder.Default
     @Schema(description = "Indica se houve mudança de endereço durante o comparecimento", example = "false")
     private Boolean mudancaEndereco = Boolean.FALSE;
@@ -66,13 +66,9 @@ public class ComparecimentoDTO {
     @Schema(description = "Motivo da mudança de endereço", example = "Mudança por questões familiares")
     private String motivoMudancaEndereco;
 
-    // === DADOS DO NOVO ENDEREÇO (apenas se mudancaEndereco = true) ===
-
     @Valid
     @Schema(description = "Dados do novo endereço (obrigatório se mudancaEndereco = true)")
     private EnderecoDTO novoEndereco;
-
-    // === MÉTODOS UTILITÁRIOS ===
 
     public boolean houveMudancaEndereco() {
         return Boolean.TRUE.equals(mudancaEndereco);
@@ -92,9 +88,6 @@ public class ComparecimentoDTO {
         return novoEndereco != null && novoEndereco.isCompleto();
     }
 
-    /**
-     * DTO interno para dados do novo endereço
-     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor

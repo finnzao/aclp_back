@@ -34,10 +34,9 @@ public class CustodiadoService {
     private final HistoricoComparecimentoRepository historicoComparecimentoRepository;
     private final HistoricoEnderecoRepository historicoEnderecoRepository;
 
-    // ========== MÉTODOS PRINCIPAIS (OTIMIZADOS) ==========
 
     /**
-     *  Busca todos os custodiados ATIVOS com endereços carregados (SEM N+1)
+     * Busca todos os custodiados ATIVOS com endereços carregados (SEM N+1)
      * USA: findAllWithEnderecosAtivos() que faz JOIN FETCH
      */
     @Transactional(readOnly = true)
@@ -47,7 +46,7 @@ public class CustodiadoService {
     }
 
     /**
-     *  Busca todos incluindo arquivados com endereços carregados (SEM N+1)
+     * Busca todos incluindo arquivados com endereços carregados (SEM N+1)
      */
     @Transactional(readOnly = true)
     public List<Custodiado> findAllIncludingArchived() {
@@ -270,7 +269,7 @@ public class CustodiadoService {
     // ==========  MÉTODOS DE BUSCA OTIMIZADOS ==========
 
     /**
-     *  Busca por status com endereços carregados (SEM N+1)
+     * Busca por status com endereços carregados (SEM N+1)
      */
     @Transactional(readOnly = true)
     public List<Custodiado> findByStatus(StatusComparecimento status) {
@@ -290,7 +289,7 @@ public class CustodiadoService {
     }
 
     /**
-     *  Busca inadimplentes com endereços carregados (SEM N+1)
+     * Busca inadimplentes com endereços carregados (SEM N+1)
      */
     @Transactional(readOnly = true)
     public List<Custodiado> findInadimplentes() {
@@ -299,7 +298,7 @@ public class CustodiadoService {
     }
 
     /**
-     *  Busca por nome ou processo com endereços carregados (SEM N+1)
+     * Busca por nome ou processo com endereços carregados (SEM N+1)
      */
     @Transactional(readOnly = true)
     public List<Custodiado> buscarPorNomeOuProcesso(String termo) {
@@ -745,6 +744,16 @@ public class CustodiadoService {
             log.warn("Não foi possível formatar processo: {}", processo);
             return processo.trim();
         }
+    }
+
+
+    /**
+     * Busca todos os custodiados ATIVOS SEM carregar relacionamentos
+     * Usa query simples sem relacionamentos para máxima performance
+     */
+    @Transactional(readOnly = true)
+    public List<Custodiado> findAllActive() {
+        return custodiadoRepository.findAllActive();
     }
 
     private boolean validarFormatoContatoFlexivel(String contato) {

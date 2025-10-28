@@ -1,6 +1,7 @@
 package br.jus.tjba.aclp.dto;
 
 import br.jus.tjba.aclp.model.enums.StatusComparecimento;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -49,16 +50,24 @@ public class CustodiadoDTO {
     @Size(max = 100, message = "Comarca deve ter no máximo 100 caracteres")
     private String comarca;
 
+    // CORRIGIDO: Sem timezone
+    @JsonFormat(pattern = "yyyy-MM-dd")
     @NotNull(message = "Data da decisão é obrigatória")
     private LocalDate dataDecisao;
 
     @NotNull(message = "Periodicidade é obrigatória")
     private Integer periodicidade;
 
+    // CORRIGIDO: Sem timezone
+    @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate dataComparecimentoInicial;
 
     private StatusComparecimento status;
+
+    @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate ultimoComparecimento;
+
+    @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate proximoComparecimento;
 
     @Size(max = 500, message = "Observações deve ter no máximo 500 caracteres")

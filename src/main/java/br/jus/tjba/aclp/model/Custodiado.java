@@ -2,6 +2,7 @@ package br.jus.tjba.aclp.model;
 
 import br.jus.tjba.aclp.model.enums.SituacaoCustodiado;
 import br.jus.tjba.aclp.model.enums.StatusComparecimento;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
@@ -76,6 +77,7 @@ public class Custodiado {
     @Column(name = "comarca", nullable = false, length = 100)
     private String comarca;
 
+    @JsonFormat(pattern = "yyyy-MM-dd")
     @NotNull(message = "Data da decisão é obrigatória")
     @PastOrPresent(message = "Data da decisão não pode ser futura")
     @Column(name = "data_decisao", nullable = false)
@@ -87,6 +89,7 @@ public class Custodiado {
     @Column(name = "periodicidade", nullable = false)
     private Integer periodicidade;
 
+    @JsonFormat(pattern = "yyyy-MM-dd")
     @NotNull(message = "Data do comparecimento inicial é obrigatória")
     @Column(name = "data_comparecimento_inicial", nullable = false)
     private LocalDate dataComparecimentoInicial;
@@ -104,9 +107,11 @@ public class Custodiado {
     @Builder.Default
     private SituacaoCustodiado situacao = SituacaoCustodiado.ATIVO;
 
+    @JsonFormat(pattern = "yyyy-MM-dd")
     @Column(name = "ultimo_comparecimento")
     private LocalDate ultimoComparecimento;
 
+    @JsonFormat(pattern = "yyyy-MM-dd")
     @Column(name = "proximo_comparecimento")
     private LocalDate proximoComparecimento;
 
