@@ -4,6 +4,7 @@ import br.jus.tjba.aclp.security.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -11,12 +12,16 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+/**
+ * Configuração de Segurança Web
+ */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity(prePostEnabled = true)
@@ -30,10 +35,22 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
+                // Desabilitar CSRF (API REST stateless)
                 .csrf(AbstractHttpConfigurer::disable)
+
+                // Configurar CORS (usa CorsConfig.java)
+                .cors(cors -> {})
+
+                // Sessão stateless (JWT)
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+
+                // Configurar autorização de requisições
                 .authorizeHttpRequests(authz -> authz
+                        // ==================== OPTIONS - PERMITIR TUDO (CORS PREFLIGHT) ====================
+                        // Requisições OPTIONS devem passar sem autenticação para CORS funcionar
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
                         // ==================== ENDPOINTS PÚBLICOS ====================
 
                         // Autenticação (sem token)
@@ -60,7 +77,7 @@ public class SecurityConfig {
 
                         // ==================== DOCUMENTAÇÃO ====================
 
-                        // Swagger
+                        // Swagger UI
                         .requestMatchers("/v3/api-docs/**").permitAll()
                         .requestMatchers("/swagger-ui/**").permitAll()
                         .requestMatchers("/swagger-ui.html").permitAll()
@@ -72,7 +89,7 @@ public class SecurityConfig {
                         // H2 Console (apenas desenvolvimento)
                         .requestMatchers("/h2-console/**").permitAll()
 
-                        // Health checks
+                        // Health checks (Actuator)
                         .requestMatchers("/actuator/health/**").permitAll()
 
                         // ==================== FRONTEND ====================
@@ -91,13 +108,30 @@ public class SecurityConfig {
                         // Qualquer outra requisição precisa autenticação
                         .anyRequest().authenticated()
                 )
+
+                // Configurar provider de autenticação
                 .authenticationProvider(authenticationProvider())
+
+                // Adicionar filtro JWT antes do filtro de autenticação padrão
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                .headers(headers -> headers.frameOptions().disable());
+
+                // Configuração de headers de segurança
+                .headers(headers -> headers
+                        // Permitir frames da mesma origem (para H2 Console em dev)
+                        .frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin)
+                        // Configurações de segurança adicionais
+                        .contentTypeOptions(contentType -> {})
+                        .xssProtection(xss -> {})
+                        .cacheControl(cache -> {})
+                );
 
         return http.build();
     }
 
+    /**
+     * Bean do provider de autenticação
+     * Usa UserDetailsService e PasswordEncoder
+     */
     @Bean
     public DaoAuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
@@ -106,6 +140,10 @@ public class SecurityConfig {
         return authProvider;
     }
 
+    /**
+     * Bean do AuthenticationManager
+     * Usado para autenticação programática (login)
+     */
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
