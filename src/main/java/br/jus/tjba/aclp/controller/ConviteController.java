@@ -107,18 +107,18 @@ public class ConviteController {
     }
 
     /**
-     * ADMIN: Listar todos os convites
+     * ADMIN: Listar convites do usuário atual
      */
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
     @SecurityRequirement(name = "bearer-auth")
     @Operation(summary = "Listar convites",
-            description = "Lista todos os convites (apenas ADMIN)")
+            description = "Lista convites criados pelo usuário autenticado (apenas ADMIN)")
     public ResponseEntity<ApiResponse<List<ConviteListItem>>> listarConvites() {
-        log.info("Listando convites");
+        log.info("Listando convites do usuário autenticado");
 
         try {
-            List<ConviteListItem> convites = conviteService.listarConvites();
+            List<ConviteListItem> convites = conviteService.listarConvitesDoUsuarioAtual();
             return ResponseEntity.ok(
                     ApiResponse.success("Convites listados com sucesso", convites));
         } catch (Exception e) {

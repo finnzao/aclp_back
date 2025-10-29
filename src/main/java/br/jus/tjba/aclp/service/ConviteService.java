@@ -331,7 +331,26 @@ public class ConviteService {
                 .map(this::toListItem)
                 .collect(Collectors.toList());
     }
+    /**
+     * Lista convites criados pelo usuário autenticado
+     */
+    @Transactional(readOnly = true)
+    public List<ConviteListItem> listarConvitesDoUsuarioAtual() {
+        // Obtém o usuário autenticado
+        Usuario usuarioAtual = authService.getUsuarioAtual();
 
+        if (usuarioAtual == null) {
+            throw new IllegalArgumentException("Usuário não autenticado");
+        }
+
+        log.info("Listando convites criados pelo usuário: {} (ID: {})",
+                usuarioAtual.getNome(), usuarioAtual.getId());
+
+        // Busca convites criados por este usuário
+        return conviteRepository.findByCriadoPorId(usuarioAtual.getId()).stream()
+                .map(this::toListItem)
+                .collect(Collectors.toList());
+    }
     /**
      * Busca convite por ID
      */
@@ -524,6 +543,7 @@ public class ConviteService {
                 .usado(convite.getUsosRealizados() > 0)
                 .build();
     }
+
 
     /**
      * Extrai endereço IP da requisição

@@ -46,12 +46,10 @@ public class CustodiadoListDTO {
     private Integer periodicidade;
     private boolean inadimplente;
     private boolean comparecimentoHoje;
-    private boolean urgente; // ✅ NOVO: Urgente quando dias de atraso >= periodicidade
+    private boolean urgente;
 
     /**
      * Converte entidade para DTO de listagem
-     * ✅ NÃO acessa relacionamentos lazy (sem endereço)
-     * ✅ Calcula se é urgente baseado na periodicidade
      */
     public static CustodiadoListDTO fromEntity(Custodiado custodiado) {
         // Determinar qual documento exibir (prioriza CPF)
