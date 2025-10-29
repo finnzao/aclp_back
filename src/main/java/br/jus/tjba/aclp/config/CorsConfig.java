@@ -21,6 +21,9 @@ public class CorsConfig {
     @Value("${aclp.frontend.url:http://localhost:3000}")
     private String frontendUrl;
 
+    @Value("${aclp.cors.allowed-origins:http://localhost:3000}")
+    private String allowedOrigins;
+
     /**
      * Configuração de CORS para permitir requisições do frontend
      */
@@ -28,12 +31,23 @@ public class CorsConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        // Origens permitidas (permitir qualquer porta no localhost para desenvolvimento)
+        // Processar múltiplas origens das variáveis de ambiente
+        List<String> origins = Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .map(origin -> origin.endsWith("/") ? origin.substring(0, origin.length() - 1) : origin)
+                .toList();
+
+        // Origens permitidas
         configuration.setAllowedOriginPatterns(Arrays.asList(
                 "http://localhost:*",
                 "http://127.0.0.1:*",
-                frontendUrl
+                "https://aclp-psi.vercel.app",
+                "https://*.vercel.app",
+                "https://*.railway.app"
         ));
+
+        // Também adicionar origens específicas das variáveis de ambiente
+        origins.forEach(configuration::addAllowedOrigin);
 
         // Métodos HTTP permitidos
         configuration.setAllowedMethods(Arrays.asList(

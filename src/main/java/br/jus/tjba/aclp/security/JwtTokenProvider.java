@@ -16,43 +16,36 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-import static io.jsonwebtoken.Jwts.parser;
-
-/**
- * Provedor de tokens JWT
- * Gerencia criação, validação e extração de informações dos tokens
- */
 @Slf4j
 @Component
 public class JwtTokenProvider {
 
     private final SecretKey secretKey;
-
-    // Blacklist de tokens invalidados (em produção usar Redis)
     private final Set<String> tokenBlacklist = ConcurrentHashMap.newKeySet();
 
-    @Value("${aclp.jwt.secret:aclp-secret-key-deve-ter-pelo-menos-256-bits-para-hmac-sha256-funcionar-corretamente}")
-    private String jwtSecret;
-
-    @Value("${aclp.jwt.expiration-ms:3600000}") // 1 hora padrão
+    @Value("${aclp.jwt.expiration-ms:3600000}")
     private long jwtExpirationMs;
 
     @Value("${aclp.jwt.issuer:ACLP-TJBA}")
     private String jwtIssuer;
 
-    public JwtTokenProvider() {
-        // Gerar chave segura para HMAC-SHA256
-        String secret = "aclp-secret-key-deve-ter-pelo-menos-256-bits-para-hmac-sha256-funcionar-corretamente";
+    public JwtTokenProvider(
+            @Value("${aclp.jwt.secret:my-super-secret-jwt-key-with-at-least-256-bits-for-hmac-sha-algorithm-security}")
+            String secret) {
+
+        if (secret.length() < 32) {
+            throw new IllegalStateException(
+                    String.format("JWT secret tem apenas %d caracteres. Mínimo: 32", secret.length())
+            );
+        }
+
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        log.info("JwtTokenProvider inicializado com chave de {} caracteres", secret.length());
     }
 
-    /**
-     * Gera token JWT para usuário
-     */
     public String generateToken(Usuario usuario) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + jwtExpirationMs);
-        String sessionId = UUID.randomUUID().toString();
 
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", usuario.getId());
@@ -60,7 +53,7 @@ public class JwtTokenProvider {
         claims.put("nome", usuario.getNome());
         claims.put("tipo", usuario.getTipo().name());
         claims.put("roles", getRoles(usuario));
-        claims.put("sessionId", sessionId);
+        claims.put("sessionId", UUID.randomUUID().toString());
 
         return Jwts.builder()
                 .setClaims(claims)
@@ -72,25 +65,19 @@ public class JwtTokenProvider {
                 .compact();
     }
 
-    /**
-     * Gera token com Authentication
-     */
     public String generateToken(Authentication authentication) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + jwtExpirationMs);
 
-        String email = authentication.getName();
-        List<String> roles = authentication.getAuthorities().stream()
-                .map(GrantedAuthority::getAuthority)
-                .collect(Collectors.toList());
-
         Map<String, Object> claims = new HashMap<>();
-        claims.put("email", email);
-        claims.put("roles", roles);
+        claims.put("email", authentication.getName());
+        claims.put("roles", authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .collect(Collectors.toList()));
 
         return Jwts.builder()
                 .setClaims(claims)
-                .setSubject(email)
+                .setSubject(authentication.getName())
                 .setIssuedAt(now)
                 .setExpiration(expiryDate)
                 .setIssuer(jwtIssuer)
@@ -98,196 +85,132 @@ public class JwtTokenProvider {
                 .compact();
     }
 
-    /**
-     * Valida token JWT
-     */
     public boolean validateToken(String token) {
         try {
-            // Verificar se está na blacklist
             if (tokenBlacklist.contains(token)) {
-                log.warn("Token está na blacklist");
                 return false;
             }
-
-            parser()
+            Jwts.parser()
                     .setSigningKey(secretKey)
                     .build()
                     .parseClaimsJws(token);
-
             return true;
-
-        } catch (SecurityException ex) {
-            log.error("Token JWT inválido - assinatura incorreta");
-        } catch (MalformedJwtException ex) {
-            log.error("Token JWT malformado");
-        } catch (ExpiredJwtException ex) {
-            log.error("Token JWT expirado");
-        } catch (UnsupportedJwtException ex) {
-            log.error("Token JWT não suportado");
-        } catch (IllegalArgumentException ex) {
-            log.error("String JWT vazia");
+        } catch (Exception ex) {
+            log.error("Token inválido: {}", ex.getMessage());
+            return false;
         }
-
-        return false;
     }
 
-    // ============================================================================
-    // ⭐ MÉTODO ADICIONADO: getUsernameFromToken
-    // ============================================================================
-
-    /**
-     * Extrai username (email) do token
-     * Este método é usado pelo JwtAuthenticationFilter
-     *
-     * @param token Token JWT
-     * @return Email do usuário (username)
-     */
     public String getUsernameFromToken(String token) {
-        Claims claims = getClaims(token);
-        return claims.getSubject(); // Subject contém o email do usuário
+        return getClaims(token).getSubject();
     }
 
-    // ============================================================================
-
-    /**
-     * Extrai email do token (mesmo que getUsernameFromToken)
-     */
     public String getEmailFromToken(String token) {
-        Claims claims = getClaims(token);
-        return claims.getSubject();
+        return getClaims(token).getSubject();
     }
 
-    /**
-     * Extrai ID do usuário do token
-     */
     public Long getUserIdFromToken(String token) {
-        Claims claims = getClaims(token);
-        return claims.get("userId", Long.class);
+        Object userId = getClaims(token).get("userId");
+        return userId instanceof Integer ? ((Integer) userId).longValue() : (Long) userId;
     }
 
-    /**
-     * Extrai nome do usuário do token
-     */
     public String getNomeFromToken(String token) {
-        Claims claims = getClaims(token);
-        return claims.get("nome", String.class);
+        return getClaims(token).get("nome", String.class);
     }
 
-    /**
-     * Extrai tipo do usuário do token
-     */
     public String getTipoFromToken(String token) {
-        Claims claims = getClaims(token);
-        return claims.get("tipo", String.class);
+        return getClaims(token).get("tipo", String.class);
     }
 
-    /**
-     * Extrai session ID do token
-     */
-    public String getSessionIdFromToken(String token) {
-        Claims claims = getClaims(token);
-        return claims.get("sessionId", String.class);
-    }
-
-    /**
-     * Extrai data de expiração do token
-     */
     public Date getExpirationDateFromToken(String token) {
-        Claims claims = getClaims(token);
-        return claims.getExpiration();
+        return getClaims(token).getExpiration();
     }
 
-    /**
-     * Extrai data de emissão do token
-     */
     public Date getIssuedAtFromToken(String token) {
-        Claims claims = getClaims(token);
-        return claims.getIssuedAt();
+        return getClaims(token).getIssuedAt();
     }
 
-    /**
-     * Extrai authorities do token
-     */
     public List<String> getAuthoritiesFromToken(String token) {
-        Claims claims = getClaims(token);
         @SuppressWarnings("unchecked")
-        List<String> roles = (List<String>) claims.get("roles");
+        List<String> roles = (List<String>) getClaims(token).get("roles");
         return roles != null ? roles : Collections.emptyList();
     }
 
-    /**
-     * Extrai todas as claims do token
-     */
     public Claims getClaims(String token) {
-        return parser()
+        return Jwts.parser()
                 .setSigningKey(secretKey)
                 .build()
                 .parseClaimsJws(token)
                 .getBody();
     }
 
-    /**
-     * Invalida token (adiciona à blacklist)
-     */
     public void invalidateToken(String token) {
         tokenBlacklist.add(token);
-        log.debug("Token adicionado à blacklist");
     }
 
-    /**
-     * Verifica se token está na blacklist
-     */
     public boolean isTokenBlacklisted(String token) {
         return tokenBlacklist.contains(token);
     }
 
-    /**
-     * Adiciona todos os tokens de um usuário à blacklist
-     */
-    public void blacklistUserTokens(String userEmail) {
-        // Em produção, implementar com Redis e padrão de chave
-        log.info("Invalidando todos os tokens do usuário: {}", userEmail);
+    public long getTokenValidity() {
+        return jwtExpirationMs / 1000;
     }
 
-    /**
-     * Limpa tokens expirados da blacklist (executar periodicamente)
-     */
+    public long getTokenRemainingTime(String token) {
+        try {
+            Date expiration = getExpirationDateFromToken(token);
+            return (expiration.getTime() - System.currentTimeMillis()) / (60 * 1000);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    public boolean validateTokenForUser(String token, String username) {
+        try {
+            return username.equals(getUsernameFromToken(token)) && validateToken(token);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private List<String> getRoles(Usuario usuario) {
+        List<String> roles = new ArrayList<>();
+        roles.add("ROLE_" + usuario.getTipo().name());
+        if (usuario.isAdmin()) {
+            roles.add("ROLE_ADMIN");
+        } else {
+            roles.add("ROLE_USER");
+        }
+        return roles;
+    }
+
+    public List<GrantedAuthority> getAuthorities(String token) {
+        return getAuthoritiesFromToken(token).stream()
+                .map(SimpleGrantedAuthority::new)
+                .collect(Collectors.toList());
+    }
+
+    public String getSessionIdFromToken(String token) {
+        return getClaims(token).get("sessionId", String.class);
+    }
+
+    public void blacklistUserTokens(String userEmail) {
+        log.info("Invalidando todos os tokens do usuário: {}", userEmail);
+        // Em produção, implementar com Redis usando padrão de chave user:email:*
+    }
+
     public void cleanExpiredTokens() {
         tokenBlacklist.removeIf(token -> {
             try {
                 Date expiration = getExpirationDateFromToken(token);
                 return expiration.before(new Date());
             } catch (Exception e) {
-                return true; // Remove tokens inválidos
+                return true;
             }
         });
-
-        log.debug("Limpeza de tokens expirados concluída. Tamanho da blacklist: {}", tokenBlacklist.size());
+        log.debug("Tokens expirados removidos. Blacklist size: {}", tokenBlacklist.size());
     }
 
-    /**
-     * Retorna tempo de validade do token em segundos
-     */
-    public long getTokenValidity() {
-        return jwtExpirationMs / 1000;
-    }
-
-    /**
-     * Retorna tempo restante do token em minutos
-     */
-    public long getTokenRemainingTime(String token) {
-        try {
-            Date expiration = getExpirationDateFromToken(token);
-            long millisUntilExpiry = expiration.getTime() - System.currentTimeMillis();
-            return millisUntilExpiry / (60 * 1000);
-        } catch (Exception e) {
-            return 0;
-        }
-    }
-
-    /**
-     * Verifica se token vai expirar em breve
-     */
     public boolean isTokenExpiringSoon(String token, long minutesThreshold) {
         try {
             Date expiration = getExpirationDateFromToken(token);
@@ -298,47 +221,16 @@ public class JwtTokenProvider {
         }
     }
 
-    /**
-     * Verifica se token é válido para um usuário específico
-     */
-    public boolean validateTokenForUser(String token, String username) {
+    public boolean isTokenFresh(String token, long minutesThreshold) {
         try {
-            String tokenUsername = getUsernameFromToken(token);
-            return (username.equals(tokenUsername) && validateToken(token));
+            Date issuedAt = getIssuedAtFromToken(token);
+            long minutesSinceIssued = (System.currentTimeMillis() - issuedAt.getTime()) / (60 * 1000);
+            return minutesSinceIssued <= minutesThreshold;
         } catch (Exception e) {
             return false;
         }
     }
 
-    /**
-     * Extrai roles do usuário
-     */
-    private List<String> getRoles(Usuario usuario) {
-        List<String> roles = new ArrayList<>();
-        roles.add("ROLE_" + usuario.getTipo().name());
-
-        if (usuario.isAdmin()) {
-            roles.add("ROLE_ADMIN");
-        } else {
-            roles.add("ROLE_USER");
-        }
-
-        return roles;
-    }
-
-    /**
-     * Cria authorities do Spring Security a partir do token
-     */
-    public List<GrantedAuthority> getAuthorities(String token) {
-        List<String> roles = getAuthoritiesFromToken(token);
-        return roles.stream()
-                .map(SimpleGrantedAuthority::new)
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * Retorna informações resumidas do token (para debug/logs)
-     */
     public String getTokenInfo(String token) {
         try {
             Claims claims = getClaims(token);
@@ -351,19 +243,6 @@ public class JwtTokenProvider {
             );
         } catch (Exception e) {
             return "Token inválido ou malformado";
-        }
-    }
-
-    /**
-     * Verifica se o token foi emitido recentemente (útil para refresh)
-     */
-    public boolean isTokenFresh(String token, long minutesThreshold) {
-        try {
-            Date issuedAt = getIssuedAtFromToken(token);
-            long minutesSinceIssued = (System.currentTimeMillis() - issuedAt.getTime()) / (60 * 1000);
-            return minutesSinceIssued <= minutesThreshold;
-        } catch (Exception e) {
-            return false;
         }
     }
 }
