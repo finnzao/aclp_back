@@ -1,6 +1,7 @@
 package br.jus.tjba.aclp.controller;
 
 import br.jus.tjba.aclp.dto.ComparecimentoDTO;
+import br.jus.tjba.aclp.dto.HistoricoComparecimentoResponseDTO;
 import br.jus.tjba.aclp.model.HistoricoComparecimento;
 import br.jus.tjba.aclp.service.ComparecimentoService;
 import br.jus.tjba.aclp.service.StatusSchedulerService;
@@ -111,7 +112,6 @@ public class ComparecimentoController {
         return ApiResponseUtil.success(comparecimentos, "Comparecimentos de hoje encontrados");
     }
 
-    // NOVO ENDPOINT
     @GetMapping("/todos")
     @Operation(summary = "Listar todos os comparecimentos",
             description = "Retorna todos os comparecimentos registrados no sistema com paginação")
@@ -130,7 +130,7 @@ public class ComparecimentoController {
         log.info("Listando todos os comparecimentos - Página: {}, Tamanho: {}", page, size);
 
         try {
-            Page<HistoricoComparecimento> comparecimentosPage =
+            Page<HistoricoComparecimentoResponseDTO> comparecimentosPage =
                     comparecimentoService.buscarTodosComparecimentos(page, size);
 
             Map<String, Object> response = new HashMap<>();
@@ -151,12 +151,6 @@ public class ComparecimentoController {
 
     // NOVO ENDPOINT
     @GetMapping("/filtrar")
-    @Operation(summary = "Filtrar comparecimentos",
-            description = "Busca comparecimentos com filtros opcionais de data e tipo")
-    @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
-                    description = "Comparecimentos filtrados com sucesso")
-    })
     public ResponseEntity<Map<String, Object>> filtrarComparecimentos(
             @Parameter(description = "Data inicial (formato: YYYY-MM-DD)")
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataInicio,
@@ -173,7 +167,7 @@ public class ComparecimentoController {
                 dataInicio, dataFim, tipoValidacao);
 
         try {
-            Page<HistoricoComparecimento> comparecimentosPage =
+            Page<HistoricoComparecimentoResponseDTO> comparecimentosPage =
                     comparecimentoService.buscarComparecimentosComFiltros(
                             dataInicio, dataFim, tipoValidacao, page, size);
 
@@ -297,7 +291,8 @@ public class ComparecimentoController {
         }
     }
 
-    // NOVO ENDPOINT
+
+
     @GetMapping("/estatisticas/detalhadas")
     @Operation(summary = "Estatísticas detalhadas",
             description = "Retorna estatísticas completas sobre comparecimentos")

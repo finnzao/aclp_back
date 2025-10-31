@@ -1,6 +1,7 @@
 package br.jus.tjba.aclp.service;
 
 import br.jus.tjba.aclp.dto.ComparecimentoDTO;
+import br.jus.tjba.aclp.dto.HistoricoComparecimentoResponseDTO;
 import br.jus.tjba.aclp.model.Custodiado;
 import br.jus.tjba.aclp.model.HistoricoComparecimento;
 import br.jus.tjba.aclp.model.HistoricoEndereco;
@@ -106,31 +107,54 @@ public class ComparecimentoService {
         return historicoComparecimentoRepository.findByDataComparecimento(LocalDate.now());
     }
 
-    // NOVO: Buscar todos os comparecimentos com paginação
     @Transactional(readOnly = true)
-    public Page<HistoricoComparecimento> buscarTodosComparecimentos(int page, int size) {
+    public Page<HistoricoComparecimentoResponseDTO> buscarTodosComparecimentos(int page, int size) {
         log.info("Buscando todos os comparecimentos - Página: {}, Size: {}", page, size);
 
         Pageable pageable = PageRequest.of(page, size, Sort.by("dataComparecimento").descending());
-        return historicoComparecimentoRepository.findAllByOrderByDataComparecimentoDesc(pageable);
+        Page<HistoricoComparecimento> comparecimentos =
+                historicoComparecimentoRepository.findAllByOrderByDataComparecimentoDesc(pageable);
+        return comparecimentos.map(this::toResponseDTO);
     }
 
-    // NOVO: Buscar comparecimentos com filtros
+    // Método auxiliar de conversão
+    private HistoricoComparecimentoResponseDTO toResponseDTO(HistoricoComparecimento historico) {
+        return HistoricoComparecimentoResponseDTO.builder()
+                .id(historico.getId())
+                .custodiadoId(historico.getCustodiado().getId())
+                .custodiadoNome(historico.getCustodiado().getNome())
+                .dataComparecimento(historico.getDataComparecimento())
+                .horaComparecimento(historico.getHoraComparecimento())
+                .tipoValidacao(historico.getTipoValidacao().name())
+                .validadoPor(historico.getValidadoPor())
+                .observacoes(historico.getObservacoes())
+                .mudancaEndereco(historico.getMudancaEndereco())
+                .motivoMudancaEndereco(historico.getMotivoMudancaEndereco())
+                .build();
+    }
+
+    // Buscar comparecimentos com filtros
+    // Buscar comparecimentos com filtros
     @Transactional(readOnly = true)
-    public Page<HistoricoComparecimento> buscarComparecimentosComFiltros(
-            LocalDate dataInicio,
-            LocalDate dataFim,
-            String tipoValidacao,
-            int page,
-            int size) {
+    public Page<HistoricoComparecimentoResponseDTO> buscarComparecimentosComFiltros(LocalDate dataInicio,
+                                                                                    LocalDate dataFim,
+                                                                                    String tipoValidacao,
+                                                                                    int page,
+                                                                                    int size) {
 
         log.info("Buscando comparecimentos com filtros - Início: {}, Fim: {}, Tipo: {}",
                 dataInicio, dataFim, tipoValidacao);
 
         Pageable pageable = PageRequest.of(page, size);
-        return historicoComparecimentoRepository.findComFiltros(
-                dataInicio, dataFim, tipoValidacao, pageable);
+        Page<HistoricoComparecimento> comparecimentos =
+                historicoComparecimentoRepository.findComFiltros(dataInicio, dataFim, tipoValidacao, pageable);
+
+        return comparecimentos.map(this::toResponseDTO);  // ✅ ADICIONA CONVERSÃO PARA DTO
     }
+
+
+
+
 
     /**
      * Busca estatísticas detalhadas
@@ -556,7 +580,6 @@ public class ComparecimentoService {
                 .comparecimentosPorHora(porHora)
                 .build();
     }
-
 
 
     /**
