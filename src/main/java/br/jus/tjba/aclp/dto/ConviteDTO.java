@@ -12,46 +12,9 @@ import java.time.LocalDateTime;
 
 /**
  * DTOs relacionados ao sistema de convites
- * Suporta convites específicos (com email) e genéricos (sem email)
+ * Apenas convites específicos com email obrigatório
  */
 public class ConviteDTO {
-
-    /**
-     * DTO para gerar link de convite genérico (sem email específico)
-     * SEMPRE USO ÚNICO
-     */
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class GerarLinkConviteRequest {
-        @NotNull(message = "Tipo de usuário é obrigatório")
-        private TipoUsuario tipoUsuario;
-
-        @Min(value = 1, message = "Dias de validade deve ser no mínimo 1")
-        @Max(value = 365, message = "Dias de validade deve ser no máximo 365")
-        private Integer diasValidade = 30;
-    }
-
-    /**
-     * DTO para resposta de geração de link
-     * USO ÚNICO
-     */
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class LinkConviteResponse {
-        private Long id;
-        private String token;
-        private String link;
-        private TipoUsuario tipoUsuario;
-        private String comarca;
-        private String departamento;
-        private LocalDateTime expiraEm;
-        private String criadoPorNome;
-        private Boolean usado = false;
-    }
 
     /**
      * DTO para validar convite
@@ -62,14 +25,15 @@ public class ConviteDTO {
     @AllArgsConstructor
     public static class ValidarConviteResponse {
         private Boolean valido;
+
+        @NotBlank
+        private String email;  // SEMPRE presente
+
         private TipoUsuario tipoUsuario;
         private String comarca;
         private String departamento;
         private LocalDateTime expiraEm;
         private String mensagem;
-
-        @Builder.Default
-        private String[] camposEditaveis = {"email", "nome", "cargo", "senha"};
 
         public boolean isValido() {
             return Boolean.TRUE.equals(valido);
@@ -112,14 +76,11 @@ public class ConviteDTO {
         private LocalDateTime expiraEm;
         private String criadoPorNome;
         private Long criadoPorId;
-        private Integer usosRestantes;
-        private Integer quantidadeUsos;
-        private Boolean isGenerico;
     }
 
     /**
      * DTO para ativar convite
-     * Suporta tanto convites específicos quanto genéricos
+     * Email sempre vem do convite (não é editável pelo usuário)
      */
     @Data
     @Builder
@@ -132,10 +93,6 @@ public class ConviteDTO {
         @NotBlank(message = "Nome é obrigatório")
         @Size(min = 3, max = 100, message = "Nome deve ter entre 3 e 100 caracteres")
         private String nome;
-
-        // Email é obrigatório apenas para convites genéricos
-        @Email(message = "Email inválido")
-        private String email;
 
         @NotBlank(message = "Senha é obrigatória")
         @Size(min = 8, message = "Senha deve ter no mínimo 8 caracteres")
@@ -186,7 +143,6 @@ public class ConviteDTO {
 
     /**
      * DTO para listagem de convites
-     * USO ÚNICO
      */
     @Data
     @Builder
@@ -205,7 +161,6 @@ public class ConviteDTO {
         private Boolean expirado;
         private String criadoPorNome;
         private String usuarioCriadoNome;
-        private Boolean isGenerico;
         private Boolean usado;
     }
 
@@ -222,13 +177,10 @@ public class ConviteDTO {
         private Long ativados;
         private Long expirados;
         private Long cancelados;
-        private Long aguardandoVerificacao;
-        private Long convitesGenericos;
-        private Long convitesEspecificos;
     }
 
     /**
-     * DTO para pré-cadastro (fluxo de verificação de email)
+     * DTO para pré-cadastro (fluxo de verificação de email - se necessário)
      */
     @Data
     @Builder

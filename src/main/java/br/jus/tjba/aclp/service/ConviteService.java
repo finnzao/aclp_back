@@ -167,6 +167,7 @@ public class ConviteService {
 
     /**
      * Valida convite retornando informações para pré-preencher formulário
+     * Email sempre presente - não há convites genéricos
      */
     @Transactional(readOnly = true)
     public ValidarConviteResponse validarConvite(String token) {
@@ -185,7 +186,7 @@ public class ConviteService {
         if (convite.getUsosRealizados() > 0) {
             return ValidarConviteResponse.builder()
                     .valido(false)
-                    .mensagem("Este convite já foi utilizado e não pode ser reutilizado")
+                    .mensagem("Este convite já foi utilizado")
                     .build();
         }
 
@@ -214,37 +215,26 @@ public class ConviteService {
                     .build();
         }
 
-        // Definir campos editáveis
-        String[] camposEditaveis;
-        if (convite.isGenerico()) {
-            // Convite genérico: usuário pode preencher email, nome, senha, cargo
-            camposEditaveis = new String[]{"email", "nome", "senha", "cargo"};
-        } else {
-            // Convite específico: email já definido
-            camposEditaveis = new String[]{"nome", "senha", "cargo"};
-        }
-
-        log.info("Convite válido - Tipo: {}, Genérico: {}",
-                convite.getTipoConviteDescricao(), convite.isGenerico());
+        log.info("Convite válido - Email: {}", convite.getEmail());
 
         return ValidarConviteResponse.builder()
                 .valido(true)
+                .email(convite.getEmail())  // SEMPRE retorna email
                 .tipoUsuario(convite.getTipoUsuario())
                 .comarca(convite.getComarca())
                 .departamento(convite.getDepartamento())
                 .expiraEm(convite.getExpiraEm())
-                .camposEditaveis(camposEditaveis)
                 .mensagem("Convite válido")
                 .build();
     }
 
     /**
      * Ativa convite criando novo usuário
-     * USO ÚNICO - após ativação, convite não pode ser reutilizado
+     * Email sempre vem do convite (não é editável)
      */
     @Transactional
     public AtivarConviteResponse ativarConvite(AtivarConviteRequest request, HttpServletRequest httpRequest) {
-        log.info("Ativando convite (uso único) - Token: {}", request.getToken());
+        log.info("Ativando convite - Token: {}", request.getToken());
 
         // Buscar convite
         Convite convite = conviteRepository.findByToken(request.getToken())
@@ -252,7 +242,7 @@ public class ConviteService {
 
         // Verificar se já foi usado
         if (convite.getUsosRealizados() > 0) {
-            throw new IllegalArgumentException("Este convite já foi utilizado e não pode ser reutilizado");
+            throw new IllegalArgumentException("Este convite já foi utilizado");
         }
 
         // Validar convite
@@ -265,17 +255,11 @@ public class ConviteService {
             throw new IllegalArgumentException("As senhas não coincidem");
         }
 
-        // Determinar email final
-        String emailFinal;
-        if (convite.isGenerico()) {
-            // Convite genérico: email vem do request
-            if (request.getEmail() == null || request.getEmail().trim().isEmpty()) {
-                throw new IllegalArgumentException("Email é obrigatório");
-            }
-            emailFinal = request.getEmail().toLowerCase().trim();
-        } else {
-            // Convite específico: email vem do convite
-            emailFinal = convite.getEmail();
+        // Email vem SEMPRE do convite (não do request)
+        String emailFinal = convite.getEmail();
+
+        if (emailFinal == null || emailFinal.trim().isEmpty()) {
+            throw new IllegalStateException("Convite inválido: email não definido");
         }
 
         // Verificar se email já existe
@@ -300,11 +284,11 @@ public class ConviteService {
 
         usuario = usuarioRepository.save(usuario);
 
-        // Ativar convite (marca como usado - USO ÚNICO)
+        // Ativar convite
         convite.ativar(usuario, extractIpAddress(httpRequest));
         conviteRepository.save(convite);
 
-        log.info("Convite ativado com sucesso (uso único) - Usuario: {}, Email: {}, Convite ID: {}",
+        log.info("Convite ativado com sucesso - Usuario: {}, Email: {}, Convite ID: {}",
                 usuario.getId(), usuario.getEmail(), convite.getId());
 
         return AtivarConviteResponse.builder()
@@ -323,14 +307,26 @@ public class ConviteService {
     }
 
     /**
-     * Lista todos os convites
+     * Converte Convite para ConviteListItem
      */
-    @Transactional(readOnly = true)
-    public List<ConviteListItem> listarConvites() {
-        return conviteRepository.findAllOrderByCreatedDesc().stream()
-                .map(this::toListItem)
-                .collect(Collectors.toList());
+    private ConviteListItem toListItem(Convite convite) {
+        return ConviteListItem.builder()
+                .id(convite.getId())
+                .email(convite.getEmail())
+                .tipoUsuario(convite.getTipoUsuario())
+                .status(convite.getStatus())
+                .comarca(convite.getComarca())
+                .departamento(convite.getDepartamento())
+                .criadoEm(convite.getCriadoEm())
+                .expiraEm(convite.getExpiraEm())
+                .ativadoEm(convite.getAtivadoEm())
+                .expirado(convite.isExpirado())
+                .criadoPorNome(convite.getCriadoPor() != null ? convite.getCriadoPor().getNome() : null)
+                .usuarioCriadoNome(convite.getUsuario() != null ? convite.getUsuario().getNome() : null)
+                .usado(convite.getUsosRealizados() > 0)
+                .build();
     }
+
     /**
      * Lista convites criados pelo usuário autenticado
      */
@@ -351,6 +347,7 @@ public class ConviteService {
                 .map(this::toListItem)
                 .collect(Collectors.toList());
     }
+
     /**
      * Busca convite por ID
      */
@@ -432,7 +429,6 @@ public class ConviteService {
             throw new RuntimeException("Erro ao enviar email");
         }
     }
-
 
 
     /**
