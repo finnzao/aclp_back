@@ -35,7 +35,8 @@ public class ConviteService {
     private final EmailService emailService;
     private final AuthService authService;
 
-    @Value("${aclp.frontend.url:https://aclp-psi.vercel.app}")
+    // Usar Value com fallback
+    @Value("${aclp.frontend.url:http://localhost:3000}")
     private String frontendUrl;
 
     /**
@@ -44,6 +45,7 @@ public class ConviteService {
     @Transactional
     public ConviteResponse criarConvite(CriarConviteRequest request, HttpServletRequest httpRequest) {
         log.info("Criando convite específico para: {}", request.getEmail());
+        log.info("Frontend URL configurada: {}", frontendUrl); // Log para debug
 
         String email = request.getEmail().toLowerCase().trim();
 
@@ -76,17 +78,22 @@ public class ConviteService {
                 .build();
 
         convite = conviteRepository.save(convite);
+        conviteRepository.flush(); // Força o flush para garantir que está salvo
 
-        // Enviar email
-        try {
-            enviarEmailConvite(convite);
-            log.info("Email de convite enviado para: {}", email);
-        } catch (Exception e) {
-            log.error("Erro ao enviar email de convite: {}", e.getMessage(), e);
-        }
+        log.info("Convite salvo no banco - ID: {}, Token: {}", convite.getId(), convite.getToken());
 
         // Link para produção
         String linkConvite = String.format("%s/invite/%s", frontendUrl, convite.getToken());
+        log.info("Link do convite gerado: {}", linkConvite);
+
+        // Enviar email de forma assíncrona
+        try {
+            enviarEmailConvite(convite);
+            log.info("Email de convite processado para: {}", email);
+        } catch (Exception e) {
+            log.error("Erro ao enviar email de convite: {}", e.getMessage(), e);
+            // Não quebra o fluxo - convite já foi criado
+        }
 
         log.info("Convite específico criado - ID: {}, Email: {}", convite.getId(), convite.getEmail());
 
@@ -116,14 +123,19 @@ public class ConviteService {
         Convite convite = conviteRepository.findByToken(token).orElse(null);
 
         if (convite == null) {
+            log.warn("Convite não encontrado para token: {}", token);
             return ValidarConviteResponse.builder()
                     .valido(false)
                     .mensagem("Convite não encontrado")
                     .build();
         }
 
+        log.info("Convite encontrado - ID: {}, Status: {}, Email: {}",
+                convite.getId(), convite.getStatus(), convite.getEmail());
+
         // Verificar se já foi usado
         if (convite.getUsosRealizados() > 0) {
+            log.warn("Convite já foi utilizado - ID: {}", convite.getId());
             return ValidarConviteResponse.builder()
                     .valido(false)
                     .mensagem("Este convite já foi utilizado")
@@ -132,6 +144,8 @@ public class ConviteService {
 
         // Verificar expiração
         if (convite.isExpirado()) {
+            log.warn("Convite expirado - ID: {}, Expirou em: {}",
+                    convite.getId(), convite.getExpiraEm());
             return ValidarConviteResponse.builder()
                     .valido(false)
                     .mensagem("Este convite expirou em " + convite.getExpiraEm())
@@ -148,6 +162,9 @@ public class ConviteService {
             } else {
                 msg = "Este convite não está mais disponível";
             }
+
+            log.warn("Convite com status inválido - ID: {}, Status: {}",
+                    convite.getId(), convite.getStatus());
 
             return ValidarConviteResponse.builder()
                     .valido(false)
@@ -178,6 +195,9 @@ public class ConviteService {
         // Buscar convite
         Convite convite = conviteRepository.findByToken(request.getToken())
                 .orElseThrow(() -> new IllegalArgumentException("Convite não encontrado"));
+
+        log.info("Convite encontrado para ativação - ID: {}, Email: {}",
+                convite.getId(), convite.getEmail());
 
         // Verificar se já foi usado
         if (convite.getUsosRealizados() > 0) {
@@ -227,7 +247,8 @@ public class ConviteService {
         convite.ativar(usuario, extractIpAddress(httpRequest));
         conviteRepository.save(convite);
 
-        log.info("Convite ativado com sucesso - Usuario: {}, Email: {}", usuario.getId(), usuario.getEmail());
+        log.info("Convite ativado com sucesso - Usuario: {}, Email: {}",
+                usuario.getId(), usuario.getEmail());
 
         return AtivarConviteResponse.builder()
                 .success(true)
@@ -379,6 +400,8 @@ public class ConviteService {
      */
     private void enviarEmailConvite(Convite convite) {
         String linkConvite = String.format("%s/invite/%s", frontendUrl, convite.getToken());
+
+        log.info("Preparando email - Link: {}", linkConvite);
 
         String assunto = "Convite para Sistema ACLP - TJBA";
 
