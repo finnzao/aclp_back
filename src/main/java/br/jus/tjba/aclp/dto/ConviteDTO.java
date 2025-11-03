@@ -27,7 +27,7 @@ public class ConviteDTO {
         private Boolean valido;
 
         @NotBlank
-        private String email;  // SEMPRE presente
+        private String email;  // Email sempre presente
 
         private TipoUsuario tipoUsuario;
         private String comarca;
@@ -80,7 +80,6 @@ public class ConviteDTO {
 
     /**
      * DTO para ativar convite
-     * Email sempre vem do convite (não é editável pelo usuário)
      */
     @Data
     @Builder
@@ -180,7 +179,7 @@ public class ConviteDTO {
     }
 
     /**
-     * DTO para pré-cadastro (fluxo de verificação de email - se necessário)
+     * DTO para pré-cadastro
      */
     @Data
     @Builder
@@ -255,5 +254,41 @@ public class ConviteDTO {
 
         @Builder.Default
         private String loginUrl = "/login";
+    }
+
+    /**
+     * DTO para gerar link de convite (removido - não há mais convites genéricos)
+     */
+    @Deprecated
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class GerarLinkConviteRequest {
+        @NotNull(message = "Tipo de usuário é obrigatório")
+        private TipoUsuario tipoUsuario;
+
+        @Builder.Default
+        private Integer diasValidade = 30;
+    }
+
+    /**
+     * DTO para resposta de link de convite (removido - não há mais convites genéricos)
+     */
+    @Deprecated
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class LinkConviteResponse {
+        private Long id;
+        private String token;
+        private String link;
+        private TipoUsuario tipoUsuario;
+        private String comarca;
+        private String departamento;
+        private LocalDateTime expiraEm;
+        private String criadoPorNome;
+        private Boolean usado;
     }
 }

@@ -29,6 +29,7 @@ import java.util.List;
 public class ConviteController {
 
     private final ConviteService conviteService;
+    private final EmailVerificationService emailVerificationService;
 
     /**
      * ADMIN: Criar novo convite
@@ -225,36 +226,8 @@ public class ConviteController {
         }
     }
 
-    private final EmailVerificationService emailVerificationService;
-
     /**
-     * ADMIN: Gerar link de convite (sem email específico)
-     */
-    @PostMapping("/gerar-link")
-    @PreAuthorize("hasRole('ADMIN')")
-    @SecurityRequirement(name = "bearer-auth")
-    @Operation(summary = "Gerar link de convite",
-            description = "Gera link de convite reutilizável (apenas ADMIN)")
-    public ResponseEntity<ApiResponse<LinkConviteResponse>> gerarLinkConvite(
-            @Valid @RequestBody GerarLinkConviteRequest request,
-            HttpServletRequest httpRequest) {
-
-        log.info("Gerando link de convite - Tipo: {}", request.getTipoUsuario());
-
-        try {
-            // Este método precisaria ser implementado no ConviteService
-            LinkConviteResponse response = conviteService.gerarLinkConvite(request, httpRequest);
-            return ResponseEntity.status(HttpStatus.CREATED)
-                    .body(ApiResponse.success("Link de convite gerado com sucesso", response));
-        } catch (Exception e) {
-            log.error("Erro ao gerar link de convite", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error("Erro ao gerar link"));
-        }
-    }
-
-    /**
-     * PÚBLICO: Criar pré-cadastro (primeira etapa)
+     * PÚBLICO: Criar pré-cadastro
      */
     @PostMapping("/pre-cadastro")
     @Operation(summary = "Criar pré-cadastro",
@@ -280,7 +253,7 @@ public class ConviteController {
     }
 
     /**
-     * PÚBLICO: Verificar email (segunda etapa)
+     * PÚBLICO: Verificar email
      */
     @PostMapping("/verificar-email")
     @Operation(summary = "Verificar email",
@@ -307,7 +280,7 @@ public class ConviteController {
     }
 
     /**
-     * PÚBLICO: Verificar email via GET (para links de email)
+     * PÚBLICO: Verificar email via GET
      */
     @GetMapping("/verificar-email/{token}")
     @Operation(summary = "Verificar email via link",
