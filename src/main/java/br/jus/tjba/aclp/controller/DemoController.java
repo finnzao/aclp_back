@@ -9,19 +9,24 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Controller de demonstração para testar o fluxo de convites
- * APENAS PARA DESENVOLVIMENTO - REMOVER EM PRODUÇÃO
+ * Controller de demonstração para testar o fluxo de convites.
+ * Ativo apenas com profile "demo" e restrito a ADMIN autenticado.
+ * Para ativar: spring.profiles.active=demo (não usar em produção).
  */
 @RestController
 @RequestMapping("/api/demo")
 @RequiredArgsConstructor
+@Profile("demo")
+@PreAuthorize("hasRole('ADMIN')")
 @Tag(name = "Demo", description = "Endpoints de demonstração (desenvolvimento)")
 @Slf4j
 public class DemoController {
@@ -39,16 +44,13 @@ public class DemoController {
         log.warn("ENDPOINT DE TESTE - Criando convite de demonstração");
 
         try {
-            // Criar DTO de convite de teste
             CriarConviteRequest dto = CriarConviteRequest.builder()
                     .email("teste@example.com")
                     .tipoUsuario(br.jus.tjba.aclp.model.enums.TipoUsuario.USUARIO)
                     .build();
 
-            // Criar convite
             ConviteResponse response = conviteService.criarConvite(dto, request);
 
-            // Montar informações usando os campos reais de ConviteResponse
             Map<String, Object> info = new HashMap<>();
             info.put("modo", "DESENVOLVIMENTO");
             info.put("token", response.getToken());
@@ -125,7 +127,6 @@ public class DemoController {
         log.warn("ENDPOINT DE TESTE - Simulando ativação de conta");
 
         try {
-            // Primeiro validar o token
             ValidarConviteResponse tokenInfo = conviteService.validarConvite(token);
 
             if (!tokenInfo.isValido()) {
@@ -137,7 +138,6 @@ public class DemoController {
                         ));
             }
 
-            // Criar DTO de ativação
             AtivarConviteRequest dto = AtivarConviteRequest.builder()
                     .token(token)
                     .nome("Usuário Teste")
@@ -145,7 +145,6 @@ public class DemoController {
                     .confirmaSenha(senha)
                     .build();
 
-            // Ativar conta
             AtivarConviteResponse response = conviteService.ativarConvite(dto, request);
 
             return ResponseEntity.ok(Map.of(

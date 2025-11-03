@@ -11,9 +11,11 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -23,6 +25,11 @@ import java.util.stream.Collectors;
 /**
  * Serviço para gerenciamento de convites
  * APENAS CONVITES ESPECÍFICOS COM EMAIL
+ *
+ * CORREÇÕES APLICADAS:
+ * - Removido flush() desnecessário que causava connection leak
+ * - Envio de email movido para método assíncrono separado
+ * - Transação é fechada antes do envio do email
  */
 @Slf4j
 @Service
@@ -35,7 +42,6 @@ public class ConviteService {
     private final EmailService emailService;
     private final AuthService authService;
 
-    // Usar Value com fallback
     @Value("${aclp.frontend.url:http://localhost:3000}")
     private String frontendUrl;
 
@@ -45,7 +51,7 @@ public class ConviteService {
     @Transactional
     public ConviteResponse criarConvite(CriarConviteRequest request, HttpServletRequest httpRequest) {
         log.info("Criando convite específico para: {}", request.getEmail());
-        log.info("Frontend URL configurada: {}", frontendUrl); // Log para debug
+        log.info("Frontend URL configurada: {}", frontendUrl);
 
         String email = request.getEmail().toLowerCase().trim();
 
@@ -78,7 +84,6 @@ public class ConviteService {
                 .build();
 
         convite = conviteRepository.save(convite);
-        conviteRepository.flush(); // Força o flush para garantir que está salvo
 
         log.info("Convite salvo no banco - ID: {}, Token: {}", convite.getId(), convite.getToken());
 
@@ -86,18 +91,15 @@ public class ConviteService {
         String linkConvite = String.format("%s/invite/%s", frontendUrl, convite.getToken());
         log.info("Link do convite gerado: {}", linkConvite);
 
-        // Enviar email de forma assíncrona
-        try {
-            enviarEmailConvite(convite);
-            log.info("Email de convite processado para: {}", email);
-        } catch (Exception e) {
-            log.error("Erro ao enviar email de convite: {}", e.getMessage(), e);
-            // Não quebra o fluxo - convite já foi criado
-        }
+        // Isso libera a conexão do banco imediatamente
+        Long conviteId = convite.getId();
+        String conviteToken = convite.getToken();
+        String conviteEmail = convite.getEmail();
 
-        log.info("Convite específico criado - ID: {}, Email: {}", convite.getId(), convite.getEmail());
+        // A transação será fechada aqui (fim do método @Transactional)
+        // Depois disso, o email é enviado de forma assíncrona
 
-        return ConviteResponse.builder()
+        ConviteResponse response = ConviteResponse.builder()
                 .id(convite.getId())
                 .token(convite.getToken())
                 .email(convite.getEmail())
@@ -111,6 +113,68 @@ public class ConviteService {
                 .criadoPorNome(admin.getNome())
                 .criadoPorId(admin.getId())
                 .build();
+
+        // Enviar email após a transação ser commitada
+        // Usa @Async para não bloquear a thread e não manter conexão aberta
+        enviarEmailConviteAsync(conviteId);
+
+        log.info("Convite específico criado - ID: {}, Email: {}", convite.getId(), convite.getEmail());
+
+        return response;
+    }
+
+    /**
+     * Envia email de convite de forma ASSÍNCRONA
+     */
+    @Async
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
+    public void enviarEmailConviteAsync(Long conviteId) {
+        try {
+            // Buscar convite em nova transação (read-only)
+            Convite convite = conviteRepository.findById(conviteId).orElse(null);
+
+            if (convite == null) {
+                log.error("Convite não encontrado para envio de email - ID: {}", conviteId);
+                return;
+            }
+
+            String linkConvite = String.format("%s/invite/%s", frontendUrl, convite.getToken());
+
+            String assunto = "Convite para Sistema ACLP - TJBA";
+
+            String conteudo = String.format("""
+                    Olá!
+                    
+                    Você foi convidado para acessar o Sistema ACLP do Tribunal de Justiça da Bahia.
+                    
+                    Perfil: %s
+                    Comarca: %s
+                    Departamento: %s
+                    Email: %s
+                    
+                    Para criar sua conta, acesse o link abaixo:
+                    %s
+                    
+                    ⚠️ IMPORTANTE: Este link é de uso único e válido até: %s
+                    
+                    Atenciosamente,
+                    Sistema ACLP - TJBA
+                    """,
+                    convite.getTipoUsuario().getLabel(),
+                    convite.getComarca() != null ? convite.getComarca() : "Não definida",
+                    convite.getDepartamento() != null ? convite.getDepartamento() : "Não definido",
+                    convite.getEmail(),
+                    linkConvite,
+                    convite.getExpiraEm()
+            );
+
+            emailService.enviarEmail(convite.getEmail(), assunto, conteudo);
+            log.info("Email de convite enviado com sucesso para: {}", convite.getEmail());
+
+        } catch (Exception e) {
+            // Log do erro mas não propaga - o convite já foi criado
+            log.error("Erro ao enviar email de convite ID {}: {}", conviteId, e.getMessage(), e);
+        }
     }
 
     /**
@@ -330,7 +394,7 @@ public class ConviteService {
     /**
      * Reenvia email de convite
      */
-    @Transactional
+    @Transactional(readOnly = true)
     public void reenviarConvite(Long id) {
         Convite convite = conviteRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Convite não encontrado"));
@@ -347,13 +411,8 @@ public class ConviteService {
             throw new IllegalArgumentException("Este convite já foi utilizado");
         }
 
-        try {
-            enviarEmailConvite(convite);
-            log.info("Convite reenviado - ID: {}, Email: {}", id, convite.getEmail());
-        } catch (Exception e) {
-            log.error("Erro ao reenviar convite: {}", e.getMessage(), e);
-            throw new RuntimeException("Erro ao enviar email");
-        }
+        enviarEmailConviteAsync(id);
+        log.info("Solicitação de reenvio de convite processada - ID: {}", id);
     }
 
     /**
@@ -393,45 +452,6 @@ public class ConviteService {
         }
 
         log.info("Convites expirados: {}", convitesExpirados.size());
-    }
-
-    /**
-     * Envia email de convite
-     */
-    private void enviarEmailConvite(Convite convite) {
-        String linkConvite = String.format("%s/invite/%s", frontendUrl, convite.getToken());
-
-        log.info("Preparando email - Link: {}", linkConvite);
-
-        String assunto = "Convite para Sistema ACLP - TJBA";
-
-        String conteudo = String.format("""
-                        Olá!
-                        
-                        Você foi convidado para acessar o Sistema ACLP do Tribunal de Justiça da Bahia.
-                        
-                        Perfil: %s
-                        Comarca: %s
-                        Departamento: %s
-                        Email: %s
-                        
-                        Para criar sua conta, acesse o link abaixo:
-                        %s
-                        
-                        ⚠️ IMPORTANTE: Este link é de uso único e válido até: %s
-                        
-                        Atenciosamente,
-                        Sistema ACLP - TJBA
-                        """,
-                convite.getTipoUsuario().getLabel(),
-                convite.getComarca() != null ? convite.getComarca() : "Não definida",
-                convite.getDepartamento() != null ? convite.getDepartamento() : "Não definido",
-                convite.getEmail(),
-                linkConvite,
-                convite.getExpiraEm()
-        );
-
-        emailService.enviarEmail(convite.getEmail(), assunto, conteudo);
     }
 
     /**

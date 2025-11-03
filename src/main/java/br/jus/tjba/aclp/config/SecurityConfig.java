@@ -4,6 +4,8 @@ import br.jus.tjba.aclp.security.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -19,9 +21,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
-/**
- * Configuração de Segurança Web
- */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity(prePostEnabled = true)
@@ -35,25 +34,17 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                // Desabilitar CSRF (API REST stateless)
                 .csrf(AbstractHttpConfigurer::disable)
 
-                // Configurar CORS (usa CorsConfig.java)
                 .cors(cors -> {})
 
-                // Sessão stateless (JWT)
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
-                // Configurar autorização de requisições
                 .authorizeHttpRequests(authz -> authz
-                        // ==================== OPTIONS - PERMITIR TUDO (CORS PREFLIGHT) ====================
-                        // Requisições OPTIONS devem passar sem autenticação para CORS funcionar
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // ==================== ENDPOINTS PÚBLICOS ====================
-
-                        // Autenticação (sem token)
+                        // ==================== AUTENTICAÇÃO (público) ====================
                         .requestMatchers("/api/auth/login").permitAll()
                         .requestMatchers("/api/auth/refresh").permitAll()
                         .requestMatchers("/api/auth/forgot-password").permitAll()
@@ -62,64 +53,52 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/check-setup").permitAll()
                         .requestMatchers("/api/auth/validate").permitAll()
 
-                        // ==================== ENDPOINTS DE PERFIL (AUTENTICADOS) ====================
-
-                        // Qualquer usuário autenticado pode acessar seu perfil
+                        // ==================== PERFIL (autenticado) ====================
                         .requestMatchers("/api/auth/perfil").authenticated()
                         .requestMatchers("/api/auth/perfil/**").authenticated()
 
-                        // ==================== SETUP E DEMO ====================
+                        // ==================== SETUP (público, exceto reset) ====================
+                        .requestMatchers("/api/setup/status").permitAll()
+                        .requestMatchers("/api/setup/admin").permitAll()
+                        .requestMatchers("/api/setup/health").permitAll()
+                        .requestMatchers("/api/setup/audit").permitAll()
 
-                        .requestMatchers("/api/setup/**").permitAll()
-                        .requestMatchers("/api/demo/**").permitAll()
+                        // ==================== CONVITES (público apenas validar/ativar) ====================
                         .requestMatchers("/api/usuarios/convites/validar/**").permitAll()
                         .requestMatchers("/api/usuarios/convites/ativar").permitAll()
 
-                        // ==================== DOCUMENTAÇÃO ====================
+                        // ==================== VERIFICAÇÃO EMAIL ====================
+                        .requestMatchers("/api/verificacao/**").permitAll()
 
-                        // Swagger UI
+                        // ==================== DOCUMENTAÇÃO ====================
                         .requestMatchers("/v3/api-docs/**").permitAll()
                         .requestMatchers("/swagger-ui/**").permitAll()
                         .requestMatchers("/swagger-ui.html").permitAll()
                         .requestMatchers("/swagger-resources/**").permitAll()
                         .requestMatchers("/webjars/**").permitAll()
 
-                        // ==================== DESENVOLVIMENTO ====================
-
-                        // H2 Console (apenas desenvolvimento)
-                        .requestMatchers("/h2-console/**").permitAll()
-
-                        // Health checks (Actuator)
+                        // ==================== HEALTH CHECKS ====================
                         .requestMatchers("/actuator/health/**").permitAll()
 
                         // ==================== FRONTEND ====================
-
                         .requestMatchers("/", "/index.html", "/setup/**").permitAll()
                         .requestMatchers("/css/**", "/js/**", "/images/**", "/static/**").permitAll()
 
-                        // ==================== ROTAS ADMINISTRATIVAS ====================
-
+                        // ==================== ADMINISTRATIVO ====================
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/usuarios/**").hasRole("ADMIN")
                         .requestMatchers("/api/usuarios/convites").hasRole("ADMIN")
 
-                        // ==================== QUALQUER OUTRA REQUISIÇÃO ====================
-
-                        // Qualquer outra requisição precisa autenticação
+                        // ==================== TUDO MAIS: AUTENTICADO ====================
                         .anyRequest().authenticated()
                 )
 
-                // Configurar provider de autenticação
                 .authenticationProvider(authenticationProvider())
 
-                // Adicionar filtro JWT antes do filtro de autenticação padrão
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
 
-                // Configuração de headers de segurança
                 .headers(headers -> headers
-                        // Permitir frames da mesma origem (para H2 Console em dev)
-                        .frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin)
-                        // Configurações de segurança adicionais
+                        .frameOptions(HeadersConfigurer.FrameOptionsConfig::deny)
                         .contentTypeOptions(contentType -> {})
                         .xssProtection(xss -> {})
                         .cacheControl(cache -> {})
@@ -129,9 +108,23 @@ public class SecurityConfig {
     }
 
     /**
-     * Bean do provider de autenticação
-     * Usa UserDetailsService e PasswordEncoder
+     * SecurityFilterChain adicional para H2 Console.
+     * Só existe com profile "dev". Em produção, /h2-console retorna 403.
      */
+    @Bean
+    @Order(1)
+    @Profile("dev")
+    public SecurityFilterChain h2ConsoleFilterChain(HttpSecurity http) throws Exception {
+        http
+                .securityMatcher("/h2-console/**")
+                .csrf(AbstractHttpConfigurer::disable)
+                .authorizeHttpRequests(authz -> authz.anyRequest().permitAll())
+                .headers(headers -> headers
+                        .frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin)
+                );
+        return http.build();
+    }
+
     @Bean
     public DaoAuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
@@ -140,10 +133,6 @@ public class SecurityConfig {
         return authProvider;
     }
 
-    /**
-     * Bean do AuthenticationManager
-     * Usado para autenticação programática (login)
-     */
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();

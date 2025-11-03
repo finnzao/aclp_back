@@ -3,18 +3,16 @@ package br.jus.tjba.aclp.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.CorsFilter;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * Configuração global de CORS para permitir requisições do frontend
- * IMPORTANTE: Esta é a ÚNICA configuração de CORS - não configure em WebConfig também!
- */
 @Configuration
 public class CorsConfig {
 
@@ -24,81 +22,72 @@ public class CorsConfig {
     @Value("${aclp.cors.allowed-origins:http://localhost:3000}")
     private String allowedOrigins;
 
-    /**
-     * Configuração de CORS para permitir requisições do frontend
-     */
+    private final Environment environment;
+
+    public CorsConfig(Environment environment) {
+        this.environment = environment;
+    }
+
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        // Processar múltiplas origens das variáveis de ambiente
-        List<String> origins = Arrays.stream(allowedOrigins.split(","))
+        List<String> patterns = new ArrayList<>();
+
+        // Origens das variáveis de ambiente (sempre incluídas)
+        Arrays.stream(allowedOrigins.split(","))
                 .map(String::trim)
                 .map(origin -> origin.endsWith("/") ? origin.substring(0, origin.length() - 1) : origin)
-                .toList();
+                .forEach(patterns::add);
 
-        // Origens permitidas
-        configuration.setAllowedOriginPatterns(Arrays.asList(
-                "http://localhost:*",
-                "http://127.0.0.1:*",
-                "https://aclp-psi.vercel.app",
-                "https://*.vercel.app",
-                "https://*.railway.app"
-        ));
+        // Adicionar frontend URL se diferente
+        if (!patterns.contains(frontendUrl)) {
+            patterns.add(frontendUrl);
+        }
 
-        // Também adicionar origens específicas das variáveis de ambiente
-        origins.forEach(configuration::addAllowedOrigin);
+        // localhost apenas em dev/default (não em prod)
+        if (isDevProfile()) {
+            patterns.add("http://localhost:*");
+            patterns.add("http://127.0.0.1:*");
+        }
 
-        // Métodos HTTP permitidos
+        configuration.setAllowedOriginPatterns(patterns);
+
         configuration.setAllowedMethods(Arrays.asList(
-                "GET",
-                "POST",
-                "PUT",
-                "DELETE",
-                "PATCH",
-                "OPTIONS",
-                "HEAD"
+                "GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"
         ));
 
-        // Headers permitidos
         configuration.setAllowedHeaders(Arrays.asList(
-                "Authorization",
-                "Content-Type",
-                "Accept",
-                "Origin",
-                "Access-Control-Request-Method",
-                "Access-Control-Request-Headers",
-                "X-Requested-With",
-                "X-CSRF-TOKEN"
+                "Authorization", "Content-Type", "Accept", "Origin",
+                "Access-Control-Request-Method", "Access-Control-Request-Headers",
+                "X-Requested-With", "X-CSRF-TOKEN"
         ));
 
-        // Headers expostos (que o frontend pode ler)
         configuration.setExposedHeaders(Arrays.asList(
-                "Authorization",
-                "Content-Type",
-                "X-Total-Count",
-                "Access-Control-Allow-Origin",
-                "Access-Control-Allow-Credentials"
+                "Authorization", "Content-Type", "X-Total-Count",
+                "Access-Control-Allow-Origin", "Access-Control-Allow-Credentials"
         ));
 
-        // Permitir credenciais (cookies, authorization headers)
         configuration.setAllowCredentials(true);
-
-        // Tempo de cache da configuração CORS (1 hora)
         configuration.setMaxAge(3600L);
 
-        // Registrar configuração para todas as rotas
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
 
         return source;
     }
 
-    /**
-     * Bean do filtro CORS
-     */
     @Bean
     public CorsFilter corsFilter() {
         return new CorsFilter(corsConfigurationSource());
+    }
+
+    private boolean isDevProfile() {
+        String[] activeProfiles = environment.getActiveProfiles();
+        if (activeProfiles.length == 0) {
+            return true; // Sem profile = dev
+        }
+        return Arrays.stream(activeProfiles)
+                .anyMatch(p -> p.equals("dev") || p.equals("default"));
     }
 }

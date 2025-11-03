@@ -11,6 +11,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -54,7 +56,6 @@ public class SetupController {
         log.info("Solicitação de criação do primeiro admin - Email: {}, IP: {}", dto.getEmail(), clientIp);
 
         try {
-            // Verificar se setup ainda é necessário
             if (!setupService.isSetupRequired()) {
                 log.warn("Tentativa de executar setup já concluído - IP: {}", clientIp);
                 return ResponseEntity.status(HttpStatus.CONFLICT)
@@ -65,7 +66,6 @@ public class SetupController {
                         ));
             }
 
-            // Criar primeiro administrador
             Usuario admin = setupService.createFirstAdmin(dto, clientIp);
 
             return ResponseEntity.status(HttpStatus.CREATED)
@@ -119,36 +119,6 @@ public class SetupController {
         return ResponseEntity.ok(auditInfo);
     }
 
-    @PostMapping("/reset")
-    @Operation(summary = "Resetar setup (desenvolvimento)",
-            description = "Reseta o setup para estado inicial - APENAS PARA DESENVOLVIMENTO")
-    @ApiResponse(responseCode = "200", description = "Setup resetado com sucesso")
-    public ResponseEntity<Map<String, String>> resetSetup(
-            @RequestParam(required = false) String confirmToken,
-            HttpServletRequest request) {
-
-        String clientIp = getClientIpAddress(request);
-
-        // Proteção adicional para reset
-        if (!"DEV_RESET_CONFIRM".equals(confirmToken)) {
-            log.warn("Tentativa de reset sem token válido - IP: {}", clientIp);
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of(
-                            "status", "error",
-                            "message", "Token de confirmação inválido"
-                    ));
-        }
-
-        log.warn("🚨 RESET DO SETUP EXECUTADO - IP: {}", clientIp);
-        setupService.resetSetup();
-
-        return ResponseEntity.ok(Map.of(
-                "status", "success",
-                "message", "Setup resetado com sucesso",
-                "warning", "Sistema retornou ao estado inicial"
-        ));
-    }
-
     @GetMapping("/health")
     @Operation(summary = "Health check do setup", description = "Verifica se o módulo de setup está funcionando")
     @ApiResponse(responseCode = "200", description = "Setup module funcionando")
@@ -161,9 +131,6 @@ public class SetupController {
         ));
     }
 
-    /**
-     * Extrai endereço IP do cliente
-     */
     private String getClientIpAddress(HttpServletRequest request) {
         String xForwardedFor = request.getHeader("X-Forwarded-For");
         if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
@@ -178,9 +145,6 @@ public class SetupController {
         return request.getRemoteAddr();
     }
 
-    /**
-     * Handler para erros de validação
-     */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, String>> handleValidationError(IllegalArgumentException e) {
         log.warn("Erro de validação no setup: {}", e.getMessage());
@@ -192,9 +156,6 @@ public class SetupController {
                 ));
     }
 
-    /**
-     * Handler para erros de estado
-     */
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<Map<String, String>> handleStateError(IllegalStateException e) {
         log.warn("Erro de estado no setup: {}", e.getMessage());
@@ -204,5 +165,50 @@ public class SetupController {
                         "message", e.getMessage(),
                         "code", "INVALID_STATE"
                 ));
+    }
+
+    /**
+     * Endpoint de reset isolado - só existe com profile "dev".
+     */
+    @Profile("dev")
+    @RestController
+    @RequestMapping("/api/setup")
+    @RequiredArgsConstructor
+    @Slf4j
+    static class SetupResetController {
+
+        private final SetupService setupService;
+
+        @Value("${aclp.setup.reset-token:#{T(java.util.UUID).randomUUID().toString()}}")
+        private String resetToken;
+
+        @PostMapping("/reset")
+        @Operation(summary = "Resetar setup (desenvolvimento)",
+                description = "Reseta o setup para estado inicial - APENAS PARA DESENVOLVIMENTO")
+        @ApiResponse(responseCode = "200", description = "Setup resetado com sucesso")
+        public ResponseEntity<Map<String, String>> resetSetup(
+                @RequestParam(required = false) String confirmToken,
+                HttpServletRequest request) {
+
+            String clientIp = request.getRemoteAddr();
+
+            if (!resetToken.equals(confirmToken)) {
+                log.warn("Tentativa de reset com token inválido - IP: {}", clientIp);
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(Map.of(
+                                "status", "error",
+                                "message", "Token de confirmação inválido"
+                        ));
+            }
+
+            log.warn("RESET DO SETUP EXECUTADO - IP: {}", clientIp);
+            setupService.resetSetup();
+
+            return ResponseEntity.ok(Map.of(
+                    "status", "success",
+                    "message", "Setup resetado com sucesso",
+                    "warning", "Sistema retornou ao estado inicial"
+            ));
+        }
     }
 }

@@ -13,7 +13,6 @@ import org.springframework.stereotype.Component;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -21,7 +20,7 @@ import java.util.stream.Collectors;
 public class JwtTokenProvider {
 
     private final SecretKey secretKey;
-    private final Set<String> tokenBlacklist = ConcurrentHashMap.newKeySet();
+    private final TokenBlacklistService blacklistService;
 
     @Value("${aclp.jwt.expiration-ms:3600000}")
     private long jwtExpirationMs;
@@ -31,7 +30,8 @@ public class JwtTokenProvider {
 
     public JwtTokenProvider(
             @Value("${aclp.jwt.secret:my-super-secret-jwt-key-with-at-least-256-bits-for-hmac-sha-algorithm-security}")
-            String secret) {
+            String secret,
+            TokenBlacklistService blacklistService) {
 
         if (secret.length() < 32) {
             throw new IllegalStateException(
@@ -40,6 +40,7 @@ public class JwtTokenProvider {
         }
 
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        this.blacklistService = blacklistService;
         log.info("JwtTokenProvider inicializado com chave de {} caracteres", secret.length());
     }
 
@@ -87,7 +88,7 @@ public class JwtTokenProvider {
 
     public boolean validateToken(String token) {
         try {
-            if (tokenBlacklist.contains(token)) {
+            if (blacklistService.isBlacklisted(token)) {
                 return false;
             }
             Jwts.parser()
@@ -145,11 +146,18 @@ public class JwtTokenProvider {
     }
 
     public void invalidateToken(String token) {
-        tokenBlacklist.add(token);
+        try {
+            Date expiration = getExpirationDateFromToken(token);
+            blacklistService.blacklist(token, expiration.getTime());
+        } catch (ExpiredJwtException e) {
+            // Token já expirado, não precisa adicionar à blacklist
+        } catch (Exception e) {
+            log.error("Erro ao invalidar token: {}", e.getMessage());
+        }
     }
 
     public boolean isTokenBlacklisted(String token) {
-        return tokenBlacklist.contains(token);
+        return blacklistService.isBlacklisted(token);
     }
 
     public long getTokenValidity() {
@@ -196,19 +204,7 @@ public class JwtTokenProvider {
 
     public void blacklistUserTokens(String userEmail) {
         log.info("Invalidando todos os tokens do usuário: {}", userEmail);
-        // Em produção, implementar com Redis usando padrão de chave user:email:*
-    }
-
-    public void cleanExpiredTokens() {
-        tokenBlacklist.removeIf(token -> {
-            try {
-                Date expiration = getExpirationDateFromToken(token);
-                return expiration.before(new Date());
-            } catch (Exception e) {
-                return true;
-            }
-        });
-        log.debug("Tokens expirados removidos. Blacklist size: {}", tokenBlacklist.size());
+        // TODO: Implementar com Redis usando padrão de chave user:email:*
     }
 
     public boolean isTokenExpiringSoon(String token, long minutesThreshold) {
