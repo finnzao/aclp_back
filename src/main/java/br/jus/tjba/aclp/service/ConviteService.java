@@ -11,26 +11,15 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * Serviço para gerenciamento de convites
- * APENAS CONVITES ESPECÍFICOS COM EMAIL
- *
- * CORREÇÕES APLICADAS:
- * - Removido flush() desnecessário que causava connection leak
- * - Envio de email movido para método assíncrono separado
- * - Transação é fechada antes do envio do email
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -39,39 +28,31 @@ public class ConviteService {
     private final ConviteRepository conviteRepository;
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
-    private final EmailService emailService;
+    private final EmailConviteService emailConviteService; // FIX #11: classe separada
     private final AuthService authService;
 
     @Value("${aclp.frontend.url:http://localhost:3000}")
     private String frontendUrl;
 
-    /**
-     * Cria convite específico (com email) e envia por email
-     */
     @Transactional
     public ConviteResponse criarConvite(CriarConviteRequest request, HttpServletRequest httpRequest) {
         log.info("Criando convite específico para: {}", request.getEmail());
-        log.info("Frontend URL configurada: {}", frontendUrl);
 
         String email = request.getEmail().toLowerCase().trim();
 
-        // Verificar se email já está cadastrado
         if (usuarioRepository.existsByEmail(email)) {
             throw new IllegalArgumentException("Email já cadastrado no sistema");
         }
 
-        // Verificar se já existe convite pendente
         if (conviteRepository.existsByEmailAndStatus(email, StatusConvite.PENDENTE)) {
             throw new IllegalArgumentException("Já existe um convite pendente para este email");
         }
 
-        // Obter admin atual
         Usuario admin = authService.getUsuarioAtual();
         if (admin == null) {
             throw new IllegalArgumentException("Usuário não autenticado");
         }
 
-        // Criar convite específico
         Convite convite = Convite.builder()
                 .email(email)
                 .tipoUsuario(request.getTipoUsuario())
@@ -85,19 +66,7 @@ public class ConviteService {
 
         convite = conviteRepository.save(convite);
 
-        log.info("Convite salvo no banco - ID: {}, Token: {}", convite.getId(), convite.getToken());
-
-        // Link para produção
         String linkConvite = String.format("%s/invite/%s", frontendUrl, convite.getToken());
-        log.info("Link do convite gerado: {}", linkConvite);
-
-        // Isso libera a conexão do banco imediatamente
-        Long conviteId = convite.getId();
-        String conviteToken = convite.getToken();
-        String conviteEmail = convite.getEmail();
-
-        // A transação será fechada aqui (fim do método @Transactional)
-        // Depois disso, o email é enviado de forma assíncrona
 
         ConviteResponse response = ConviteResponse.builder()
                 .id(convite.getId())
@@ -114,72 +83,14 @@ public class ConviteService {
                 .criadoPorId(admin.getId())
                 .build();
 
-        // Enviar email após a transação ser commitada
-        // Usa @Async para não bloquear a thread e não manter conexão aberta
-        enviarEmailConviteAsync(conviteId);
+        // FIX #11: Delegar para classe separada (proxy intercepta corretamente)
+        emailConviteService.enviarEmailConviteAsync(convite.getId());
 
         log.info("Convite específico criado - ID: {}, Email: {}", convite.getId(), convite.getEmail());
 
         return response;
     }
 
-    /**
-     * Envia email de convite de forma ASSÍNCRONA
-     */
-    @Async
-    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
-    public void enviarEmailConviteAsync(Long conviteId) {
-        try {
-            // Buscar convite em nova transação (read-only)
-            Convite convite = conviteRepository.findById(conviteId).orElse(null);
-
-            if (convite == null) {
-                log.error("Convite não encontrado para envio de email - ID: {}", conviteId);
-                return;
-            }
-
-            String linkConvite = String.format("%s/invite/%s", frontendUrl, convite.getToken());
-
-            String assunto = "Convite para Sistema ACLP - TJBA";
-
-            String conteudo = String.format("""
-                    Olá!
-                    
-                    Você foi convidado para acessar o Sistema ACLP do Tribunal de Justiça da Bahia.
-                    
-                    Perfil: %s
-                    Comarca: %s
-                    Departamento: %s
-                    Email: %s
-                    
-                    Para criar sua conta, acesse o link abaixo:
-                    %s
-                    
-                    ⚠️ IMPORTANTE: Este link é de uso único e válido até: %s
-                    
-                    Atenciosamente,
-                    Sistema ACLP - TJBA
-                    """,
-                    convite.getTipoUsuario().getLabel(),
-                    convite.getComarca() != null ? convite.getComarca() : "Não definida",
-                    convite.getDepartamento() != null ? convite.getDepartamento() : "Não definido",
-                    convite.getEmail(),
-                    linkConvite,
-                    convite.getExpiraEm()
-            );
-
-            emailService.enviarEmail(convite.getEmail(), assunto, conteudo);
-            log.info("Email de convite enviado com sucesso para: {}", convite.getEmail());
-
-        } catch (Exception e) {
-            // Log do erro mas não propaga - o convite já foi criado
-            log.error("Erro ao enviar email de convite ID {}: {}", conviteId, e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Valida convite retornando informações
-     */
     @Transactional(readOnly = true)
     public ValidarConviteResponse validarConvite(String token) {
         log.info("Validando convite - Token: {}", token);
@@ -187,36 +98,26 @@ public class ConviteService {
         Convite convite = conviteRepository.findByToken(token).orElse(null);
 
         if (convite == null) {
-            log.warn("Convite não encontrado para token: {}", token);
             return ValidarConviteResponse.builder()
                     .valido(false)
                     .mensagem("Convite não encontrado")
                     .build();
         }
 
-        log.info("Convite encontrado - ID: {}, Status: {}, Email: {}",
-                convite.getId(), convite.getStatus(), convite.getEmail());
-
-        // Verificar se já foi usado
         if (convite.getUsosRealizados() > 0) {
-            log.warn("Convite já foi utilizado - ID: {}", convite.getId());
             return ValidarConviteResponse.builder()
                     .valido(false)
                     .mensagem("Este convite já foi utilizado")
                     .build();
         }
 
-        // Verificar expiração
         if (convite.isExpirado()) {
-            log.warn("Convite expirado - ID: {}, Expirou em: {}",
-                    convite.getId(), convite.getExpiraEm());
             return ValidarConviteResponse.builder()
                     .valido(false)
                     .mensagem("Este convite expirou em " + convite.getExpiraEm())
                     .build();
         }
 
-        // Verificar status
         if (convite.getStatus() != StatusConvite.PENDENTE) {
             String msg;
             if (convite.getStatus() == StatusConvite.ATIVADO) {
@@ -227,16 +128,11 @@ public class ConviteService {
                 msg = "Este convite não está mais disponível";
             }
 
-            log.warn("Convite com status inválido - ID: {}, Status: {}",
-                    convite.getId(), convite.getStatus());
-
             return ValidarConviteResponse.builder()
                     .valido(false)
                     .mensagem(msg)
                     .build();
         }
-
-        log.info("Convite válido - Email: {}", convite.getEmail());
 
         return ValidarConviteResponse.builder()
                 .valido(true)
@@ -249,48 +145,35 @@ public class ConviteService {
                 .build();
     }
 
-    /**
-     * Ativa convite criando novo usuário
-     */
     @Transactional
     public AtivarConviteResponse ativarConvite(AtivarConviteRequest request, HttpServletRequest httpRequest) {
         log.info("Ativando convite - Token: {}", request.getToken());
 
-        // Buscar convite
         Convite convite = conviteRepository.findByToken(request.getToken())
                 .orElseThrow(() -> new IllegalArgumentException("Convite não encontrado"));
 
-        log.info("Convite encontrado para ativação - ID: {}, Email: {}",
-                convite.getId(), convite.getEmail());
-
-        // Verificar se já foi usado
         if (convite.getUsosRealizados() > 0) {
             throw new IllegalArgumentException("Este convite já foi utilizado");
         }
 
-        // Validar convite
         if (!convite.isValido()) {
             throw new IllegalArgumentException("Convite inválido ou expirado");
         }
 
-        // Validar senhas
         if (!request.senhasCoincidentes()) {
             throw new IllegalArgumentException("As senhas não coincidem");
         }
 
-        // Email vem do convite
         String emailFinal = convite.getEmail();
 
         if (emailFinal == null || emailFinal.trim().isEmpty()) {
             throw new IllegalStateException("Convite inválido: email não definido");
         }
 
-        // Verificar se email já existe
         if (usuarioRepository.existsByEmail(emailFinal)) {
             throw new IllegalArgumentException("Este email já está cadastrado no sistema");
         }
 
-        // Criar usuário
         Usuario usuario = Usuario.builder()
                 .nome(request.getNome())
                 .email(emailFinal)
@@ -307,7 +190,6 @@ public class ConviteService {
 
         usuario = usuarioRepository.save(usuario);
 
-        // Ativar convite
         convite.ativar(usuario, extractIpAddress(httpRequest));
         conviteRepository.save(convite);
 
@@ -329,9 +211,6 @@ public class ConviteService {
                 .build();
     }
 
-    /**
-     * Lista convites criados pelo usuário autenticado
-     */
     @Transactional(readOnly = true)
     public List<ConviteListItem> listarConvitesDoUsuarioAtual() {
         Usuario usuarioAtual = authService.getUsuarioAtual();
@@ -340,16 +219,11 @@ public class ConviteService {
             throw new IllegalArgumentException("Usuário não autenticado");
         }
 
-        log.info("Listando convites do usuário: {}", usuarioAtual.getNome());
-
         return conviteRepository.findByCriadoPorId(usuarioAtual.getId()).stream()
                 .map(this::toListItem)
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Busca convite por ID
-     */
     @Transactional(readOnly = true)
     public ConviteResponse buscarPorId(Long id) {
         Convite convite = conviteRepository.findById(id)
@@ -373,9 +247,6 @@ public class ConviteService {
                 .build();
     }
 
-    /**
-     * Cancela convite
-     */
     @Transactional
     public void cancelarConvite(Long id) {
         Convite convite = conviteRepository.findById(id)
@@ -391,10 +262,8 @@ public class ConviteService {
         log.info("Convite cancelado - ID: {}", id);
     }
 
-    /**
-     * Reenvia email de convite
-     */
-    @Transactional(readOnly = true)
+    // FIX #12: Removido readOnly = true (pode precisar registrar reenvios futuramente)
+    @Transactional
     public void reenviarConvite(Long id) {
         Convite convite = conviteRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Convite não encontrado"));
@@ -411,13 +280,11 @@ public class ConviteService {
             throw new IllegalArgumentException("Este convite já foi utilizado");
         }
 
-        enviarEmailConviteAsync(id);
+        // FIX #11: Delegar para classe separada
+        emailConviteService.enviarEmailConviteAsync(id);
         log.info("Solicitação de reenvio de convite processada - ID: {}", id);
     }
 
-    /**
-     * Retorna estatísticas de convites
-     */
     @Transactional(readOnly = true)
     public ConviteStats getEstatisticas() {
         long total = conviteRepository.count();
@@ -435,9 +302,6 @@ public class ConviteService {
                 .build();
     }
 
-    /**
-     * Job para expirar convites automaticamente
-     */
     @Scheduled(cron = "0 0 0 * * ?")
     @Transactional
     public void expirarConvitesAutomaticamente() {
@@ -454,9 +318,6 @@ public class ConviteService {
         log.info("Convites expirados: {}", convitesExpirados.size());
     }
 
-    /**
-     * Converte Convite para ConviteListItem
-     */
     private ConviteListItem toListItem(Convite convite) {
         return ConviteListItem.builder()
                 .id(convite.getId())
@@ -475,9 +336,6 @@ public class ConviteService {
                 .build();
     }
 
-    /**
-     * Extrai endereço IP da requisição
-     */
     private String extractIpAddress(HttpServletRequest request) {
         String xForwardedFor = request.getHeader("X-Forwarded-For");
         if (xForwardedFor != null && !xForwardedFor.isEmpty()) {

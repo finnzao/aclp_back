@@ -15,24 +15,19 @@ import java.util.List;
 @Repository
 public interface HistoricoComparecimentoRepository extends JpaRepository<HistoricoComparecimento, Long> {
 
-    // CORRIGIDO: custodiado.id com underscore
     List<HistoricoComparecimento> findByCustodiado_IdOrderByDataComparecimentoDesc(Long custodiadoId);
 
     List<HistoricoComparecimento> findByDataComparecimentoBetween(LocalDate inicio, LocalDate fim);
 
     List<HistoricoComparecimento> findByDataComparecimento(LocalDate data);
 
-    // CORRIGIDO: custodiado.id com underscore
     List<HistoricoComparecimento> findByCustodiado_IdAndMudancaEnderecoTrue(Long custodiadoId);
 
-    // CORRIGIDO: custodiado.id com underscore
     List<HistoricoComparecimento> findByCustodiado_IdAndDataComparecimento(Long custodiadoId, LocalDate data);
 
     @Query("SELECT CASE WHEN COUNT(h) > 0 THEN true ELSE false END FROM HistoricoComparecimento h " +
             "WHERE h.custodiado.id = :custodiadoId AND h.tipoValidacao = 'CADASTRO_INICIAL'")
     boolean existsCadastroInicialPorCustodiado(@Param("custodiadoId") Long custodiadoId);
-
-    // NOVOS MÉTODOS ADICIONADOS
 
     Page<HistoricoComparecimento> findAllByOrderByDataComparecimentoDesc(Pageable pageable);
 
@@ -63,4 +58,14 @@ public interface HistoricoComparecimentoRepository extends JpaRepository<Histori
 
     @Query("SELECT COUNT(h) FROM HistoricoComparecimento h WHERE h.mudancaEndereco = true")
     long countComMudancaEndereco();
+
+
+    @Query("SELECT COUNT(h) FROM HistoricoComparecimento h WHERE h.dataComparecimento = :data")
+    long countByDataComparecimento(@Param("data") LocalDate data);
+
+    @Query("SELECT COUNT(h) FROM HistoricoComparecimento h WHERE h.dataComparecimento BETWEEN :inicio AND :fim")
+    long countByDataComparecimentoBetween(@Param("inicio") LocalDate inicio, @Param("fim") LocalDate fim);
+
+    @Query("SELECT COUNT(DISTINCT h.custodiado.id) FROM HistoricoComparecimento h")
+    long countCustodiadosDistintos();
 }

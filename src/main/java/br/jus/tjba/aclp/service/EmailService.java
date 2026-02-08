@@ -6,21 +6,12 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
-// Use ONLY Jakarta Mail imports (jakarta.mail.*)
 import jakarta.mail.*;
 import jakarta.mail.internet.*;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
-import java.security.cert.X509Certificate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Properties;
 
-/**
- * Serviço de email com implementação manual completa
- * Funciona com ou sem Spring Mail, usando JavaMail diretamente
- */
 @Slf4j
 @Service
 public class EmailService {
@@ -45,30 +36,22 @@ public class EmailService {
     @Value("${aclp.email.remetente:noreply@tjba.jus.br}")
     private String emailRemetente;
 
-    // Construtor que aceita JavaMailSender opcional
     public EmailService(JavaMailSender mailSender) {
         this.mailSender = mailSender;
         log.info("EmailService inicializado - Sender: {}", mailSender != null ? "Spring Mail" : "Manual");
     }
 
-    /**
-     * Método principal para envio de email
-     * Tenta usar Spring Mail primeiro, depois implementação manual
-     */
     public void enviarEmail(String destinatario, String assunto, String conteudo) {
         if (!emailEnabled) {
             log.warn("Envio de email desabilitado - destinatário: {}", destinatario);
-            // Em desenvolvimento, apenas simula o envio
             simularEnvioEmail(destinatario, assunto, conteudo);
             return;
         }
 
         try {
-            // Tentar usar Spring Mail se disponível
             if (mailSender != null) {
                 enviarComSpringMail(destinatario, assunto, conteudo);
             } else {
-                // Fallback para implementação manual
                 enviarComJavaMailManual(destinatario, assunto, conteudo);
             }
 
@@ -77,7 +60,6 @@ public class EmailService {
         } catch (Exception e) {
             log.error("Erro ao enviar email para: " + destinatario, e);
 
-            // Em caso de erro, simular envio para desenvolvimento
             if (isDevelopmentMode()) {
                 log.warn("Modo desenvolvimento - simulando envio de email");
                 simularEnvioEmail(destinatario, assunto, conteudo);
@@ -87,9 +69,6 @@ public class EmailService {
         }
     }
 
-    /**
-     * Envio usando Spring Mail (quando disponível)
-     */
     private void enviarComSpringMail(String destinatario, String assunto, String conteudo) throws MessagingException {
         MimeMessage message = mailSender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
@@ -104,18 +83,24 @@ public class EmailService {
     }
 
     /**
-     * Implementação manual usando JavaMail diretamente
-     * Funciona independente do Spring Mail
+     * Implementação manual usando JavaMail diretamente.
+     *
+     * FIX #4: Removido configurarSSLInseguro() que chamava
+     * HttpsURLConnection.setDefaultSSLSocketFactory() com TrustManager que
+     * aceitava qualquer certificado. Isso afetava TODA a JVM globalmente
+     * (não só o email), desabilitando verificação SSL para HttpClient,
+     * RestTemplate, WebClient, etc.
+     *
+     * Agora usa mail.smtp.ssl.trust com o host específico do SMTP,
+     * que é o mecanismo correto do JavaMail para confiar no servidor.
      */
     private void enviarComJavaMailManual(String destinatario, String assunto, String conteudo) throws Exception {
         log.info("Enviando email manual - Host: {}, Port: {}, User: {}", smtpHost, smtpPort, smtpUsername);
 
-        // Verificar se tem configurações mínimas
         if (smtpUsername.isEmpty() || smtpPassword.isEmpty()) {
             throw new IllegalStateException("Configurações SMTP não definidas (username/password)");
         }
 
-        // Configurar propriedades SMTP
         Properties props = new Properties();
         props.put("mail.smtp.host", smtpHost);
         props.put("mail.smtp.port", smtpPort);
@@ -123,15 +108,11 @@ public class EmailService {
         props.put("mail.smtp.starttls.enable", "true");
         props.put("mail.smtp.starttls.required", "true");
         props.put("mail.smtp.ssl.trust", smtpHost);
-        props.put("mail.smtp.ssl.protocols", "TLSv1.2");
+        props.put("mail.smtp.ssl.protocols", "TLSv1.2,TLSv1.3");
+        props.put("mail.smtp.connectiontimeout", "5000");
+        props.put("mail.smtp.timeout", "10000");
+        props.put("mail.smtp.writetimeout", "10000");
 
-        // Para desenvolvimento, desabilitar verificação SSL
-        if (isDevelopmentMode()) {
-            props.put("mail.smtp.ssl.trust", "*");
-            configurarSSLInseguro();
-        }
-
-        // Criar sessão
         Session session = Session.getInstance(props, new Authenticator() {
             @Override
             protected PasswordAuthentication getPasswordAuthentication() {
@@ -139,7 +120,6 @@ public class EmailService {
             }
         });
 
-        // Criar mensagem
         Message message = new MimeMessage(session);
         message.setFrom(new InternetAddress(emailRemetente));
         message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(destinatario));
@@ -147,17 +127,13 @@ public class EmailService {
         message.setText(conteudo);
         message.setSentDate(new java.util.Date());
 
-        // Enviar
         Transport.send(message);
         log.debug("Email enviado via JavaMail manual");
     }
 
-    /**
-     * Simula envio de email para desenvolvimento
-     */
     private void simularEnvioEmail(String destinatario, String assunto, String conteudo) {
         log.info("=".repeat(80));
-        log.info("📧 SIMULAÇÃO DE EMAIL");
+        log.info("SIMULAÇÃO DE EMAIL");
         log.info("=".repeat(80));
         log.info("Para: {}", destinatario);
         log.info("Assunto: {}", assunto);
@@ -167,7 +143,6 @@ public class EmailService {
         log.info(conteudo);
         log.info("=".repeat(80));
 
-        // Simular delay de envio
         try {
             Thread.sleep(500);
         } catch (InterruptedException e) {
@@ -175,97 +150,56 @@ public class EmailService {
         }
     }
 
-    /**
-     * Configura SSL inseguro para desenvolvimento
-     */
-    private void configurarSSLInseguro() {
-        try {
-            TrustManager[] trustAllCerts = new TrustManager[] {
-                    new X509TrustManager() {
-                        public X509Certificate[] getAcceptedIssuers() { return null; }
-                        public void checkClientTrusted(X509Certificate[] certs, String authType) { }
-                        public void checkServerTrusted(X509Certificate[] certs, String authType) { }
-                    }
-            };
-
-            SSLContext sc = SSLContext.getInstance("SSL");
-            sc.init(null, trustAllCerts, new java.security.SecureRandom());
-            javax.net.ssl.HttpsURLConnection.setDefaultSSLSocketFactory(sc.getSocketFactory());
-
-        } catch (Exception e) {
-            log.warn("Erro ao configurar SSL inseguro: {}", e.getMessage());
-        }
-    }
-
-    /**
-     * Verifica se está em modo desenvolvimento
-     */
     private boolean isDevelopmentMode() {
         String profile = System.getProperty("spring.profiles.active", "dev");
         return profile.contains("dev") || profile.contains("test");
     }
 
-    /**
-     * Envia email de verificação com template personalizado
-     */
     public void enviarEmailVerificacao(String destinatario, String codigo, String tipoUsuario, int validadeMinutos) {
         String assunto = "Código de Verificação - Sistema ACLP TJBA";
         String conteudo = criarConteudoVerificacao(codigo, tipoUsuario, validadeMinutos);
         enviarEmail(destinatario, assunto, conteudo);
     }
 
-    /**
-     * Cria conteúdo do email de verificação
-     */
     private String criarConteudoVerificacao(String codigo, String tipoUsuario, int validadeMinutos) {
         String tipoTexto = "ADMIN".equals(tipoUsuario) ? "Administrador" : "Usuário";
         String dataHora = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"));
 
         return String.format("""
-                🏛️ TRIBUNAL DE JUSTIÇA DA BAHIA
+                TRIBUNAL DE JUSTIÇA DA BAHIA
                 Sistema ACLP - Acompanhamento de Comparecimento em Liberdade Provisória
                 
-                ═══════════════════════════════════════════════════════════════
-                ✉️  CÓDIGO DE VERIFICAÇÃO
-                ═══════════════════════════════════════════════════════════════
+                CÓDIGO DE VERIFICAÇÃO
                 
                 Prezado(a) usuário(a),
                 
                 Você solicitou um código de verificação para acessar o Sistema ACLP.
                 
-                🔑 SEU CÓDIGO DE VERIFICAÇÃO: %s
+                SEU CÓDIGO DE VERIFICAÇÃO: %s
                 
-                📋 Detalhes da solicitação:
-                ⏰ Válido por: %d minutos
-                👤 Tipo de acesso: %s
-                🕐 Solicitado em: %s
+                Detalhes da solicitação:
+                Válido por: %d minutos
+                Tipo de acesso: %s
+                Solicitado em: %s
                 
-                ⚠️  INSTRUÇÕES IMPORTANTES:
-                • Digite este código na tela de verificação
-                • Não compartilhe este código com outras pessoas
-                • O código expira automaticamente em %d minutos
-                • Se não foi você quem solicitou, ignore este email
+                INSTRUÇÕES IMPORTANTES:
+                - Digite este código na tela de verificação
+                - Não compartilhe este código com outras pessoas
+                - O código expira automaticamente em %d minutos
+                - Se não foi você quem solicitou, ignore este email
                 
-                ═══════════════════════════════════════════════════════════════
-                
-                📞 Precisa de ajuda?
+                Precisa de ajuda?
                 Entre em contato com o suporte técnico do TJBA
                 
                 Atenciosamente,
                 Equipe de Tecnologia da Informação
                 Tribunal de Justiça do Estado da Bahia
                 
-                ═══════════════════════════════════════════════════════════════
                 Esta é uma mensagem automática do Sistema ACLP.
                 Não responda este email.
-                
-                Sistema ACLP - Versão 2.0.0 | %s
-                """, codigo, validadeMinutos, tipoTexto, dataHora, validadeMinutos, dataHora);
+                """, codigo, validadeMinutos, tipoTexto, dataHora, validadeMinutos);
     }
 
-    /**
-     * Testa configuração de email
-     */
     public boolean testarConectividade() {
         try {
             enviarEmail(emailRemetente, "Teste de Conectividade - ACLP",
@@ -279,12 +213,9 @@ public class EmailService {
         }
     }
 
-    /**
-     * Informações sobre configuração
-     */
     public String getEmailInfo() {
         return String.format("""
-                📧 Email Service Configuration:
+                Email Service Configuration:
                 - Enabled: %s
                 - Method: %s
                 - SMTP Host: %s
@@ -302,9 +233,6 @@ public class EmailService {
                 isDevelopmentMode());
     }
 
-    /**
-     * Verifica se serviço está funcional
-     */
     public boolean isEmailEnabled() {
         return emailEnabled;
     }

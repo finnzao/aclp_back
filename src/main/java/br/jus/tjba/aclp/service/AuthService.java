@@ -15,6 +15,7 @@ import br.jus.tjba.aclp.exception.InvalidTokenException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
@@ -31,10 +32,6 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Servico principal de autenticacao e autorizacao
- * Gerencia login, logout, tokens JWT, refresh tokens e controle de sessao
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -72,11 +69,29 @@ public class AuthService {
     @Value("${aclp.auth.mfa-enabled:false}")
     private boolean mfaEnabled;
 
+    @Value("${aclp.frontend.url:http://localhost:3000}")
+    private String frontendUrl;
+
     private final SecureRandom secureRandom = new SecureRandom();
 
-    /**
-     * Realiza o login do usuario
-     */
+    // =====================================================================
+    // FIX #6: Job para limpeza de sessões expiradas (a cada 5 minutos)
+    // Evita memory leak progressivo no ConcurrentHashMap
+    // =====================================================================
+    @Scheduled(fixedRate = 300_000)
+    public void limparSessoesExpiradas() {
+        int antes = activeSessions.size();
+        LocalDateTime agora = LocalDateTime.now();
+
+        activeSessions.entrySet().removeIf(entry ->
+                entry.getValue().getExpiresAt().isBefore(agora));
+
+        int removidas = antes - activeSessions.size();
+        if (removidas > 0) {
+            log.info("Sessões expiradas removidas: {} (restantes: {})", removidas, activeSessions.size());
+        }
+    }
+
     @Transactional
     public LoginResponseDTO login(LoginRequestDTO request, HttpServletRequest httpRequest) {
         String ipAddress = extractIpAddress(httpRequest);
@@ -100,8 +115,28 @@ public class AuthService {
                     new UsernamePasswordAuthenticationToken(request.getEmail(), request.getSenha())
             );
 
+            // =====================================================================
+            // FIX #3 + #7: MFA corrigido
+            // - Se MFA está habilitado e não enviou código, retorna requiresMfa
+            // - Se MFA está habilitado e enviou código inválido, lança exceção
+            // - Se MFA está habilitado e código válido, continua o fluxo normal
+            //   (antes retornava null, causando NullPointerException)
+            // - validateMfaCode agora lança UnsupportedOperationException
+            //   (MFA não está implementado, não deve aceitar qualquer código)
+            // =====================================================================
             if (usuario.getMfaEnabled() && mfaEnabled) {
-                return handleMfaAuthentication(usuario, request, ipAddress);
+                if (request.getMfaCode() == null || request.getMfaCode().isEmpty()) {
+                    return LoginResponseDTO.builder()
+                            .success(false)
+                            .requiresMfa(true)
+                            .message("Codigo de autenticacao necessario")
+                            .build();
+                }
+
+                if (!validateMfaCode(usuario, request.getMfaCode())) {
+                    throw new AuthenticationException("Codigo de autenticacao invalido");
+                }
+                // MFA válido — continua o fluxo normal de login abaixo
             }
 
             handleConcurrentSessions(usuario, request.isForceLogin());
@@ -143,15 +178,15 @@ public class AuthService {
         } catch (AccountLockedException e) {
             throw e;
 
+        } catch (AuthenticationException e) {
+            throw e;
+
         } catch (Exception e) {
             log.error("Erro no login - Email: {}, IP: {}", request.getEmail(), ipAddress, e);
             throw new AuthenticationException("Erro ao realizar login. Tente novamente.");
         }
     }
 
-    /**
-     * Realiza logout do usuario
-     */
     @Transactional
     public void logout(String token, HttpServletRequest request) {
         try {
@@ -176,9 +211,6 @@ public class AuthService {
         }
     }
 
-    /**
-     * Renova o token de acesso usando refresh token
-     */
     @Transactional
     public RefreshTokenResponseDTO refreshToken(RefreshTokenRequestDTO request, HttpServletRequest httpRequest) {
         String ipAddress = extractIpAddress(httpRequest);
@@ -225,9 +257,6 @@ public class AuthService {
                 .build();
     }
 
-    /**
-     * Valida token JWT
-     */
     public TokenValidationResponseDTO validateToken(String token) {
         try {
             boolean isValid = jwtTokenProvider.validateToken(token);
@@ -274,9 +303,6 @@ public class AuthService {
         }
     }
 
-    /**
-     * Inicia processo de recuperacao de senha
-     */
     @Transactional
     public void requestPasswordReset(PasswordResetRequestDTO request) {
         String email = request.getEmail().trim().toLowerCase();
@@ -301,9 +327,6 @@ public class AuthService {
         log.info("Email de recuperacao processado - Email: {}", email);
     }
 
-    /**
-     * Reseta a senha usando token
-     */
     @Transactional
     public void resetPassword(PasswordResetConfirmDTO request) {
         log.info("Reset de senha solicitado");
@@ -334,9 +357,6 @@ public class AuthService {
         log.info("Senha resetada com sucesso - Email: {}", usuario.getEmail());
     }
 
-    /**
-     * Altera senha do usuario autenticado
-     */
     @Transactional
     public void changePassword(ChangePasswordDTO request, String userEmail) {
         log.info("Alteracao de senha solicitada - Email: {}", userEmail);
@@ -368,9 +388,6 @@ public class AuthService {
         log.info("Senha alterada com sucesso - Email: {}", userEmail);
     }
 
-    /**
-     * Retorna o usuario autenticado atual
-     */
     public Usuario getUsuarioAtual() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
@@ -382,9 +399,6 @@ public class AuthService {
         return usuarioRepository.findByEmail(email).orElse(null);
     }
 
-    /**
-     * Retorna usuario mock para desenvolvimento
-     */
     public Usuario getMockAdminUser() {
         return usuarioRepository.findByEmail("admin@tjba.jus.br")
                 .orElseGet(() -> {
@@ -396,9 +410,6 @@ public class AuthService {
                 });
     }
 
-    /**
-     * Retorna informacoes da sessao atual
-     */
     public SessionInfoDTO getCurrentSessionInfo(String token) {
         try {
             String sessionId = jwtTokenProvider.getSessionIdFromToken(token);
@@ -424,9 +435,6 @@ public class AuthService {
         }
     }
 
-    /**
-     * Lista todas as sessoes ativas de um usuario
-     */
     public List<SessionInfoDTO> getUserSessions(String userEmail) {
         return activeSessions.values().stream()
                 .filter(s -> s.getUserEmail().equals(userEmail))
@@ -442,9 +450,6 @@ public class AuthService {
                 .toList();
     }
 
-    /**
-     * Invalida uma sessao especifica
-     */
     @Transactional
     public void invalidateSession(String sessionId, String requestingUser) {
         SessionInfo session = activeSessions.get(sessionId);
@@ -463,9 +468,6 @@ public class AuthService {
         }
     }
 
-    /**
-     * Invalida todas as sessoes de um usuario
-     */
     @Transactional
     public void invalidateAllUserSessions(String userEmail) {
         activeSessions.entrySet().removeIf(entry ->
@@ -572,10 +574,6 @@ public class AuthService {
                 });
     }
 
-    /**
-     * Gerencia sessoes concorrentes
-     * Remove automaticamente a sessao mais antiga se o limite for atingido
-     */
     private void handleConcurrentSessions(Usuario usuario, boolean forceLogin) {
         List<SessionInfo> userSessions = activeSessions.values().stream()
                 .filter(s -> s.getUserEmail().equals(usuario.getEmail()))
@@ -601,24 +599,18 @@ public class AuthService {
         return token.getCreatedAt().isBefore(LocalDateTime.now().minusDays(1));
     }
 
-    private LoginResponseDTO handleMfaAuthentication(Usuario usuario, LoginRequestDTO request, String ipAddress) {
-        if (request.getMfaCode() == null || request.getMfaCode().isEmpty()) {
-            return LoginResponseDTO.builder()
-                    .success(false)
-                    .requiresMfa(true)
-                    .message("Codigo de autenticacao necessario")
-                    .build();
-        }
-
-        if (!validateMfaCode(usuario, request.getMfaCode())) {
-            throw new AuthenticationException("Codigo de autenticacao invalido");
-        }
-
-        return null;
-    }
-
+    // =====================================================================
+    // FIX #3: MFA validateMfaCode agora rejeita tudo (não está implementado)
+    // Antes retornava true sempre — qualquer código seria aceito.
+    // Agora lança exceção explicando que MFA não está implementado.
+    // Quando for implementar TOTP, substituir este método.
+    // =====================================================================
     private boolean validateMfaCode(Usuario usuario, String code) {
-        return true;
+        // MFA ainda não implementado — rejeitar para evitar bypass de segurança
+        log.warn("Tentativa de validação MFA para usuario {} mas MFA não está implementado", usuario.getEmail());
+        throw new UnsupportedOperationException(
+                "Autenticação multifator (MFA) ainda não está implementada. " +
+                        "Desative o MFA para este usuário ou aguarde a implementação.");
     }
 
     private void validatePasswordStrength(String password) {
@@ -676,8 +668,7 @@ public class AuthService {
     }
 
     private void sendPasswordResetEmail(Usuario usuario, String token) {
-        String resetLink = String.format("%s/reset-password?token=%s",
-                "http://localhost:3000", token);
+        String resetLink = String.format("%s/reset-password?token=%s", frontendUrl, token);
 
         String content = String.format("""
                 Ola %s,

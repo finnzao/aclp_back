@@ -57,7 +57,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/perfil").authenticated()
                         .requestMatchers("/api/auth/perfil/**").authenticated()
 
-                        // ==================== SETUP (público, exceto reset) ====================
+                        // ==================== SETUP (público, uso único) ====================
                         .requestMatchers("/api/setup/status").permitAll()
                         .requestMatchers("/api/setup/admin").permitAll()
                         .requestMatchers("/api/setup/health").permitAll()
@@ -66,9 +66,6 @@ public class SecurityConfig {
                         // ==================== CONVITES (público apenas validar/ativar) ====================
                         .requestMatchers("/api/usuarios/convites/validar/**").permitAll()
                         .requestMatchers("/api/usuarios/convites/ativar").permitAll()
-
-                        // ==================== VERIFICAÇÃO EMAIL ====================
-                        .requestMatchers("/api/verificacao/**").permitAll()
 
                         // ==================== DOCUMENTAÇÃO ====================
                         .requestMatchers("/v3/api-docs/**").permitAll()
@@ -107,10 +104,6 @@ public class SecurityConfig {
         return http.build();
     }
 
-    /**
-     * SecurityFilterChain adicional para H2 Console.
-     * Só existe com profile "dev". Em produção, /h2-console retorna 403.
-     */
     @Bean
     @Order(1)
     @Profile("dev")
