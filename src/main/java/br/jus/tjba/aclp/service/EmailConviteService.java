@@ -10,14 +10,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * FIX #11: Serviço separado para envio assíncrono de emails de convite.
- *
- * O @Async dentro da mesma classe (ConviteService) NÃO funciona porque
- * o proxy do Spring não intercepta chamadas internas (self-invocation).
- * Extraindo para uma classe separada, o proxy funciona corretamente e
- * o email é enviado de forma assíncrona em uma nova thread.
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
