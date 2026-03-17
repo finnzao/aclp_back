@@ -2,12 +2,14 @@ package br.jus.tjba.aclp.security;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.concurrent.TimeUnit;
 
 @Service
+@ConditionalOnProperty(name = "aclp.redis.enabled", havingValue = "true", matchIfMissing = true)
 public class RedisTokenBlacklistService implements TokenBlacklistService {
 
     private static final Logger logger = LoggerFactory.getLogger(RedisTokenBlacklistService.class);
