@@ -1,17 +1,13 @@
 package br.jus.tjba.aclp.model;
 
 import br.jus.tjba.aclp.model.enums.SituacaoCustodiado;
-import br.jus.tjba.aclp.model.enums.StatusComparecimento;
-import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
 import lombok.*;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -21,13 +17,8 @@ import java.util.Objects;
         indexes = {
                 @Index(name = "idx_custodiado_cpf", columnList = "cpf"),
                 @Index(name = "idx_custodiado_rg", columnList = "rg"),
-                @Index(name = "idx_custodiado_processo", columnList = "processo"),
-                @Index(name = "idx_custodiado_status", columnList = "status"),
-                @Index(name = "idx_custodiado_situacao", columnList = "situacao"), // Novo índice
-                @Index(name = "idx_custodiado_proximo_comparecimento", columnList = "proximo_comparecimento"),
-                @Index(name = "idx_custodiado_status_proximo", columnList = "status, proximo_comparecimento"),
-                @Index(name = "idx_custodiado_situacao_status", columnList = "situacao, status"), // Novo índice composto
-                @Index(name = "idx_custodiado_comarca_status", columnList = "comarca, status")
+                @Index(name = "idx_custodiado_situacao", columnList = "situacao"),
+                @Index(name = "idx_custodiado_nome", columnList = "nome")
         }
 )
 @Data
@@ -42,8 +33,8 @@ public class Custodiado {
     private Long id;
 
     @NotBlank(message = "Nome é obrigatório")
-    @Size(min = 2, max = 150, message = "Nome deve ter entre 2 e 150 caracteres")
-    @Pattern(regexp = "^[A-Za-zÀ-ÿ\\s'.-]+$", message = "Nome deve conter apenas letras, espaços e caracteres especiais válidos")
+    @Size(min = 2, max = 150)
+    @Pattern(regexp = "^[A-Za-zÀ-ÿ\\s'.-]+$", message = "Nome deve conter apenas letras e caracteres válidos")
     @Column(name = "nome", nullable = false, length = 150)
     private String nome;
 
@@ -51,71 +42,23 @@ public class Custodiado {
     @Column(name = "cpf", length = 14)
     private String cpf;
 
-    @Size(max = 20, message = "RG deve ter no máximo 20 caracteres")
+    @Size(max = 20)
     @Column(name = "rg", length = 20)
     private String rg;
 
     @NotBlank(message = "Contato é obrigatório")
-    @Pattern(regexp = "\\(?\\d{2}\\)?\\s?\\d{4,5}-?\\d{4}", message = "Contato deve ter formato válido de telefone")
+    @Pattern(regexp = "\\(?\\d{2}\\)?\\s?\\d{4,5}-?\\d{4}", message = "Contato deve ter formato válido")
     @Column(name = "contato", nullable = false, length = 20)
     private String contato;
 
-    // Processo não é mais único - vários custodiados podem ter o mesmo processo
-    @NotBlank(message = "Processo é obrigatório")
-    @Pattern(regexp = "\\d{7}-\\d{2}\\.\\d{4}\\.\\d{1}\\.\\d{2}\\.\\d{4}",
-            message = "Processo deve ter o formato 0000000-00.0000.0.00.0000")
-    @Column(name = "processo", nullable = false, length = 25)
-    private String processo;
-
-    @NotBlank(message = "Vara é obrigatória")
-    @Size(max = 100, message = "Vara deve ter no máximo 100 caracteres")
-    @Column(name = "vara", nullable = false, length = 100)
-    private String vara;
-
-    @NotBlank(message = "Comarca é obrigatória")
-    @Size(max = 100, message = "Comarca deve ter no máximo 100 caracteres")
-    @Column(name = "comarca", nullable = false, length = 100)
-    private String comarca;
-
-    @JsonFormat(pattern = "yyyy-MM-dd")
-    @NotNull(message = "Data da decisão é obrigatória")
-    @PastOrPresent(message = "Data da decisão não pode ser futura")
-    @Column(name = "data_decisao", nullable = false)
-    private LocalDate dataDecisao;
-
-    @NotNull(message = "Periodicidade é obrigatória")
-    @Min(value = 1, message = "Periodicidade deve ser maior que zero")
-    @Max(value = 365, message = "Periodicidade não pode ser maior que 365 dias")
-    @Column(name = "periodicidade", nullable = false)
-    private Integer periodicidade;
-
-    @JsonFormat(pattern = "yyyy-MM-dd")
-    @NotNull(message = "Data do comparecimento inicial é obrigatória")
-    @Column(name = "data_comparecimento_inicial", nullable = false)
-    private LocalDate dataComparecimentoInicial;
-
-    // Status de comparecimento (EM_CONFORMIDADE/INADIMPLENTE)
-    @NotNull(message = "Status é obrigatório")
-    @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 20)
-    private StatusComparecimento status;
-
-    // NOVA COLUNA: Situação do custodiado no sistema (ATIVO/ARQUIVADO)
-    @NotNull(message = "Situação é obrigatória")
+    // Situação do custodiado no sistema (ATIVO/ARQUIVADO)
+    @NotNull
     @Enumerated(EnumType.STRING)
     @Column(name = "situacao", nullable = false, length = 20)
     @Builder.Default
     private SituacaoCustodiado situacao = SituacaoCustodiado.ATIVO;
 
-    @JsonFormat(pattern = "yyyy-MM-dd")
-    @Column(name = "ultimo_comparecimento")
-    private LocalDate ultimoComparecimento;
-
-    @JsonFormat(pattern = "yyyy-MM-dd")
-    @Column(name = "proximo_comparecimento")
-    private LocalDate proximoComparecimento;
-
-    @Size(max = 500, message = "Observações deve ter no máximo 500 caracteres")
+    @Size(max = 500)
     @Column(name = "observacoes", length = 500)
     private String observacoes;
 
@@ -131,69 +74,86 @@ public class Custodiado {
     @Builder.Default
     private Long version = 0L;
 
-    // Relacionamentos - IGNORAR na serialização JSON para evitar referências circulares
+    // ========== CAMPOS PROCESSUAIS MANTIDOS TEMPORARIAMENTE ==========
+    // Serão removidos após migração completa do frontend (Passo 5 do SQL)
+
+    @Column(name = "processo", length = 25)
+    private String processo;
+
+    @Column(name = "vara", length = 100)
+    private String vara;
+
+    @Column(name = "comarca", length = 100)
+    private String comarca;
+
+    @Column(name = "data_decisao")
+    private java.time.LocalDate dataDecisao;
+
+    @Column(name = "periodicidade")
+    private Integer periodicidade;
+
+    @Column(name = "data_comparecimento_inicial")
+    private java.time.LocalDate dataComparecimentoInicial;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", length = 20)
+    private br.jus.tjba.aclp.model.enums.StatusComparecimento status;
+
+    @Column(name = "ultimo_comparecimento")
+    private java.time.LocalDate ultimoComparecimento;
+
+    @Column(name = "proximo_comparecimento")
+    private java.time.LocalDate proximoComparecimento;
+
+    // ========== FIM CAMPOS TEMPORÁRIOS ==========
+
+    // NOVO: Relação OneToMany com Processo
+    @OneToMany(mappedBy = "custodiado", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @Builder.Default
+    @JsonIgnore
+    private List<Processo> processos = new ArrayList<>();
+
+    // Mantido: Histórico de comparecimentos (temporário, será via Processo)
     @OneToMany(mappedBy = "custodiado", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @OrderBy("dataComparecimento DESC")
     @Builder.Default
-    @JsonIgnore // IMPORTANTE: Ignora na serialização JSON
+    @JsonIgnore
     private List<HistoricoComparecimento> historicoComparecimentos = new ArrayList<>();
 
     @OneToMany(mappedBy = "custodiado", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @OrderBy("dataInicio DESC")
     @Builder.Default
-    @JsonIgnore // IMPORTANTE: Ignora na serialização JSON
+    @JsonIgnore
     private List<HistoricoEndereco> historicoEnderecos = new ArrayList<>();
 
-    // Validações
     @AssertTrue(message = "Pelo menos CPF ou RG deve ser informado")
     public boolean isDocumentosValidos() {
-        return (cpf != null && !cpf.trim().isEmpty()) ||
-                (rg != null && !rg.trim().isEmpty());
+        return (cpf != null && !cpf.trim().isEmpty()) || (rg != null && !rg.trim().isEmpty());
     }
 
     @PrePersist
     public void prePersist() {
-        if (this.criadoEm == null) {
-            this.criadoEm = LocalDateTime.now();
-        }
-        if (this.version == null) {
-            this.version = 0L;
-        }
-        if (this.status == null) {
-            this.status = StatusComparecimento.EM_CONFORMIDADE;
-        }
-        if (this.situacao == null) {
-            this.situacao = SituacaoCustodiado.ATIVO;
-        }
-
-        // Inicializar datas se for o primeiro cadastro
-        if (this.ultimoComparecimento == null) {
-            this.ultimoComparecimento = this.dataComparecimentoInicial;
-        }
-        if (this.proximoComparecimento == null && situacao.isAtivo()) {
-            calcularProximoComparecimento();
-        }
+        if (criadoEm == null) criadoEm = LocalDateTime.now();
+        if (version == null) version = 0L;
+        if (situacao == null) situacao = SituacaoCustodiado.ATIVO;
+        // Campos processuais temporários
+        if (status == null) status = br.jus.tjba.aclp.model.enums.StatusComparecimento.EM_CONFORMIDADE;
+        if (ultimoComparecimento == null && dataComparecimentoInicial != null) ultimoComparecimento = dataComparecimentoInicial;
+        if (proximoComparecimento == null && situacao.isAtivo() && periodicidade != null) calcularProximoComparecimento();
     }
 
     @PreUpdate
     public void preUpdate() {
-        this.atualizadoEm = LocalDateTime.now();
-
-        // Se foi arquivado, limpar próximo comparecimento
-        if (situacao.isArquivado()) {
-            this.proximoComparecimento = null;
-        }
+        atualizadoEm = LocalDateTime.now();
+        if (situacao.isArquivado()) proximoComparecimento = null;
     }
 
-    // Métodos de formatação
     public void setCpf(String cpf) {
         if (cpf != null) {
             String digits = cpf.replaceAll("[^\\d]", "");
             if (digits.length() == 11) {
-                this.cpf = digits.substring(0, 3) + "." +
-                        digits.substring(3, 6) + "." +
-                        digits.substring(6, 9) + "-" +
-                        digits.substring(9);
+                this.cpf = digits.substring(0, 3) + "." + digits.substring(3, 6) + "." +
+                        digits.substring(6, 9) + "-" + digits.substring(9);
             } else {
                 this.cpf = cpf;
             }
@@ -206,205 +166,110 @@ public class Custodiado {
         this.nome = nome != null ? nome.trim() : null;
     }
 
-    // Métodos de cálculo
+    // Métodos de cálculo TEMPORÁRIOS (mantidos para compatibilidade durante transição)
     public void calcularProximoComparecimento() {
         if (ultimoComparecimento != null && periodicidade != null && situacao.isAtivo()) {
-            this.proximoComparecimento = ultimoComparecimento.plusDays(periodicidade);
+            proximoComparecimento = ultimoComparecimento.plusDays(periodicidade);
         }
     }
 
     public void atualizarStatusBaseadoEmData() {
-        // Só atualizar status se estiver ativo
-        if (situacao.isAtivo() && proximoComparecimento != null && proximoComparecimento.isBefore(LocalDate.now())) {
-            this.status = StatusComparecimento.INADIMPLENTE;
+        if (situacao.isAtivo() && proximoComparecimento != null && proximoComparecimento.isBefore(java.time.LocalDate.now())) {
+            status = br.jus.tjba.aclp.model.enums.StatusComparecimento.INADIMPLENTE;
         } else if (situacao.isAtivo()) {
-            this.status = StatusComparecimento.EM_CONFORMIDADE;
+            status = br.jus.tjba.aclp.model.enums.StatusComparecimento.EM_CONFORMIDADE;
         }
-        // Se arquivado, manter status atual
     }
 
     public long getDiasAtraso() {
         if (proximoComparecimento == null || situacao.isArquivado()) return 0;
-        LocalDate hoje = LocalDate.now();
+        java.time.LocalDate hoje = java.time.LocalDate.now();
         return hoje.isAfter(proximoComparecimento) ?
-                ChronoUnit.DAYS.between(proximoComparecimento, hoje) : 0;
+                java.time.temporal.ChronoUnit.DAYS.between(proximoComparecimento, hoje) : 0;
     }
 
     public boolean isInadimplente() {
-        return situacao.isAtivo() && (status == StatusComparecimento.INADIMPLENTE ||
-                (proximoComparecimento != null && proximoComparecimento.isBefore(LocalDate.now())));
+        return situacao.isAtivo() && (status == br.jus.tjba.aclp.model.enums.StatusComparecimento.INADIMPLENTE ||
+                (proximoComparecimento != null && proximoComparecimento.isBefore(java.time.LocalDate.now())));
     }
 
     public boolean isComparecimentoHoje() {
-        return situacao.isAtivo() && proximoComparecimento != null &&
-                proximoComparecimento.equals(LocalDate.now());
+        return situacao.isAtivo() && proximoComparecimento != null && proximoComparecimento.equals(java.time.LocalDate.now());
     }
 
-    public boolean isProximoComparecimento(int dias) {
-        if (proximoComparecimento == null || situacao.isArquivado()) return false;
-        LocalDate limite = LocalDate.now().plusDays(dias);
-        return !proximoComparecimento.isBefore(LocalDate.now()) &&
-                !proximoComparecimento.isAfter(limite);
+    public String getPeriodicidadeDescricao() {
+        if (periodicidade == null) return "Não definida";
+        return switch (periodicidade) {
+            case 7 -> "Semanal"; case 15 -> "Quinzenal"; case 30 -> "Mensal";
+            case 60 -> "Bimensal"; case 90 -> "Trimestral"; case 180 -> "Semestral";
+            default -> periodicidade + " dias";
+        };
     }
 
-    // ========== NOVOS MÉTODOS PARA CONTROLE DE SITUAÇÃO ==========
+    // Situação
+    public boolean isAtivo() { return situacao != null && situacao.isAtivo(); }
+    public boolean isArquivado() { return situacao != null && situacao.isArquivado(); }
 
-    /**
-     * Verifica se o custodiado está ativo
-     */
-    public boolean isAtivo() {
-        return situacao != null && situacao.isAtivo();
-    }
-
-    /**
-     * Verifica se o custodiado está arquivado
-     */
-    public boolean isArquivado() {
-        return situacao != null && situacao.isArquivado();
-    }
-
-    /**
-     * Arquiva o custodiado (equivale ao "delete")
-     */
     public void arquivar() {
-        this.situacao = SituacaoCustodiado.ARQUIVADO;
-        this.proximoComparecimento = null; // Remove da agenda de comparecimentos
-        this.atualizadoEm = LocalDateTime.now();
+        situacao = SituacaoCustodiado.ARQUIVADO;
+        proximoComparecimento = null;
+        atualizadoEm = LocalDateTime.now();
     }
 
-    /**
-     * Reativa o custodiado arquivado
-     */
     public void reativar() {
-        this.situacao = SituacaoCustodiado.ATIVO;
-        calcularProximoComparecimento(); // Recalcular próximo comparecimento
-        atualizarStatusBaseadoEmData(); // Recalcular status
-        this.atualizadoEm = LocalDateTime.now();
+        situacao = SituacaoCustodiado.ATIVO;
+        calcularProximoComparecimento();
+        atualizarStatusBaseadoEmData();
+        atualizadoEm = LocalDateTime.now();
     }
 
-    /**
-     * Verifica se pode ser excluído fisicamente (apenas se não tem histórico)
-     */
     public boolean podeSerExcluidoFisicamente() {
         return (historicoComparecimentos == null || historicoComparecimentos.isEmpty()) &&
                 (historicoEnderecos == null || historicoEnderecos.isEmpty());
     }
 
-    // Métodos para endereço - SEM carregar relacionamentos automaticamente
     public HistoricoEndereco getEnderecoAtual() {
-        // Não acessa a lista diretamente para evitar lazy loading
-        // Este método deve ser usado apenas quando a lista já foi carregada
-        return historicoEnderecos.stream()
-                .filter(HistoricoEndereco::isEnderecoAtivo)
-                .findFirst()
-                .orElse(null);
+        return historicoEnderecos.stream().filter(HistoricoEndereco::isEnderecoAtivo).findFirst().orElse(null);
     }
 
-    /**
-     * Retorna o endereço atual em formato resumido.
-     * Evita lazy loading ao verificar se a lista já foi inicializada.
-     */
     public String getEnderecoResumido() {
-        if (historicoEnderecos == null || historicoEnderecos.isEmpty()) {
-            return "Endereço não carregado";
-        }
-
-        HistoricoEndereco enderecoAtivo = historicoEnderecos.stream()
-                .filter(HistoricoEndereco::isEnderecoAtivo)
-                .findFirst()
-                .orElse(null);
-
-        if (enderecoAtivo != null) {
-            return enderecoAtivo.getEnderecoResumido();
-        }
-
-        return "Sem endereço ativo";
+        if (historicoEnderecos == null || historicoEnderecos.isEmpty()) return "Endereço não carregado";
+        HistoricoEndereco ativo = getEnderecoAtual();
+        return ativo != null ? ativo.getEnderecoResumido() : "Sem endereço ativo";
     }
 
-    /**
-     * Retorna o endereço completo atual.
-     * Evita lazy loading ao verificar se a lista já foi inicializada.
-     */
     public String getEnderecoCompleto() {
-        if (historicoEnderecos == null || historicoEnderecos.isEmpty()) {
-            return "Endereço não informado";
-        }
-
-        HistoricoEndereco enderecoAtivo = historicoEnderecos.stream()
-                .filter(HistoricoEndereco::isEnderecoAtivo)
-                .findFirst()
-                .orElse(null);
-
-        if (enderecoAtivo != null) {
-            return enderecoAtivo.getEnderecoCompleto();
-        }
-
-        return "Endereço não informado";
+        if (historicoEnderecos == null || historicoEnderecos.isEmpty()) return "Endereço não informado";
+        HistoricoEndereco ativo = getEnderecoAtual();
+        return ativo != null ? ativo.getEnderecoCompleto() : "Endereço não informado";
     }
 
-    /**
-     * Retorna cidade e estado do endereço atual.
-     * Evita lazy loading ao verificar se a lista já foi inicializada.
-     */
     public String getCidadeEstado() {
-        if (historicoEnderecos == null || historicoEnderecos.isEmpty()) {
-            return "Não informado";
-        }
-
-        HistoricoEndereco enderecoAtivo = historicoEnderecos.stream()
-                .filter(HistoricoEndereco::isEnderecoAtivo)
-                .findFirst()
-                .orElse(null);
-
-        if (enderecoAtivo != null) {
-            return enderecoAtivo.getCidade() + " - " + enderecoAtivo.getEstado();
-        }
-
-        return "Não informado";
+        if (historicoEnderecos == null || historicoEnderecos.isEmpty()) return "Não informado";
+        HistoricoEndereco ativo = getEnderecoAtual();
+        return ativo != null ? ativo.getCidade() + " - " + ativo.getEstado() : "Não informado";
     }
 
-    // Métodos auxiliares que NÃO dependem dos relacionamentos
     public String getIdentificacao() {
-        if (cpf != null && !cpf.trim().isEmpty()) {
-            return "CPF: " + cpf;
-        } else if (rg != null && !rg.trim().isEmpty()) {
-            return "RG: " + rg;
-        }
+        if (cpf != null && !cpf.trim().isEmpty()) return "CPF: " + cpf;
+        if (rg != null && !rg.trim().isEmpty()) return "RG: " + rg;
         return "Sem documento";
     }
 
-    public String getPeriodicidadeDescricao() {
-        if (periodicidade == null) return "Não definida";
-        if (periodicidade == 7) return "Semanal";
-        if (periodicidade == 15) return "Quinzenal";
-        if (periodicidade == 30) return "Mensal";
-        if (periodicidade == 60) return "Bimensal";
-        if (periodicidade == 90) return "Trimestral";
-        if (periodicidade == 180) return "Semestral";
-        return periodicidade + " dias";
-    }
-
     public void adicionarHistorico(HistoricoComparecimento historico) {
-        if (historicoComparecimentos == null) {
-            historicoComparecimentos = new ArrayList<>();
-        }
+        if (historicoComparecimentos == null) historicoComparecimentos = new ArrayList<>();
         historicoComparecimentos.add(historico);
         historico.setCustodiado(this);
     }
 
     public void adicionarHistoricoEndereco(HistoricoEndereco historicoEndereco) {
-        if (historicoEnderecos == null) {
-            historicoEnderecos = new ArrayList<>();
-        }
+        if (historicoEnderecos == null) historicoEnderecos = new ArrayList<>();
         historicoEnderecos.add(historicoEndereco);
         historicoEndereco.setCustodiado(this);
     }
 
     public String getResumo() {
-        return String.format("%s - %s - %s",
-                nome,
-                getIdentificacao(),
-                situacao.getLabel());
+        return String.format("%s - %s - %s", nome, getIdentificacao(), situacao.getLabel());
     }
 
     public String getSituacaoDescricao() {
@@ -415,12 +280,9 @@ public class Custodiado {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        Custodiado custodiado = (Custodiado) o;
-        return Objects.equals(id, custodiado.id);
+        return Objects.equals(id, ((Custodiado) o).id);
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(id);
-    }
+    public int hashCode() { return Objects.hash(id); }
 }

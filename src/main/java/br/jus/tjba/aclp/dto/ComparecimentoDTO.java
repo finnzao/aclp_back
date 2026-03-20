@@ -22,48 +22,47 @@ import java.time.LocalTime;
 @Builder
 public class ComparecimentoDTO {
 
-    @NotNull(message = "ID do custodiado é obrigatório")
-    @Schema(description = "ID do custodiado", example = "1", required = true)
+    // NOVO: referência principal ao processo
+    @Schema(description = "ID do processo (preferencial)", example = "1")
+    private Long processoId;
+
+    // DEPRECATED: mantido para compatibilidade durante transição
+    @Schema(description = "ID do custodiado (deprecated - use processoId)", example = "1", deprecated = true)
     private Long custodiadoId;
 
-    // CORRIGIDO: Removido shape e timezone para evitar conversão
     @JsonFormat(pattern = "yyyy-MM-dd")
     @NotNull(message = "Data do comparecimento é obrigatória")
     @Schema(description = "Data do comparecimento", example = "2025-10-27", required = true)
     private LocalDate dataComparecimento;
 
     @JsonFormat(pattern = "HH:mm:ss")
-    @Schema(description = "Hora do comparecimento no formato HH:mm:ss",
-            example = "14:30:00",
-            type = "string",
-            pattern = "^([01]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$")
+    @Schema(description = "Hora do comparecimento no formato HH:mm:ss", example = "14:30:00")
     private LocalTime horaComparecimento;
 
     @NotNull(message = "Tipo de validação é obrigatório")
-    @Schema(description = "Tipo de validação do comparecimento",
-            example = "presencial",
+    @Schema(description = "Tipo de validação", example = "presencial",
             allowableValues = {"presencial", "online", "cadastro_inicial"})
     private TipoValidacao tipoValidacao;
 
     @Size(max = 500, message = "Observações deve ter no máximo 500 caracteres")
-    @Schema(description = "Observações sobre o comparecimento", example = "Comparecimento regular")
+    @Schema(description = "Observações sobre o comparecimento")
     private String observacoes;
 
     @NotBlank(message = "Validado por é obrigatório")
-    @Size(max = 100, message = "Validado por deve ter no máximo 100 caracteres")
+    @Size(max = 100)
     @Schema(description = "Nome do responsável pela validação", example = "Maria Santos - Servidora TJBA")
     private String validadoPor;
 
-    @Size(max = 1000, message = "Anexos deve ter no máximo 1000 caracteres")
-    @Schema(description = "Lista de anexos ou documentos relacionados", example = "doc1.pdf, foto.jpg")
+    @Size(max = 1000)
+    @Schema(description = "Lista de anexos")
     private String anexos;
 
     @Builder.Default
-    @Schema(description = "Indica se houve mudança de endereço durante o comparecimento", example = "false")
+    @Schema(description = "Indica se houve mudança de endereço", example = "false")
     private Boolean mudancaEndereco = Boolean.FALSE;
 
-    @Size(max = 500, message = "Motivo da mudança deve ter no máximo 500 caracteres")
-    @Schema(description = "Motivo da mudança de endereço", example = "Mudança por questões familiares")
+    @Size(max = 500)
+    @Schema(description = "Motivo da mudança de endereço")
     private String motivoMudancaEndereco;
 
     @Valid
@@ -74,17 +73,22 @@ public class ComparecimentoDTO {
         return Boolean.TRUE.equals(mudancaEndereco);
     }
 
+    /**
+     * Retorna o ID efetivo: processoId tem prioridade, fallback para custodiadoId
+     */
+    public Long getIdEfetivo() {
+        return processoId != null ? processoId : custodiadoId;
+    }
+
     public boolean isComparecimentoValido() {
-        return custodiadoId != null &&
+        return (processoId != null || custodiadoId != null) &&
                 dataComparecimento != null &&
                 tipoValidacao != null &&
                 validadoPor != null && !validadoPor.trim().isEmpty();
     }
 
     public boolean isMudancaEnderecoValida() {
-        if (!houveMudancaEndereco()) {
-            return true;
-        }
+        if (!houveMudancaEndereco()) return true;
         return novoEndereco != null && novoEndereco.isCompleto();
     }
 
@@ -96,36 +100,29 @@ public class ComparecimentoDTO {
 
         @NotBlank(message = "CEP é obrigatório")
         @Pattern(regexp = "\\d{5}-?\\d{3}", message = "CEP deve ter o formato 00000-000")
-        @Schema(description = "CEP do endereço", example = "40070-110")
         private String cep;
 
         @NotBlank(message = "Logradouro é obrigatório")
-        @Size(min = 5, max = 200, message = "Logradouro deve ter entre 5 e 200 caracteres")
-        @Schema(description = "Nome da rua/avenida", example = "Avenida Sete de Setembro")
+        @Size(min = 5, max = 200)
         private String logradouro;
 
-        @Size(max = 20, message = "Número deve ter no máximo 20 caracteres")
-        @Schema(description = "Número do imóvel", example = "1234")
+        @Size(max = 20)
         private String numero;
 
-        @Size(max = 100, message = "Complemento deve ter no máximo 100 caracteres")
-        @Schema(description = "Complemento do endereço", example = "Apto 501")
+        @Size(max = 100)
         private String complemento;
 
         @NotBlank(message = "Bairro é obrigatório")
-        @Size(min = 2, max = 100, message = "Bairro deve ter entre 2 e 100 caracteres")
-        @Schema(description = "Nome do bairro", example = "Centro")
+        @Size(min = 2, max = 100)
         private String bairro;
 
         @NotBlank(message = "Cidade é obrigatória")
-        @Size(min = 2, max = 100, message = "Cidade deve ter entre 2 e 100 caracteres")
-        @Schema(description = "Nome da cidade", example = "Salvador")
+        @Size(min = 2, max = 100)
         private String cidade;
 
         @NotBlank(message = "Estado é obrigatório")
-        @Size(min = 2, max = 2, message = "Estado deve ter exatamente 2 caracteres")
-        @Pattern(regexp = "[A-Z]{2}", message = "Estado deve ser uma sigla válida com 2 letras maiúsculas")
-        @Schema(description = "Sigla do estado", example = "BA")
+        @Size(min = 2, max = 2)
+        @Pattern(regexp = "[A-Z]{2}", message = "Estado deve ser sigla com 2 letras maiúsculas")
         private String estado;
 
         public boolean isCompleto() {

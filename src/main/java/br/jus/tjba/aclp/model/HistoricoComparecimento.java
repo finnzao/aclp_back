@@ -21,9 +21,11 @@ import java.util.Objects;
 @Table(name = "historico_comparecimentos",
         indexes = {
                 @Index(name = "idx_historico_custodiado", columnList = "custodiado_id"),
+                @Index(name = "idx_historico_processo", columnList = "processo_id"),
                 @Index(name = "idx_historico_data", columnList = "data_comparecimento"),
                 @Index(name = "idx_historico_tipo", columnList = "tipo_validacao"),
                 @Index(name = "idx_historico_custodiado_data", columnList = "custodiado_id, data_comparecimento DESC"),
+                @Index(name = "idx_historico_processo_data", columnList = "processo_id, data_comparecimento DESC"),
                 @Index(name = "idx_historico_mudanca_endereco", columnList = "mudanca_endereco"),
                 @Index(name = "idx_historico_custodiado_mudanca", columnList = "custodiado_id, mudanca_endereco")
         }
@@ -38,30 +40,47 @@ public class HistoricoComparecimento {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @NotNull(message = "Custodiado é obrigatório")
+    // NOVO: Referência principal agora é o Processo
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "custodiado_id", nullable = false,
+    @JoinColumn(name = "processo_id",
+            foreignKey = @ForeignKey(name = "fk_comparecimento_processo"))
+    @JsonIgnore
+    private Processo processo;
+
+    // MANTIDO TEMPORARIAMENTE para compatibilidade durante transição
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "custodiado_id",
             foreignKey = @ForeignKey(name = "fk_historico_custodiado"))
-    @JsonIgnore // Ignora o objeto custodiado completo
+    @JsonIgnore
     private Custodiado custodiado;
 
-    // Adiciona apenas o ID do custodiado no JSON
+    // Navega via processo -> custodiado (caminho principal)
     @JsonProperty("custodiadoId")
     public Long getCustodiadoId() {
+        if (processo != null && processo.getCustodiado() != null) return processo.getCustodiado().getId();
         return custodiado != null ? custodiado.getId() : null;
     }
 
-    // Adiciona o nome do custodiado no JSON
     @JsonProperty("custodiadoNome")
     public String getCustodiadoNome() {
+        if (processo != null && processo.getCustodiado() != null) return processo.getCustodiado().getNome();
         return custodiado != null ? custodiado.getNome() : null;
+    }
+
+    @JsonProperty("processoId")
+    public Long getProcessoId() {
+        return processo != null ? processo.getId() : null;
+    }
+
+    @JsonProperty("numeroProcesso")
+    public String getNumeroProcesso() {
+        return processo != null ? processo.getNumeroProcesso() : null;
     }
 
     @NotNull(message = "Data do comparecimento é obrigatória")
     @Column(name = "data_comparecimento", nullable = false)
     private LocalDate dataComparecimento;
 
-    //SERIALIZAR COMO STRING "HH:mm:ss"
     @JsonFormat(pattern = "HH:mm:ss")
     @Column(name = "hora_comparecimento")
     private LocalTime horaComparecimento;
@@ -72,33 +91,30 @@ public class HistoricoComparecimento {
     private TipoValidacao tipoValidacao;
 
     @NotBlank(message = "Validado por é obrigatório")
-    @Size(max = 100, message = "Validado por deve ter no máximo 100 caracteres")
+    @Size(max = 100)
     @Column(name = "validado_por", nullable = false, length = 100)
     private String validadoPor;
 
-    @Size(max = 500, message = "Observações deve ter no máximo 500 caracteres")
+    @Size(max = 500)
     @Column(name = "observacoes", length = 500)
     private String observacoes;
 
     @Column(name = "anexos", columnDefinition = "TEXT")
     private String anexos;
 
-    // Controle de mudança de endereço
     @Column(name = "mudanca_endereco", nullable = false)
     @Builder.Default
     private Boolean mudancaEndereco = Boolean.FALSE;
 
-    @Size(max = 500, message = "Motivo da mudança deve ter no máximo 500 caracteres")
+    @Size(max = 500)
     @Column(name = "motivo_mudanca_endereco", length = 500)
     private String motivoMudancaEndereco;
 
-    // Relacionamentos - também ignorados para evitar ciclos
     @OneToMany(mappedBy = "historicoComparecimento", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @Builder.Default
-    @JsonIgnore // Ignora na serialização JSON
+    @JsonIgnore
     private List<HistoricoEndereco> enderecosAlterados = new ArrayList<>();
 
-    // Auditoria
     @Column(name = "criado_em", nullable = false)
     @Builder.Default
     private LocalDateTime criadoEm = LocalDateTime.now();
@@ -113,78 +129,44 @@ public class HistoricoComparecimento {
 
     @PrePersist
     public void prePersist() {
-        if (this.criadoEm == null) {
-            this.criadoEm = LocalDateTime.now();
-        }
-        if (this.version == null) {
-            this.version = 0L;
-        }
-        if (this.mudancaEndereco == null) {
-            this.mudancaEndereco = Boolean.FALSE;
-        }
+        if (criadoEm == null) criadoEm = LocalDateTime.now();
+        if (version == null) version = 0L;
+        if (mudancaEndereco == null) mudancaEndereco = Boolean.FALSE;
     }
 
     @PreUpdate
     public void preUpdate() {
-        this.atualizadoEm = LocalDateTime.now();
+        atualizadoEm = LocalDateTime.now();
     }
 
-    //MÉTODOS UTILITÁRIOS
-
-    /**
-     * Combina data e hora em um LocalDateTime
-     */
     public LocalDateTime getDataHoraComparecimento() {
         if (dataComparecimento == null) return null;
-        if (horaComparecimento == null) return dataComparecimento.atStartOfDay();
-        return dataComparecimento.atTime(horaComparecimento);
+        return horaComparecimento != null ? dataComparecimento.atTime(horaComparecimento) : dataComparecimento.atStartOfDay();
     }
 
-    /**
-     * Retorna resumo do comparecimento formatado
-     */
     public String getResumo() {
         StringBuilder resumo = new StringBuilder();
         resumo.append(dataComparecimento.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")));
         resumo.append(" - ").append(tipoValidacao.getLabel());
-
         if (horaComparecimento != null) {
             resumo.append(" às ").append(horaComparecimento.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")));
         }
-
-        if (Boolean.TRUE.equals(mudancaEndereco)) {
-            resumo.append(" (com mudança de endereço)");
-        }
-
+        if (Boolean.TRUE.equals(mudancaEndereco)) resumo.append(" (com mudança de endereço)");
         return resumo.toString();
     }
 
-    public boolean isComparecimentoVirtual() {
-        return tipoValidacao != null && tipoValidacao.isVirtual();
-    }
-
-    public boolean isComparecimentoPresencial() {
-        return tipoValidacao != null && tipoValidacao.requerPresencaFisica();
-    }
-
-    public boolean isCadastroInicial() {
-        return tipoValidacao != null && tipoValidacao.isCadastroInicial();
-    }
-
-    public boolean houveMudancaEndereco() {
-        return Boolean.TRUE.equals(mudancaEndereco);
-    }
+    public boolean isComparecimentoVirtual() { return tipoValidacao != null && tipoValidacao.isVirtual(); }
+    public boolean isComparecimentoPresencial() { return tipoValidacao != null && tipoValidacao.requerPresencaFisica(); }
+    public boolean isCadastroInicial() { return tipoValidacao != null && tipoValidacao.isCadastroInicial(); }
+    public boolean houveMudancaEndereco() { return Boolean.TRUE.equals(mudancaEndereco); }
 
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        HistoricoComparecimento that = (HistoricoComparecimento) o;
-        return Objects.equals(id, that.id);
+        return Objects.equals(id, ((HistoricoComparecimento) o).id);
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(id);
-    }
+    public int hashCode() { return Objects.hash(id); }
 }

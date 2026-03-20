@@ -1,8 +1,10 @@
 package br.jus.tjba.aclp.service;
 
 import br.jus.tjba.aclp.model.Custodiado;
+import br.jus.tjba.aclp.model.Processo;
 import br.jus.tjba.aclp.model.enums.StatusComparecimento;
 import br.jus.tjba.aclp.repository.CustodiadoRepository;
+import br.jus.tjba.aclp.repository.ProcessoRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -12,156 +14,144 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.List;
 
-/**
- * Serviço para atualização automática do status das pessoas
- * Executa verificações periódicas para identificar inadimplentes
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class StatusSchedulerService {
 
     private final CustodiadoRepository custodiadoRepository;
+    private final ProcessoRepository processoRepository;
 
-    /**
-     * Executa TODOS OS DIAS à 01:00 da manhã
-     * Verifica pessoas que ficaram inadimplentes
-     */
-    @Scheduled(cron = "0 0 1 * * *") // Segundos Minutos Horas Dia Mês DiaSemana
+    @Scheduled(cron = "0 0 1 * * *")
     @Transactional
     public void verificarStatusDiario() {
-        log.info("🔄 Iniciando verificação automática diária de status - {}", LocalDate.now());
-
-        long inadimplentesMarcados = executarVerificacaoStatus();
-
-        if (inadimplentesMarcados > 0) {
-            log.warn("⚠️  {} pessoas foram marcadas como INADIMPLENTES", inadimplentesMarcados);
+        log.info("Iniciando verificação automática diária de status - {}", LocalDate.now());
+        long marcados = executarVerificacaoStatus();
+        if (marcados > 0) {
+            log.warn("{} processos foram marcados como INADIMPLENTES", marcados);
         } else {
-            log.info("✅ Nenhuma pessoa ficou inadimplente hoje");
+            log.info("Nenhum processo ficou inadimplente hoje");
         }
     }
 
-    /**
-     * Executa a cada 6 HORAS durante o dia
-     * Para capturar mudanças durante o expediente
-     */
-    @Scheduled(cron = "0 0 */6 * * *") // A cada 6 horas: 00:00, 06:00, 12:00, 18:00
+    @Scheduled(cron = "0 0 */6 * * *")
     @Transactional
     public void verificarStatusPeriodico() {
-        log.debug("🔄 Verificação periódica de status - {}", LocalDate.now());
+        log.debug("Verificação periódica de status - {}", LocalDate.now());
         executarVerificacaoStatus();
     }
 
     /**
-     * Lógica principal de verificação de status
+     * Verifica processos EM_CONFORMIDADE com proximo_comparecimento < hoje
+     * e marca como INADIMPLENTE (usa ProcessoRepository)
      */
     private long executarVerificacaoStatus() {
+        // Buscar processos atrasados via ProcessoRepository
+        List<Processo> processosAtrasados = processoRepository.findAtrasadosParaVerificacao();
+        long contadorProcessos = 0;
+
+        for (Processo processo : processosAtrasados) {
+            processo.setStatus(StatusComparecimento.INADIMPLENTE);
+            processoRepository.save(processo);
+            contadorProcessos++;
+
+            long diasAtraso = java.time.temporal.ChronoUnit.DAYS
+                    .between(processo.getProximoComparecimento(), LocalDate.now());
+            log.warn("INADIMPLENTE: Processo {} (ID: {}) - Custodiado: {} - {} dias de atraso",
+                    processo.getNumeroProcesso(), processo.getId(),
+                    processo.getCustodiado() != null ? processo.getCustodiado().getNome() : "N/A",
+                    diasAtraso);
+        }
+
+        // Manter compatibilidade: também atualizar custodiados (temporário)
+        List<Custodiado> custodiadosEmConformidade = custodiadoRepository.findByStatus(StatusComparecimento.EM_CONFORMIDADE);
         LocalDate hoje = LocalDate.now();
-        long contador = 0;
+        long contadorCustodiados = 0;
 
-        // Buscar apenas pessoas EM_CONFORMIDADE (para otimizar)
-        List<Custodiado> pessoasEmConformidade = custodiadoRepository.findByStatus(StatusComparecimento.EM_CONFORMIDADE);
-
-        log.debug("Verificando {} pessoas em conformidade", pessoasEmConformidade.size());
-
-        for (Custodiado pessoa : pessoasEmConformidade) {
-            if (pessoa.getProximoComparecimento() != null &&
-                    pessoa.getProximoComparecimento().isBefore(hoje)) {
-
-                // Custodiado está atrasada - marcar como inadimplente
+        for (Custodiado pessoa : custodiadosEmConformidade) {
+            if (pessoa.getProximoComparecimento() != null && pessoa.getProximoComparecimento().isBefore(hoje)) {
                 pessoa.setStatus(StatusComparecimento.INADIMPLENTE);
                 custodiadoRepository.save(pessoa);
-                contador++;
-
-                long diasAtraso = java.time.temporal.ChronoUnit.DAYS
-                        .between(pessoa.getProximoComparecimento(), hoje);
-
-                log.warn("❌ INADIMPLENTE: {} (ID: {}) - {} dias de atraso",
-                        pessoa.getNome(), pessoa.getId(), diasAtraso);
+                contadorCustodiados++;
             }
         }
 
-        if (contador > 0) {
-            log.info("✅ Verificação concluída: {} pessoas marcadas como inadimplentes", contador);
+        if (contadorProcessos > 0 || contadorCustodiados > 0) {
+            log.info("Verificação concluída: {} processos e {} custodiados marcados como inadimplentes",
+                    contadorProcessos, contadorCustodiados);
         }
 
-        return contador;
+        return Math.max(contadorProcessos, contadorCustodiados);
     }
 
-    /**
-     * Método manual para forçar verificação (útil para testes)
-     */
     @Transactional
     public long verificarStatusManual() {
-        log.info("🔧 Verificação MANUAL de status solicitada");
+        log.info("Verificação MANUAL de status solicitada");
         return executarVerificacaoStatus();
     }
 
     /**
-     * Método para reprocessar TODAS as pessoas (útil após mudanças)
+     * Reprocessa todos os processos ativos + custodiados (compatibilidade)
      */
     @Transactional
     public long reprocessarTodosStatus() {
-        log.info("🔄 REPROCESSAMENTO COMPLETO de todos os status");
-
+        log.info("REPROCESSAMENTO COMPLETO de todos os status");
         LocalDate hoje = LocalDate.now();
-        long emConformidade = 0;
         long inadimplentes = 0;
 
-        List<Custodiado> todasCustodiados = custodiadoRepository.findAll();
+        // Reprocessar processos
+        List<Processo> todosProcessos = processoRepository.findAllAtivosComCustodiado();
+        for (Processo processo : todosProcessos) {
+            StatusComparecimento novoStatus = (processo.getProximoComparecimento() != null && processo.getProximoComparecimento().isBefore(hoje))
+                    ? StatusComparecimento.INADIMPLENTE : StatusComparecimento.EM_CONFORMIDADE;
 
-        for (Custodiado pessoa : todasCustodiados) {
-            StatusComparecimento statusAnterior = pessoa.getStatus();
-            StatusComparecimento statusNovo;
-
-            // Determinar status correto baseado na data
-            if (pessoa.getProximoComparecimento() == null) {
-                statusNovo = StatusComparecimento.EM_CONFORMIDADE;
-            } else if (pessoa.getProximoComparecimento().isBefore(hoje)) {
-                statusNovo = StatusComparecimento.INADIMPLENTE;
-                inadimplentes++;
-            } else {
-                statusNovo = StatusComparecimento.EM_CONFORMIDADE;
-                emConformidade++;
+            if (!processo.getStatus().equals(novoStatus)) {
+                processo.setStatus(novoStatus);
+                processoRepository.save(processo);
+                log.info("Processo {} status alterado para {}", processo.getNumeroProcesso(), novoStatus);
             }
+            if (novoStatus == StatusComparecimento.INADIMPLENTE) inadimplentes++;
+        }
 
-            // Atualizar apenas se mudou
-            if (!statusAnterior.equals(statusNovo)) {
+        // Compatibilidade: reprocessar custodiados
+        List<Custodiado> todosCustodiados = custodiadoRepository.findAll();
+        for (Custodiado pessoa : todosCustodiados) {
+            StatusComparecimento statusNovo = (pessoa.getProximoComparecimento() == null || !pessoa.getProximoComparecimento().isBefore(hoje))
+                    ? StatusComparecimento.EM_CONFORMIDADE : StatusComparecimento.INADIMPLENTE;
+
+            if (!pessoa.getStatus().equals(statusNovo)) {
                 pessoa.setStatus(statusNovo);
                 custodiadoRepository.save(pessoa);
-
-                log.info("📝 Status alterado: {} (ID: {}) {} → {}",
-                        pessoa.getNome(), pessoa.getId(), statusAnterior, statusNovo);
             }
         }
 
-        log.info("✅ Reprocessamento concluído: {} em conformidade, {} inadimplentes",
-                emConformidade, inadimplentes);
-
+        log.info("Reprocessamento concluído: {} processos inadimplentes", inadimplentes);
         return inadimplentes;
     }
 
-    /**
-     * Obter estatísticas de status das pessoas
-     */
     public StatusInfo obterStatusInfo() {
-        long totalCustodiados = custodiadoRepository.count();
-        long emConformidade = custodiadoRepository.countByStatus(StatusComparecimento.EM_CONFORMIDADE);
-        long inadimplentes = custodiadoRepository.countByStatus(StatusComparecimento.INADIMPLENTE);
+        // Usar ProcessoRepository para contadores principais
+        long totalProcessos = processoRepository.countBySituacaoProcesso(
+                br.jus.tjba.aclp.model.enums.SituacaoProcesso.ATIVO);
+        long emConformidade = processoRepository.countByStatusAtivo(StatusComparecimento.EM_CONFORMIDADE);
+        long inadimplentes = processoRepository.countByStatusAtivo(StatusComparecimento.INADIMPLENTE);
+
+        // Fallback para custodiados se não houver processos migrados ainda
+        if (totalProcessos == 0) {
+            totalProcessos = custodiadoRepository.count();
+            emConformidade = custodiadoRepository.countByStatus(StatusComparecimento.EM_CONFORMIDADE);
+            inadimplentes = custodiadoRepository.countByStatus(StatusComparecimento.INADIMPLENTE);
+        }
 
         return StatusInfo.builder()
-                .totalCustodiados(totalCustodiados)
+                .totalCustodiados(totalProcessos)
                 .emConformidade(emConformidade)
                 .inadimplentes(inadimplentes)
                 .dataConsulta(LocalDate.now())
-                .percentualConformidade(totalCustodiados > 0 ?
-                        (double) emConformidade / totalCustodiados * 100 : 0.0)
+                .percentualConformidade(totalProcessos > 0 ? (double) emConformidade / totalProcessos * 100 : 0.0)
                 .build();
     }
 
-    /**
-     * DTO para informações de status
-     */
     @lombok.Data
     @lombok.Builder
     public static class StatusInfo {
