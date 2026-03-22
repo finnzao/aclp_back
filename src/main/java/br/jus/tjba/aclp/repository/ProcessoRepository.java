@@ -60,8 +60,7 @@ public interface ProcessoRepository extends JpaRepository<Processo, Long> {
     @Query("SELECT p FROM Processo p WHERE p.proximoComparecimento < CURRENT_DATE AND p.status = 'EM_CONFORMIDADE' AND p.situacaoProcesso = 'ATIVO'")
     List<Processo> findAtrasadosParaVerificacao();
 
-    // Todos os processos de um custodiado (incluindo encerrados)
-    List<Processo> findByCustodiadoIdOrderByCriadoEmDesc(Long custodiadoId);
+    List<Processo> findByCustodiado_IdOrderByCriadoEmDesc(Long custodiadoId);
 
     // Buscar por ID com custodiado carregado
     @Query("SELECT p FROM Processo p JOIN FETCH p.custodiado c WHERE p.id = :id")
