@@ -37,9 +37,6 @@ public class CustodiadoController {
     private final CustodiadoService custodiadoService;
     private final HistoricoEnderecoService historicoEnderecoService;
 
-    /**
-     * DTO interno para dados detalhados do endereço
-     */
     @lombok.Data
     @lombok.Builder
     public static class EnderecoDetalhadoDTO {
@@ -66,14 +63,10 @@ public class CustodiadoController {
         private LocalDateTime atualizadoEm;
     }
 
-    /**
-     * DTO melhorado para resposta do custodiado com endereço detalhado
-     * Usado APENAS para consultas individuais (findById)
-     */
     @lombok.Data
     @lombok.Builder
     public static class CustodiadoResponseDTO {
-        private Long id;
+        private String id;
         private String nome;
         private String cpf;
         private String rg;
@@ -90,29 +83,19 @@ public class CustodiadoController {
         private LocalDate proximoComparecimento;
         private Long diasAtraso;
         private String observacoes;
-
-        // Endereço detalhado como objeto estruturado
         private EnderecoDetalhadoDTO endereco;
-
-        // Metadados
         private LocalDateTime criadoEm;
         private LocalDateTime atualizadoEm;
         private String identificacao;
         private boolean inadimplente;
         private boolean comparecimentoHoje;
 
-        /**
-         * Converte entidade para DTO com endereço detalhado
-         * Usado APENAS para consultas individuais
-         */
-        public static CustodiadoResponseDTO fromEntity(Custodiado custodiado, HistoricoEnderecoService enderecoService) {
-            // Buscar endereço ativo do custodiado
+        public static CustodiadoResponseDTO fromEntity(Custodiado custodiado,
+                                                        HistoricoEnderecoService enderecoService) {
             EnderecoDetalhadoDTO enderecoDetalhado = null;
-
             try {
                 Optional<br.jus.tjba.aclp.dto.HistoricoEnderecoDTO> enderecoOpt =
                         enderecoService.buscarEnderecoAtivo(custodiado.getId());
-
                 if (enderecoOpt.isPresent()) {
                     br.jus.tjba.aclp.dto.HistoricoEnderecoDTO enderecoDTO = enderecoOpt.get();
                     enderecoDetalhado = EnderecoDetalhadoDTO.builder()
@@ -140,11 +123,12 @@ public class CustodiadoController {
                             .build();
                 }
             } catch (Exception e) {
-                log.warn("Erro ao buscar endereço do custodiado ID {}: {}", custodiado.getId(), e.getMessage());
+                log.warn("Erro ao buscar endereço do custodiado publicId {}: {}",
+                        custodiado.getPublicId(), e.getMessage());
             }
 
             return CustodiadoResponseDTO.builder()
-                    .id(custodiado.getId())
+                    .id(custodiado.getPublicId() != null ? custodiado.getPublicId().toString() : null)
                     .nome(custodiado.getNome())
                     .cpf(custodiado.getCpf())
                     .rg(custodiado.getRg())
@@ -161,9 +145,7 @@ public class CustodiadoController {
                     .proximoComparecimento(custodiado.getProximoComparecimento())
                     .diasAtraso(custodiado.getDiasAtraso())
                     .observacoes(custodiado.getObservacoes())
-                    // Endereço detalhado
                     .endereco(enderecoDetalhado)
-                    // Metadados
                     .criadoEm(custodiado.getCriadoEm())
                     .atualizadoEm(custodiado.getAtualizadoEm())
                     .identificacao(custodiado.getIdentificacao())
@@ -173,56 +155,36 @@ public class CustodiadoController {
         }
     }
 
-    /**
-     * Método auxiliar para tratar erros de validação
-     */
     private String extrairMensagemValidacao(Exception e) {
         String mensagem = e.getMessage();
-
-        // Tratar erros específicos de formatação
         if (mensagem != null) {
-            if (mensagem.contains("processo") || mensagem.contains("Processo")) {
+            if (mensagem.contains("processo") || mensagem.contains("Processo"))
                 return "Formato do número do processo é inválido. Use o formato correto (ex: 0000000-00.0000.0.00.0000)";
-            }
-            if (mensagem.contains("cpf") || mensagem.contains("CPF")) {
+            if (mensagem.contains("cpf") || mensagem.contains("CPF"))
                 return "CPF inválido. Verifique o formato (000.000.000-00) ou se o número é válido";
-            }
-            if (mensagem.contains("rg") || mensagem.contains("RG")) {
+            if (mensagem.contains("rg") || mensagem.contains("RG"))
                 return "RG inválido. Verifique o formato";
-            }
-            if (mensagem.contains("periodicidade")) {
+            if (mensagem.contains("periodicidade"))
                 return "Periodicidade deve ser um número positivo (dias)";
-            }
-            if (mensagem.contains("data")) {
+            if (mensagem.contains("data"))
                 return "Formato de data inválido. Use o formato YYYY-MM-DD";
-            }
-            if (mensagem.contains("nome") && mensagem.contains("tamanho")) {
+            if (mensagem.contains("nome") && mensagem.contains("tamanho"))
                 return "Nome deve ter entre 2 e 100 caracteres";
-            }
-            if (mensagem.contains("contato")) {
+            if (mensagem.contains("contato"))
                 return "Formato do contato inválido. Use formato de telefone válido";
-            }
         }
-
         return mensagem;
     }
 
-    /**
-     * Método auxiliar para tratar erros de integridade de dados
-     */
     private String extrairMensagemIntegridade(DataIntegrityViolationException e) {
         String mensagem = e.getMessage();
-
         if (mensagem != null) {
-            if (mensagem.contains("cpf") || mensagem.contains("uk_custodiado_cpf")) {
+            if (mensagem.contains("cpf") || mensagem.contains("uk_custodiado_cpf"))
                 return "CPF já cadastrado no sistema. Verifique se o custodiado já existe";
-            }
-            if (mensagem.contains("rg") || mensagem.contains("uk_custodiado_rg")) {
+            if (mensagem.contains("rg") || mensagem.contains("uk_custodiado_rg"))
                 return "RG já cadastrado no sistema. Verifique se o custodiado já existe";
-            }
-            if (mensagem.contains("processo") && mensagem.contains("cpf")) {
+            if (mensagem.contains("processo") && mensagem.contains("cpf"))
                 return "Já existe um custodiado com este CPF neste processo";
-            }
             if (mensagem.contains("not null") || mensagem.contains("cannot be null")) {
                 if (mensagem.contains("nome")) return "Nome é obrigatório";
                 if (mensagem.contains("cpf")) return "CPF é obrigatório";
@@ -230,507 +192,284 @@ public class CustodiadoController {
                 return "Campo obrigatório não foi preenchido";
             }
         }
-
         return "Violação de integridade dos dados. Verifique se não há duplicação de informações";
     }
 
-    // ENDPOINTS DE LISTAGEM (SEM ENDEREÇO)
-
     @GetMapping
     @Operation(summary = "Listar todos os custodiados",
-            description = "Retorna uma lista resumida de todos os custodiados cadastrados (sem endereço detalhado para melhor performance)")
-    @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
-                    description = "Lista de custodiados retornada com sucesso")
-    })
+            description = "Retorna uma lista resumida de todos os custodiados cadastrados")
     public ResponseEntity<ApiResponse<List<CustodiadoListDTO>>> findAll() {
-        log.info("Listando todos os custodiados (resumido - sem endereço)");
-
+        log.info("Listando todos os custodiados (resumido)");
         try {
-            // Usa query SEM JOIN FETCH - muito mais rápida
             List<Custodiado> custodiados = custodiadoService.findAllActive();
-
             List<CustodiadoListDTO> response = custodiados.stream()
                     .map(CustodiadoListDTO::fromEntity)
                     .collect(Collectors.toList());
-
-            return ResponseEntity.ok(
-                    ApiResponse.success("Custodiados listados com sucesso", response)
-            );
+            return ResponseEntity.ok(ApiResponse.success("Custodiados listados com sucesso", response));
         } catch (Exception e) {
             log.error("Erro ao listar custodiados", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                    ApiResponse.error("Erro ao listar custodiados. Tente novamente")
-            );
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Erro ao listar custodiados. Tente novamente"));
         }
     }
 
     @GetMapping("/status/{status}")
-    @Operation(summary = "Buscar custodiados por status",
-            description = "Retorna custodiados filtrados por status de comparecimento (sem endereço detalhado)")
-    @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
-                    description = "Lista de custodiados retornada com sucesso"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "Status inválido")
-    })
+    @Operation(summary = "Buscar custodiados por status")
     public ResponseEntity<ApiResponse<List<CustodiadoListDTO>>> findByStatus(
             @Parameter(description = "Status do comparecimento") @PathVariable StatusComparecimento status) {
-        log.info("Buscando custodiados por status: {} (resumido)", status);
-
+        log.info("Buscando custodiados por status: {}", status);
         try {
             List<Custodiado> custodiados = custodiadoService.findByStatus(status);
-
             List<CustodiadoListDTO> response = custodiados.stream()
                     .map(CustodiadoListDTO::fromEntity)
                     .collect(Collectors.toList());
-
-            return ResponseEntity.ok(
-                    ApiResponse.success("Custodiados encontrados com sucesso", response)
-            );
+            return ResponseEntity.ok(ApiResponse.success("Custodiados encontrados com sucesso", response));
         } catch (IllegalArgumentException e) {
             String valoresValidos = String.join(", ",
                     StatusComparecimento.EM_CONFORMIDADE.getCode(),
                     StatusComparecimento.INADIMPLENTE.getCode());
-
             return ResponseEntity.badRequest().body(
-                    ApiResponse.error("Status inválido. Use um dos valores: " + valoresValidos)
-            );
+                    ApiResponse.error("Status inválido. Use um dos valores: " + valoresValidos));
         } catch (Exception e) {
             log.error("Erro ao buscar custodiados por status: {}", status, e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                    ApiResponse.error("Erro ao buscar custodiados por status. Tente novamente")
-            );
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Erro ao buscar custodiados por status. Tente novamente"));
         }
     }
 
     @GetMapping("/comparecimentos/hoje")
-    @Operation(summary = "Comparecimentos de hoje",
-            description = "Retorna custodiados que devem comparecer hoje (sem endereço detalhado)")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
-            description = "Lista de custodiados retornada com sucesso")
+    @Operation(summary = "Comparecimentos de hoje")
     public ResponseEntity<ApiResponse<List<CustodiadoListDTO>>> findComparecimentosHoje() {
-        log.info("Buscando custodiados com comparecimento hoje (resumido)");
-
+        log.info("Buscando custodiados com comparecimento hoje");
         try {
             List<Custodiado> custodiados = custodiadoService.findComparecimentosHoje();
-
             List<CustodiadoListDTO> response = custodiados.stream()
                     .map(CustodiadoListDTO::fromEntity)
                     .collect(Collectors.toList());
-
             return ResponseEntity.ok(
-                    ApiResponse.success("Custodiados com comparecimento hoje listados com sucesso", response)
-            );
+                    ApiResponse.success("Custodiados com comparecimento hoje listados com sucesso", response));
         } catch (Exception e) {
             log.error("Erro ao buscar comparecimentos de hoje", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                    ApiResponse.error("Erro ao buscar comparecimentos de hoje. Tente novamente")
-            );
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Erro ao buscar comparecimentos de hoje. Tente novamente"));
         }
     }
 
     @GetMapping("/inadimplentes")
-    @Operation(summary = "Custodiados inadimplentes",
-            description = "Retorna custodiados inadimplentes (sem endereço detalhado)")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
-            description = "Lista de custodiados retornada com sucesso")
+    @Operation(summary = "Custodiados inadimplentes")
     public ResponseEntity<ApiResponse<List<CustodiadoListDTO>>> findInadimplentes() {
-        log.info("Buscando custodiados inadimplentes (resumido)");
-
+        log.info("Buscando custodiados inadimplentes");
         try {
             List<Custodiado> custodiados = custodiadoService.findInadimplentes();
-
             List<CustodiadoListDTO> response = custodiados.stream()
                     .map(CustodiadoListDTO::fromEntity)
                     .collect(Collectors.toList());
-
             return ResponseEntity.ok(
-                    ApiResponse.success("Custodiados inadimplentes listados com sucesso", response)
-            );
+                    ApiResponse.success("Custodiados inadimplentes listados com sucesso", response));
         } catch (Exception e) {
             log.error("Erro ao buscar custodiados inadimplentes", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                    ApiResponse.error("Erro ao buscar custodiados inadimplentes. Tente novamente")
-            );
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Erro ao buscar custodiados inadimplentes. Tente novamente"));
         }
     }
 
     @GetMapping("/buscar")
-    @Operation(summary = "Buscar custodiados",
-            description = "Busca custodiados por nome ou número do processo (sem endereço detalhado)")
-    @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
-                    description = "Lista de custodiados retornada com sucesso"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "Termo de busca inválido")
-    })
+    @Operation(summary = "Buscar custodiados por termo")
     public ResponseEntity<ApiResponse<List<CustodiadoListDTO>>> buscar(
             @Parameter(description = "Termo de busca") @RequestParam String termo) {
-        log.info("Buscando custodiados por termo: {} (resumido)", termo);
-
+        log.info("Buscando custodiados por termo: {}", termo);
         try {
-            if (termo == null || termo.trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(
-                        ApiResponse.error("Termo de busca não pode ser vazio")
-                );
-            }
-
-            if (termo.trim().length() < 2) {
-                return ResponseEntity.badRequest().body(
-                        ApiResponse.error("Termo de busca deve ter pelo menos 2 caracteres")
-                );
-            }
+            if (termo == null || termo.trim().isEmpty())
+                return ResponseEntity.badRequest().body(ApiResponse.error("Termo de busca não pode ser vazio"));
+            if (termo.trim().length() < 2)
+                return ResponseEntity.badRequest()
+                        .body(ApiResponse.error("Termo de busca deve ter pelo menos 2 caracteres"));
 
             List<Custodiado> custodiados = custodiadoService.buscarPorNomeOuProcesso(termo);
-
             List<CustodiadoListDTO> response = custodiados.stream()
                     .map(CustodiadoListDTO::fromEntity)
                     .collect(Collectors.toList());
-
-            return ResponseEntity.ok(
-                    ApiResponse.success("Busca realizada com sucesso", response)
-            );
+            return ResponseEntity.ok(ApiResponse.success("Busca realizada com sucesso", response));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error("Termo de busca inválido: " + e.getMessage())
-            );
+            return ResponseEntity.badRequest().body(ApiResponse.error("Termo de busca inválido: " + e.getMessage()));
         } catch (Exception e) {
             log.error("Erro ao buscar custodiados por termo: {}", termo, e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                    ApiResponse.error("Erro ao realizar busca. Tente novamente")
-            );
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Erro ao realizar busca. Tente novamente"));
         }
     }
 
     @GetMapping("/processo/{processo}")
-    @Operation(summary = "Buscar custodiados por processo",
-            description = "Retorna todos os custodiados de um processo (sem endereço detalhado)")
-    @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
-                    description = "Custodiados encontrados"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
-                    description = "Nenhum custodiado encontrado para este processo"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "Número do processo inválido")
-    })
+    @Operation(summary = "Buscar custodiados por processo")
     public ResponseEntity<ApiResponse<List<CustodiadoListDTO>>> findByProcesso(
             @Parameter(description = "Número do processo") @PathVariable String processo) {
-        log.info("Buscando custodiados por processo: {} (resumido)", processo);
-
+        log.info("Buscando custodiados por processo: {}", processo);
         try {
-            if (processo == null || processo.trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(
-                        ApiResponse.error("Número do processo não pode ser vazio")
-                );
-            }
+            if (processo == null || processo.trim().isEmpty())
+                return ResponseEntity.badRequest()
+                        .body(ApiResponse.error("Número do processo não pode ser vazio"));
 
             List<Custodiado> custodiados = custodiadoService.findByProcesso(processo);
-
-            if (custodiados.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
-                        ApiResponse.error("Nenhum custodiado encontrado com processo: " + processo)
-                );
-            }
+            if (custodiados.isEmpty())
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(ApiResponse.error("Nenhum custodiado encontrado com processo: " + processo));
 
             List<CustodiadoListDTO> response = custodiados.stream()
                     .map(CustodiadoListDTO::fromEntity)
                     .collect(Collectors.toList());
-
-            return ResponseEntity.ok(
-                    ApiResponse.success("Custodiados encontrados com sucesso", response)
-            );
+            return ResponseEntity.ok(ApiResponse.success("Custodiados encontrados com sucesso", response));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error("Número do processo com formato inválido: " + e.getMessage())
-            );
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("Número do processo com formato inválido: " + e.getMessage()));
         } catch (Exception e) {
             log.error("Erro ao buscar custodiados por processo: {}", processo, e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                    ApiResponse.error("Erro ao buscar custodiados por processo. Tente novamente")
-            );
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Erro ao buscar custodiados por processo. Tente novamente"));
         }
     }
 
-    // ENDPOINTS COM DETALHES (COM ENDEREÇO)
-
-    @GetMapping("/{id}")
-    @Operation(summary = "Buscar custodiado por ID",
-            description = "Retorna um custodiado específico pelo seu ID com endereço detalhado")
-    @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
-                    description = "Custodiado encontrado"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
-                    description = "Custodiado não encontrado"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "ID inválido")
-    })
+    @GetMapping("/{publicId}")
+    @Operation(summary = "Buscar custodiado por ID (UUID)")
     public ResponseEntity<ApiResponse<CustodiadoResponseDTO>> findById(
-            @Parameter(description = "ID do custodiado") @PathVariable Long id) {
-        log.info("Buscando custodiado por ID: {} com endereço detalhado", id);
-
+            @Parameter(description = "UUID público do custodiado") @PathVariable String publicId) {
+        log.info("Buscando custodiado por publicId: {}", publicId);
         try {
-            if (id == null || id <= 0) {
-                return ResponseEntity.badRequest().body(
-                        ApiResponse.error("ID deve ser um número positivo válido")
-                );
-            }
-
-            return custodiadoService.findById(id)
+            return custodiadoService.findByPublicId(publicId)
                     .map(custodiado -> ResponseEntity.ok(
                             ApiResponse.success("Custodiado encontrado com sucesso",
-                                    CustodiadoResponseDTO.fromEntity(custodiado, historicoEnderecoService))
-                    ))
-                    .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).body(
-                            ApiResponse.error("Custodiado não encontrado com ID: " + id)
-                    ));
+                                    CustodiadoResponseDTO.fromEntity(custodiado, historicoEnderecoService))))
+                    .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
+                            .body(ApiResponse.error("Custodiado não encontrado com ID: " + publicId)));
         } catch (Exception e) {
-            log.error("Erro ao buscar custodiado por ID: {}", id, e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                    ApiResponse.error("Erro ao buscar custodiado. Tente novamente")
-            );
+            log.error("Erro ao buscar custodiado publicId: {}", publicId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Erro ao buscar custodiado. Tente novamente"));
         }
     }
-
-    // CRUD
 
     @PostMapping
-    @Operation(summary = "Cadastrar novo custodiado",
-            description = "Cadastra um novo custodiado no sistema. O endereço será incluído no retorno")
-    @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201",
-                    description = "Custodiado cadastrado com sucesso"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "Dados inválidos"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
-                    description = "Conflito - CPF ou RG já cadastrado")
-    })
+    @Operation(summary = "Cadastrar novo custodiado")
     public ResponseEntity<ApiResponse<CustodiadoResponseDTO>> save(@Valid @RequestBody CustodiadoDTO dto) {
         log.info("Cadastrando novo custodiado - Processo: {}, Nome: {}", dto.getProcesso(), dto.getNome());
-
         try {
-            // Validações básicas antes de processar
-            if (dto.getNome() == null || dto.getNome().trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(
-                        ApiResponse.error("Nome é obrigatório")
-                );
-            }
-
-            if (dto.getCpf() == null || dto.getCpf().trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(
-                        ApiResponse.error("CPF é obrigatório")
-                );
-            }
-
-            if (dto.getProcesso() == null || dto.getProcesso().trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(
-                        ApiResponse.error("Número do processo é obrigatório")
-                );
-            }
-
-            if (dto.getId() != null) {
-                log.warn("ID {} recebido na criação será ignorado - ID é auto-increment", dto.getId());
-                dto.setId(null);
-            }
-
-            if (dto.getDataComparecimentoInicial() == null) {
-                log.info("Data de comparecimento inicial não fornecida - será usada data atual");
-            } else {
-                log.info("Data de comparecimento inicial fornecida: {}", dto.getDataComparecimentoInicial());
-            }
+            if (dto.getNome() == null || dto.getNome().trim().isEmpty())
+                return ResponseEntity.badRequest().body(ApiResponse.error("Nome é obrigatório"));
+            if (dto.getCpf() == null || dto.getCpf().trim().isEmpty())
+                return ResponseEntity.badRequest().body(ApiResponse.error("CPF é obrigatório"));
+            if (dto.getProcesso() == null || dto.getProcesso().trim().isEmpty())
+                return ResponseEntity.badRequest().body(ApiResponse.error("Número do processo é obrigatório"));
+            if (dto.getId() != null) dto.setId(null);
 
             Custodiado custodiado = custodiadoService.save(dto);
-            log.info("Custodiado cadastrado com sucesso. ID gerado: {}", custodiado.getId());
-
+            log.info("Custodiado cadastrado com sucesso. publicId: {}", custodiado.getPublicId());
             return ResponseEntity.status(HttpStatus.CREATED).body(
                     ApiResponse.success("Custodiado cadastrado com sucesso",
-                            CustodiadoResponseDTO.fromEntity(custodiado, historicoEnderecoService))
-            );
+                            CustodiadoResponseDTO.fromEntity(custodiado, historicoEnderecoService)));
         } catch (DataIntegrityViolationException e) {
             log.warn("Erro de integridade ao cadastrar custodiado: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(
-                    ApiResponse.error(extrairMensagemIntegridade(e))
-            );
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.error(extrairMensagemIntegridade(e)));
         } catch (IllegalArgumentException e) {
             log.warn("Erro de validação ao cadastrar custodiado: {}", e.getMessage());
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error(extrairMensagemValidacao(e))
-            );
+            return ResponseEntity.badRequest().body(ApiResponse.error(extrairMensagemValidacao(e)));
         } catch (DateTimeParseException e) {
             log.warn("Erro de formato de data ao cadastrar custodiado: {}", e.getMessage());
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error("Formato de data inválido. Use o formato YYYY-MM-DD")
-            );
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("Formato de data inválido. Use o formato YYYY-MM-DD"));
         } catch (Exception e) {
             log.error("Erro inesperado ao cadastrar custodiado", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                    ApiResponse.error("Erro interno ao cadastrar custodiado. Verifique os dados e tente novamente")
-            );
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Erro interno ao cadastrar custodiado. Verifique os dados e tente novamente"));
         }
     }
 
-    @PutMapping("/{id}")
-    @Operation(summary = "Atualizar custodiado",
-            description = "Atualiza os dados de um custodiado existente")
-    @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
-                    description = "Custodiado atualizado com sucesso"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "Dados inválidos"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
-                    description = "Custodiado não encontrado"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409",
-                    description = "Conflito - CPF ou RG já cadastrado")
-    })
+    @PutMapping("/{publicId}")
+    @Operation(summary = "Atualizar custodiado por UUID")
     public ResponseEntity<ApiResponse<CustodiadoResponseDTO>> update(
-            @PathVariable Long id, @Valid @RequestBody CustodiadoDTO dto) {
-        log.info("Atualizando custodiado ID: {}", id);
-
+            @PathVariable String publicId, @Valid @RequestBody CustodiadoDTO dto) {
+        log.info("Atualizando custodiado publicId: {}", publicId);
         try {
-            // Validações básicas
-            if (id == null || id <= 0) {
-                return ResponseEntity.badRequest().body(
-                        ApiResponse.error("ID deve ser um número positivo válido")
-                );
-            }
+            if (dto.getNome() == null || dto.getNome().trim().isEmpty())
+                return ResponseEntity.badRequest().body(ApiResponse.error("Nome é obrigatório"));
+            if (dto.getCpf() == null || dto.getCpf().trim().isEmpty())
+                return ResponseEntity.badRequest().body(ApiResponse.error("CPF é obrigatório"));
+            if (dto.getProcesso() == null || dto.getProcesso().trim().isEmpty())
+                return ResponseEntity.badRequest().body(ApiResponse.error("Número do processo é obrigatório"));
 
-            if (dto.getNome() == null || dto.getNome().trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(
-                        ApiResponse.error("Nome é obrigatório")
-                );
-            }
-
-            if (dto.getCpf() == null || dto.getCpf().trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(
-                        ApiResponse.error("CPF é obrigatório")
-                );
-            }
-
-            if (dto.getProcesso() == null || dto.getProcesso().trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(
-                        ApiResponse.error("Número do processo é obrigatório")
-                );
-            }
-
-            Custodiado custodiado = custodiadoService.update(id, dto);
-            log.info("Custodiado atualizado com sucesso. ID: {}", custodiado.getId());
-
+            Custodiado custodiado = custodiadoService.updateByPublicId(publicId, dto);
+            log.info("Custodiado atualizado com sucesso. publicId: {}", custodiado.getPublicId());
             return ResponseEntity.ok(
                     ApiResponse.success("Custodiado atualizado com sucesso",
-                            CustodiadoResponseDTO.fromEntity(custodiado, historicoEnderecoService))
-            );
+                            CustodiadoResponseDTO.fromEntity(custodiado, historicoEnderecoService)));
         } catch (EntityNotFoundException e) {
-            log.warn("Custodiado não encontrado para atualização. ID: {}", id);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
-                    ApiResponse.error("Custodiado não encontrado com ID: " + id)
-            );
+            log.warn("Custodiado não encontrado para atualização. publicId: {}", publicId);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error("Custodiado não encontrado com ID: " + publicId));
         } catch (DataIntegrityViolationException e) {
-            log.warn("Erro de integridade ao atualizar custodiado ID {}: {}", id, e.getMessage());
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(
-                    ApiResponse.error(extrairMensagemIntegridade(e))
-            );
+            log.warn("Erro de integridade ao atualizar custodiado publicId {}: {}", publicId, e.getMessage());
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.error(extrairMensagemIntegridade(e)));
         } catch (IllegalArgumentException e) {
-            log.warn("Erro de validação ao atualizar custodiado ID {}: {}", id, e.getMessage());
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error(extrairMensagemValidacao(e))
-            );
+            log.warn("Erro de validação ao atualizar custodiado publicId {}: {}", publicId, e.getMessage());
+            return ResponseEntity.badRequest().body(ApiResponse.error(extrairMensagemValidacao(e)));
         } catch (DateTimeParseException e) {
-            log.warn("Erro de formato de data ao atualizar custodiado ID {}: {}", id, e.getMessage());
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error("Formato de data inválido. Use o formato YYYY-MM-DD")
-            );
+            log.warn("Erro de formato de data ao atualizar custodiado publicId {}: {}", publicId, e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("Formato de data inválido. Use o formato YYYY-MM-DD"));
         } catch (Exception e) {
-            log.error("Erro inesperado ao atualizar custodiado ID: {}", id, e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                    ApiResponse.error("Erro interno ao atualizar custodiado. Verifique os dados e tente novamente")
-            );
+            log.error("Erro inesperado ao atualizar custodiado publicId: {}", publicId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Erro interno ao atualizar custodiado. Verifique os dados e tente novamente"));
         }
     }
 
-    @DeleteMapping("/{id}")
-    @Operation(summary = "Excluir custodiado", description = "Remove um custodiado do sistema")
-    @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
-                    description = "Custodiado excluído com sucesso"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400",
-                    description = "ID inválido ou operação não permitida"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
-                    description = "Custodiado não encontrado")
-    })
-    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
-        log.info("Excluindo custodiado ID: {}", id);
-
+    @DeleteMapping("/{publicId}")
+    @Operation(summary = "Excluir custodiado por UUID")
+    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable String publicId) {
+        log.info("Excluindo custodiado publicId: {}", publicId);
         try {
-            if (id == null || id <= 0) {
-                return ResponseEntity.badRequest().body(
-                        ApiResponse.error("ID deve ser um número positivo válido")
-                );
-            }
-
-            custodiadoService.delete(id);
-            log.info("Custodiado excluído com sucesso. ID: {}", id);
-
-            return ResponseEntity.ok(
-                    ApiResponse.success("Custodiado excluído com sucesso")
-            );
+            custodiadoService.deleteByPublicId(publicId);
+            log.info("Custodiado excluído com sucesso. publicId: {}", publicId);
+            return ResponseEntity.ok(ApiResponse.success("Custodiado excluído com sucesso"));
         } catch (EntityNotFoundException e) {
-            log.warn("Custodiado não encontrado para exclusão. ID: {}", id);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
-                    ApiResponse.error("Custodiado não encontrado com ID: " + id)
-            );
+            log.warn("Custodiado não encontrado para exclusão. publicId: {}", publicId);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error("Custodiado não encontrado com ID: " + publicId));
         } catch (DataIntegrityViolationException e) {
-            log.warn("Erro de integridade ao excluir custodiado ID {}: {}", id, e.getMessage());
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error("Não é possível excluir este custodiado pois possui registros relacionados (comparecimentos, endereços, etc.)")
-            );
+            log.warn("Erro de integridade ao excluir custodiado publicId {}: {}", publicId, e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("Não é possível excluir este custodiado pois possui registros relacionados"));
         } catch (IllegalArgumentException e) {
-            log.warn("Erro de validação ao excluir custodiado ID {}: {}", id, e.getMessage());
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error(e.getMessage())
-            );
+            log.warn("Erro de validação ao excluir custodiado publicId {}: {}", publicId, e.getMessage());
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         } catch (Exception e) {
-            log.error("Erro inesperado ao excluir custodiado ID: {}", id, e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                    ApiResponse.error("Erro interno ao excluir custodiado. Tente novamente")
-            );
+            log.error("Erro inesperado ao excluir custodiado publicId: {}", publicId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Erro interno ao excluir custodiado. Tente novamente"));
         }
     }
-
-    // UTILITÁRIOS
 
     @GetMapping("/processo/{processo}/count")
-    @Operation(summary = "Contar custodiados por processo",
-            description = "Retorna a quantidade de custodiados em um processo específico")
-    @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
-                    description = "Contagem retornada com sucesso")
-    })
+    @Operation(summary = "Contar custodiados por processo")
     public ResponseEntity<ApiResponse<Long>> countByProcesso(
             @Parameter(description = "Número do processo") @PathVariable String processo) {
         log.info("Contando custodiados no processo: {}", processo);
-
         try {
-            if (processo == null || processo.trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(
-                        ApiResponse.error("Número do processo não pode ser vazio")
-                );
-            }
+            if (processo == null || processo.trim().isEmpty())
+                return ResponseEntity.badRequest()
+                        .body(ApiResponse.error("Número do processo não pode ser vazio"));
 
             List<Custodiado> custodiados = custodiadoService.findByProcesso(processo);
             long count = custodiados.size();
-
             return ResponseEntity.ok(
-                    ApiResponse.success(String.format("Processo %s tem %d custodiado(s)", processo, count), count)
-            );
+                    ApiResponse.success(String.format("Processo %s tem %d custodiado(s)", processo, count), count));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error("Número do processo com formato inválido: " + e.getMessage())
-            );
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("Número do processo com formato inválido: " + e.getMessage()));
         } catch (Exception e) {
             log.error("Erro ao contar custodiados por processo: {}", processo, e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                    ApiResponse.error("Erro ao contar custodiados. Tente novamente")
-            );
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Erro ao contar custodiados. Tente novamente"));
         }
     }
 

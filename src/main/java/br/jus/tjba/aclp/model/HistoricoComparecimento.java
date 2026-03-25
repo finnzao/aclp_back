@@ -3,7 +3,6 @@ package br.jus.tjba.aclp.model;
 import br.jus.tjba.aclp.model.enums.TipoValidacao;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -17,15 +16,27 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * Entidade HistoricoComparecimento — versão corrigida.
+ *
+ * CORREÇÃO CRÍTICA — LazyInitializationException:
+ *   Os getters @JsonProperty (getCustodiadoId, getCustodiadoNome, getProcessoId,
+ *   getNumeroProcesso) foram REMOVIDOS.  Eles acessavam relacionamentos LAZY
+ *   durante a serialização Jackson, fora da sessão Hibernate.
+ *
+ *   Use HistoricoComparecimentoResponseDTO (já existente no projeto) para
+ *   retornar os dados ao frontend.  A conversão deve ocorrer dentro da
+ *   transação (@Transactional), enquanto a sessão ainda está aberta.
+ */
 @Entity
 @Table(name = "historico_comparecimentos",
         indexes = {
-                @Index(name = "idx_historico_custodiado", columnList = "custodiado_id"),
-                @Index(name = "idx_historico_processo", columnList = "processo_id"),
-                @Index(name = "idx_historico_data", columnList = "data_comparecimento"),
-                @Index(name = "idx_historico_tipo", columnList = "tipo_validacao"),
-                @Index(name = "idx_historico_custodiado_data", columnList = "custodiado_id, data_comparecimento DESC"),
-                @Index(name = "idx_historico_processo_data", columnList = "processo_id, data_comparecimento DESC"),
+                @Index(name = "idx_historico_custodiado",       columnList = "custodiado_id"),
+                @Index(name = "idx_historico_processo",         columnList = "processo_id"),
+                @Index(name = "idx_historico_data",             columnList = "data_comparecimento"),
+                @Index(name = "idx_historico_tipo",             columnList = "tipo_validacao"),
+                @Index(name = "idx_historico_custodiado_data",  columnList = "custodiado_id, data_comparecimento DESC"),
+                @Index(name = "idx_historico_processo_data",    columnList = "processo_id, data_comparecimento DESC"),
                 @Index(name = "idx_historico_mudanca_endereco", columnList = "mudanca_endereco"),
                 @Index(name = "idx_historico_custodiado_mudanca", columnList = "custodiado_id, mudanca_endereco")
         }
@@ -40,39 +51,63 @@ public class HistoricoComparecimento {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // NOVO: Referência principal agora é o Processo
+    /**
+     * Referência principal — LAZY, sem @JsonProperty nesta entidade.
+     * Acesse via HistoricoComparecimentoResponseDTO.fromEntity() dentro da transação.
+     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "processo_id",
             foreignKey = @ForeignKey(name = "fk_comparecimento_processo"))
     @JsonIgnore
     private Processo processo;
 
-    // MANTIDO TEMPORARIAMENTE para compatibilidade durante transição
+    /**
+     * Mantido para compatibilidade durante transição — LAZY, sem @JsonProperty.
+     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "custodiado_id",
             foreignKey = @ForeignKey(name = "fk_historico_custodiado"))
     @JsonIgnore
     private Custodiado custodiado;
 
-    // Navega via processo -> custodiado (caminho principal)
-    @JsonProperty("custodiadoId")
+    // ---- REMOVIDOS os getters @JsonProperty que causavam LazyInitializationException ----
+    // getCustodiadoId()   → use HistoricoComparecimentoResponseDTO.custodiadoId
+    // getCustodiadoNome() → use HistoricoComparecimentoResponseDTO.custodiadoNome
+    // getProcessoId()     → (adicione ao DTO se necessário)
+    // getNumeroProcesso() → (adicione ao DTO se necessário)
+
+    /**
+     * Retorna o ID do custodiado de forma segura.
+     * Só chame este método enquanto a sessão Hibernate estiver ativa (dentro de @Transactional).
+     */
     public Long getCustodiadoId() {
-        if (processo != null && processo.getCustodiado() != null) return processo.getCustodiado().getId();
+        if (processo != null && processo.getCustodiado() != null)
+            return processo.getCustodiado().getId();
         return custodiado != null ? custodiado.getId() : null;
     }
 
-    @JsonProperty("custodiadoNome")
+    /**
+     * Retorna o nome do custodiado de forma segura.
+     * Só chame dentro de @Transactional.
+     */
     public String getCustodiadoNome() {
-        if (processo != null && processo.getCustodiado() != null) return processo.getCustodiado().getNome();
+        if (processo != null && processo.getCustodiado() != null)
+            return processo.getCustodiado().getNome();
         return custodiado != null ? custodiado.getNome() : null;
     }
 
-    @JsonProperty("processoId")
+    /**
+     * Retorna o ID do processo de forma segura.
+     * Só chame dentro de @Transactional.
+     */
     public Long getProcessoId() {
         return processo != null ? processo.getId() : null;
     }
 
-    @JsonProperty("numeroProcesso")
+    /**
+     * Retorna o número do processo de forma segura.
+     * Só chame dentro de @Transactional.
+     */
     public String getNumeroProcesso() {
         return processo != null ? processo.getNumeroProcesso() : null;
     }
@@ -127,6 +162,10 @@ public class HistoricoComparecimento {
     @Builder.Default
     private Long version = 0L;
 
+    // =====================================================================
+    // Lifecycle
+    // =====================================================================
+
     @PrePersist
     public void prePersist() {
         if (criadoEm == null) criadoEm = LocalDateTime.now();
@@ -139,26 +178,34 @@ public class HistoricoComparecimento {
         atualizadoEm = LocalDateTime.now();
     }
 
+    // =====================================================================
+    // Domain helpers
+    // =====================================================================
+
     public LocalDateTime getDataHoraComparecimento() {
         if (dataComparecimento == null) return null;
-        return horaComparecimento != null ? dataComparecimento.atTime(horaComparecimento) : dataComparecimento.atStartOfDay();
+        return horaComparecimento != null
+                ? dataComparecimento.atTime(horaComparecimento)
+                : dataComparecimento.atStartOfDay();
     }
 
     public String getResumo() {
-        StringBuilder resumo = new StringBuilder();
-        resumo.append(dataComparecimento.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")));
-        resumo.append(" - ").append(tipoValidacao.getLabel());
+        StringBuilder sb = new StringBuilder();
+        sb.append(dataComparecimento.format(
+                java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")));
+        sb.append(" - ").append(tipoValidacao.getLabel());
         if (horaComparecimento != null) {
-            resumo.append(" às ").append(horaComparecimento.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")));
+            sb.append(" às ").append(horaComparecimento.format(
+                    java.time.format.DateTimeFormatter.ofPattern("HH:mm")));
         }
-        if (Boolean.TRUE.equals(mudancaEndereco)) resumo.append(" (com mudança de endereço)");
-        return resumo.toString();
+        if (Boolean.TRUE.equals(mudancaEndereco)) sb.append(" (com mudança de endereço)");
+        return sb.toString();
     }
 
-    public boolean isComparecimentoVirtual() { return tipoValidacao != null && tipoValidacao.isVirtual(); }
+    public boolean isComparecimentoVirtual()  { return tipoValidacao != null && tipoValidacao.isVirtual(); }
     public boolean isComparecimentoPresencial() { return tipoValidacao != null && tipoValidacao.requerPresencaFisica(); }
-    public boolean isCadastroInicial() { return tipoValidacao != null && tipoValidacao.isCadastroInicial(); }
-    public boolean houveMudancaEndereco() { return Boolean.TRUE.equals(mudancaEndereco); }
+    public boolean isCadastroInicial()        { return tipoValidacao != null && tipoValidacao.isCadastroInicial(); }
+    public boolean houveMudancaEndereco()     { return Boolean.TRUE.equals(mudancaEndereco); }
 
     @Override
     public boolean equals(Object o) {

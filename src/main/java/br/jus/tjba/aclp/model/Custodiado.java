@@ -11,6 +11,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 
 @Entity
 @Table(name = "custodiados",
@@ -18,7 +19,8 @@ import java.util.Objects;
                 @Index(name = "idx_custodiado_cpf", columnList = "cpf"),
                 @Index(name = "idx_custodiado_rg", columnList = "rg"),
                 @Index(name = "idx_custodiado_situacao", columnList = "situacao"),
-                @Index(name = "idx_custodiado_nome", columnList = "nome")
+                @Index(name = "idx_custodiado_nome", columnList = "nome"),
+                @Index(name = "idx_custodiado_public_id", columnList = "public_id", unique = true)
         }
 )
 @Data
@@ -30,7 +32,11 @@ public class Custodiado {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @JsonIgnore
     private Long id;
+
+    @Column(name = "public_id", unique = true, nullable = false, updatable = false)
+    private UUID publicId;
 
     @NotBlank(message = "Nome é obrigatório")
     @Size(min = 2, max = 150)
@@ -51,7 +57,6 @@ public class Custodiado {
     @Column(name = "contato", nullable = false, length = 20)
     private String contato;
 
-    // Situação do custodiado no sistema (ATIVO/ARQUIVADO)
     @NotNull
     @Enumerated(EnumType.STRING)
     @Column(name = "situacao", nullable = false, length = 20)
@@ -73,9 +78,6 @@ public class Custodiado {
     @Column(name = "version")
     @Builder.Default
     private Long version = 0L;
-
-    // ========== CAMPOS PROCESSUAIS MANTIDOS TEMPORARIAMENTE ==========
-    // Serão removidos após migração completa do frontend (Passo 5 do SQL)
 
     @Column(name = "processo", length = 25)
     private String processo;
@@ -105,15 +107,11 @@ public class Custodiado {
     @Column(name = "proximo_comparecimento")
     private java.time.LocalDate proximoComparecimento;
 
-    // ========== FIM CAMPOS TEMPORÁRIOS ==========
-
-    // NOVO: Relação OneToMany com Processo
     @OneToMany(mappedBy = "custodiado", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @Builder.Default
     @JsonIgnore
     private List<Processo> processos = new ArrayList<>();
 
-    // Mantido: Histórico de comparecimentos (temporário, será via Processo)
     @OneToMany(mappedBy = "custodiado", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @OrderBy("dataComparecimento DESC")
     @Builder.Default
@@ -136,10 +134,12 @@ public class Custodiado {
         if (criadoEm == null) criadoEm = LocalDateTime.now();
         if (version == null) version = 0L;
         if (situacao == null) situacao = SituacaoCustodiado.ATIVO;
-        // Campos processuais temporários
+        if (publicId == null) publicId = UUID.randomUUID();
         if (status == null) status = br.jus.tjba.aclp.model.enums.StatusComparecimento.EM_CONFORMIDADE;
-        if (ultimoComparecimento == null && dataComparecimentoInicial != null) ultimoComparecimento = dataComparecimentoInicial;
-        if (proximoComparecimento == null && situacao.isAtivo() && periodicidade != null) calcularProximoComparecimento();
+        if (ultimoComparecimento == null && dataComparecimentoInicial != null)
+            ultimoComparecimento = dataComparecimentoInicial;
+        if (proximoComparecimento == null && situacao.isAtivo() && periodicidade != null)
+            calcularProximoComparecimento();
     }
 
     @PreUpdate
@@ -152,8 +152,8 @@ public class Custodiado {
         if (cpf != null) {
             String digits = cpf.replaceAll("[^\\d]", "");
             if (digits.length() == 11) {
-                this.cpf = digits.substring(0, 3) + "." + digits.substring(3, 6) + "." +
-                        digits.substring(6, 9) + "-" + digits.substring(9);
+                this.cpf = digits.substring(0, 3) + "." + digits.substring(3, 6) + "."
+                        + digits.substring(6, 9) + "-" + digits.substring(9);
             } else {
                 this.cpf = cpf;
             }
@@ -166,7 +166,6 @@ public class Custodiado {
         this.nome = nome != null ? nome.trim() : null;
     }
 
-    // Métodos de cálculo TEMPORÁRIOS (mantidos para compatibilidade durante transição)
     public void calcularProximoComparecimento() {
         if (ultimoComparecimento != null && periodicidade != null && situacao.isAtivo()) {
             proximoComparecimento = ultimoComparecimento.plusDays(periodicidade);
@@ -174,7 +173,8 @@ public class Custodiado {
     }
 
     public void atualizarStatusBaseadoEmData() {
-        if (situacao.isAtivo() && proximoComparecimento != null && proximoComparecimento.isBefore(java.time.LocalDate.now())) {
+        if (situacao.isAtivo() && proximoComparecimento != null
+                && proximoComparecimento.isBefore(java.time.LocalDate.now())) {
             status = br.jus.tjba.aclp.model.enums.StatusComparecimento.INADIMPLENTE;
         } else if (situacao.isAtivo()) {
             status = br.jus.tjba.aclp.model.enums.StatusComparecimento.EM_CONFORMIDADE;
@@ -184,29 +184,33 @@ public class Custodiado {
     public long getDiasAtraso() {
         if (proximoComparecimento == null || situacao.isArquivado()) return 0;
         java.time.LocalDate hoje = java.time.LocalDate.now();
-        return hoje.isAfter(proximoComparecimento) ?
-                java.time.temporal.ChronoUnit.DAYS.between(proximoComparecimento, hoje) : 0;
+        return hoje.isAfter(proximoComparecimento)
+                ? java.time.temporal.ChronoUnit.DAYS.between(proximoComparecimento, hoje) : 0;
     }
 
     public boolean isInadimplente() {
-        return situacao.isAtivo() && (status == br.jus.tjba.aclp.model.enums.StatusComparecimento.INADIMPLENTE ||
-                (proximoComparecimento != null && proximoComparecimento.isBefore(java.time.LocalDate.now())));
+        return situacao.isAtivo() && (status == br.jus.tjba.aclp.model.enums.StatusComparecimento.INADIMPLENTE
+                || (proximoComparecimento != null && proximoComparecimento.isBefore(java.time.LocalDate.now())));
     }
 
     public boolean isComparecimentoHoje() {
-        return situacao.isAtivo() && proximoComparecimento != null && proximoComparecimento.equals(java.time.LocalDate.now());
+        return situacao.isAtivo() && proximoComparecimento != null
+                && proximoComparecimento.equals(java.time.LocalDate.now());
     }
 
     public String getPeriodicidadeDescricao() {
         if (periodicidade == null) return "Não definida";
         return switch (periodicidade) {
-            case 7 -> "Semanal"; case 15 -> "Quinzenal"; case 30 -> "Mensal";
-            case 60 -> "Bimensal"; case 90 -> "Trimestral"; case 180 -> "Semestral";
+            case 7 -> "Semanal";
+            case 15 -> "Quinzenal";
+            case 30 -> "Mensal";
+            case 60 -> "Bimensal";
+            case 90 -> "Trimestral";
+            case 180 -> "Semestral";
             default -> periodicidade + " dias";
         };
     }
 
-    // Situação
     public boolean isAtivo() { return situacao != null && situacao.isAtivo(); }
     public boolean isArquivado() { return situacao != null && situacao.isArquivado(); }
 
@@ -224,8 +228,8 @@ public class Custodiado {
     }
 
     public boolean podeSerExcluidoFisicamente() {
-        return (historicoComparecimentos == null || historicoComparecimentos.isEmpty()) &&
-                (historicoEnderecos == null || historicoEnderecos.isEmpty());
+        return (historicoComparecimentos == null || historicoComparecimentos.isEmpty())
+                && (historicoEnderecos == null || historicoEnderecos.isEmpty());
     }
 
     public HistoricoEndereco getEnderecoAtual() {
@@ -280,9 +284,13 @@ public class Custodiado {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        return Objects.equals(id, ((Custodiado) o).id);
+        Custodiado c = (Custodiado) o;
+        if (publicId != null && c.publicId != null) return publicId.equals(c.publicId);
+        return Objects.equals(id, c.id);
     }
 
     @Override
-    public int hashCode() { return Objects.hash(id); }
+    public int hashCode() {
+        return publicId != null ? Objects.hash(publicId) : Objects.hash(id);
+    }
 }

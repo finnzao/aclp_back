@@ -5,7 +5,6 @@ import br.jus.tjba.aclp.model.enums.StatusComparecimento;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
 import lombok.*;
@@ -17,15 +16,27 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * Entidade Processo.
+ *
+ * CORREÇÃO CRÍTICA — LazyInitializationException:
+ *   Os getters @JsonProperty (getCustodiadoId, getCustodiadoNome, getCustodiadoCpf)
+ *   foram REMOVIDOS desta entidade.  Eles causavam o erro porque o Jackson os
+ *   chamava durante a serialização, fora da sessão Hibernate.
+ *
+ *   Agora o Processo deve ser convertido para ProcessoResponseDTO dentro da
+ *   transação (sessão aberta) antes de retornar ao controller.
+ *   Ver: ProcessoResponseDTO.fromEntity(processo)
+ */
 @Entity
 @Table(name = "processos",
         indexes = {
-                @Index(name = "idx_processo_custodiado", columnList = "custodiado_id"),
-                @Index(name = "idx_processo_numero", columnList = "numero_processo"),
-                @Index(name = "idx_processo_status", columnList = "status"),
-                @Index(name = "idx_processo_situacao", columnList = "situacao_processo"),
-                @Index(name = "idx_processo_proximo", columnList = "proximo_comparecimento"),
-                @Index(name = "idx_processo_status_proximo", columnList = "status, proximo_comparecimento"),
+                @Index(name = "idx_processo_custodiado",       columnList = "custodiado_id"),
+                @Index(name = "idx_processo_numero",           columnList = "numero_processo"),
+                @Index(name = "idx_processo_status",           columnList = "status"),
+                @Index(name = "idx_processo_situacao",         columnList = "situacao_processo"),
+                @Index(name = "idx_processo_proximo",          columnList = "proximo_comparecimento"),
+                @Index(name = "idx_processo_status_proximo",   columnList = "status, proximo_comparecimento"),
                 @Index(name = "idx_processo_custodiado_situacao", columnList = "custodiado_id, situacao_processo")
         }
 )
@@ -40,26 +51,20 @@ public class Processo {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /**
+     * Relacionamento LAZY — NÃO exponha via @JsonProperty nesta entidade.
+     * Use ProcessoResponseDTO.fromEntity() dentro da transação.
+     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "custodiado_id", nullable = false,
             foreignKey = @ForeignKey(name = "fk_processo_custodiado"))
     @JsonIgnore
     private Custodiado custodiado;
 
-    @JsonProperty("custodiadoId")
-    public Long getCustodiadoId() {
-        return custodiado != null ? custodiado.getId() : null;
-    }
-
-    @JsonProperty("custodiadoNome")
-    public String getCustodiadoNome() {
-        return custodiado != null ? custodiado.getNome() : null;
-    }
-
-    @JsonProperty("custodiadoCpf")
-    public String getCustodiadoCpf() {
-        return custodiado != null ? custodiado.getCpf() : null;
-    }
+    // ---- REMOVIDOS os getters @JsonProperty que causavam LazyInitializationException ----
+    // getCustodiadoId()   → use ProcessoResponseDTO.custodiadoId
+    // getCustodiadoNome() → use ProcessoResponseDTO.custodiadoNome
+    // getCustodiadoCpf()  → use ProcessoResponseDTO.custodiadoCpf
 
     @NotBlank(message = "Número do processo é obrigatório")
     @Column(name = "numero_processo", nullable = false, length = 25)
@@ -82,7 +87,7 @@ public class Processo {
     private LocalDate dataDecisao;
 
     @NotNull(message = "Periodicidade é obrigatória")
-    @Min(value = 1, message = "Periodicidade deve ser no mínimo 1 dia")
+    @Min(value = 1,   message = "Periodicidade deve ser no mínimo 1 dia")
     @Max(value = 365, message = "Periodicidade não pode exceder 365 dias")
     @Column(name = "periodicidade", nullable = false)
     private Integer periodicidade;
@@ -128,12 +133,15 @@ public class Processo {
     @Builder.Default
     private Long version = 0L;
 
-    // Historico de comparecimentos vinculado ao processo
     @OneToMany(mappedBy = "processo", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @OrderBy("dataComparecimento DESC")
     @Builder.Default
     @JsonIgnore
     private List<HistoricoComparecimento> historicoComparecimentos = new ArrayList<>();
+
+    // =====================================================================
+    // Lifecycle hooks
+    // =====================================================================
 
     @PrePersist
     public void prePersist() {
@@ -151,6 +159,10 @@ public class Processo {
         if (!situacaoProcesso.isAtivo()) proximoComparecimento = null;
     }
 
+    // =====================================================================
+    // Domain logic
+    // =====================================================================
+
     public void calcularProximoComparecimento() {
         if (ultimoComparecimento != null && periodicidade != null && situacaoProcesso.isAtivo()) {
             proximoComparecimento = ultimoComparecimento.plusDays(periodicidade);
@@ -158,7 +170,8 @@ public class Processo {
     }
 
     public void atualizarStatusBaseadoEmData() {
-        if (situacaoProcesso.isAtivo() && proximoComparecimento != null && proximoComparecimento.isBefore(LocalDate.now())) {
+        if (situacaoProcesso.isAtivo() && proximoComparecimento != null
+                && proximoComparecimento.isBefore(LocalDate.now())) {
             status = StatusComparecimento.INADIMPLENTE;
         } else if (situacaoProcesso.isAtivo()) {
             status = StatusComparecimento.EM_CONFORMIDADE;
@@ -168,29 +181,30 @@ public class Processo {
     public long getDiasAtraso() {
         if (proximoComparecimento == null || !situacaoProcesso.isAtivo()) return 0;
         LocalDate hoje = LocalDate.now();
-        return hoje.isAfter(proximoComparecimento) ? ChronoUnit.DAYS.between(proximoComparecimento, hoje) : 0;
+        return hoje.isAfter(proximoComparecimento)
+                ? ChronoUnit.DAYS.between(proximoComparecimento, hoje) : 0;
     }
 
     public boolean isInadimplente() {
-        return situacaoProcesso.isAtivo() && (status == StatusComparecimento.INADIMPLENTE ||
-                (proximoComparecimento != null && proximoComparecimento.isBefore(LocalDate.now())));
+        return situacaoProcesso.isAtivo() && (status == StatusComparecimento.INADIMPLENTE
+                || (proximoComparecimento != null && proximoComparecimento.isBefore(LocalDate.now())));
     }
 
     public boolean isComparecimentoHoje() {
-        return situacaoProcesso.isAtivo() && proximoComparecimento != null &&
-                proximoComparecimento.equals(LocalDate.now());
+        return situacaoProcesso.isAtivo() && proximoComparecimento != null
+                && proximoComparecimento.equals(LocalDate.now());
     }
 
     public String getPeriodicidadeDescricao() {
         if (periodicidade == null) return "Não definida";
         return switch (periodicidade) {
-            case 7 -> "Semanal";
-            case 15 -> "Quinzenal";
-            case 30 -> "Mensal";
-            case 60 -> "Bimensal";
-            case 90 -> "Trimestral";
+            case 7   -> "Semanal";
+            case 15  -> "Quinzenal";
+            case 30  -> "Mensal";
+            case 60  -> "Bimensal";
+            case 90  -> "Trimestral";
             case 180 -> "Semestral";
-            default -> periodicidade + " dias";
+            default  -> periodicidade + " dias";
         };
     }
 
@@ -198,8 +212,7 @@ public class Processo {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        Processo processo = (Processo) o;
-        return Objects.equals(id, processo.id);
+        return Objects.equals(id, ((Processo) o).id);
     }
 
     @Override

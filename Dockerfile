@@ -1,10 +1,3 @@
-# =============================================================
-# ACLP Backend - Dockerfile para Render.com
-# =============================================================
-# Java 17 (conforme pom.xml)
-# Build multi-stage para otimizar tamanho da imagem
-# =============================================================
-
 # ---- Stage 1: Build com Maven ----
 FROM maven:3.9-eclipse-temurin-17-alpine AS build
 
@@ -41,6 +34,6 @@ USER aclp
 EXPOSE ${PORT:-8080}
 
 # Otimizações de memória para Render free tier (512MB RAM)
-ENV JAVA_OPTS="-Xmx400m -Xms200m -XX:+UseSerialGC -XX:MaxMetaspaceSize=100m -Djava.security.egd=file:/dev/./urandom"
+ENV JAVA_OPTS="-Xmx256m -Xms128m -XX:+UseSerialGC -XX:MaxMetaspaceSize=192m -Djava.security.egd=file:/dev/./urandom"
 
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

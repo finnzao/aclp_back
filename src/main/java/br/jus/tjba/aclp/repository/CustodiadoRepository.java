@@ -11,11 +11,19 @@ import org.springframework.stereotype.Repository;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Repository
 public interface CustodiadoRepository extends JpaRepository<Custodiado, Long> {
 
-    // ==================== QUERIES COM JOIN FETCH (SEM N+1) ====================
+    Optional<Custodiado> findByPublicId(UUID publicId);
+
+    @Query("SELECT DISTINCT c FROM Custodiado c " +
+            "LEFT JOIN FETCH c.historicoEnderecos he " +
+            "WHERE c.publicId = :publicId AND (he.ativo = true OR he IS NULL)")
+    Optional<Custodiado> findByPublicIdWithEnderecoAtivo(@Param("publicId") UUID publicId);
+
+    boolean existsByPublicId(UUID publicId);
 
     @Query("SELECT DISTINCT c FROM Custodiado c " +
             "LEFT JOIN FETCH c.historicoEnderecos he " +
@@ -75,8 +83,6 @@ public interface CustodiadoRepository extends JpaRepository<Custodiado, Long> {
             "WHERE c.vara = :vara AND c.situacao = 'ATIVO' AND (he.ativo = true OR he IS NULL)")
     List<Custodiado> findByVaraWithEnderecos(@Param("vara") String vara);
 
-    // ==================== QUERIES DADOS PESSOAIS (SEM JOIN) ====================
-
     @Query("SELECT c FROM Custodiado c WHERE c.cpf = :cpf AND c.situacao = 'ATIVO'")
     Optional<Custodiado> findByCpfAndSituacaoAtivo(@Param("cpf") String cpf);
 
@@ -104,12 +110,9 @@ public interface CustodiadoRepository extends JpaRepository<Custodiado, Long> {
     @Query("SELECT COUNT(c) > 0 FROM Custodiado c WHERE c.rg = :rg AND c.situacao = 'ATIVO' AND c.id != :id")
     boolean existsByRgAndSituacaoAtivoAndIdNot(@Param("rg") String rg, @Param("id") Long id);
 
-    // NOVA: Busca textual otimizada por nome ou CPF
     @Query("SELECT DISTINCT c FROM Custodiado c WHERE c.situacao = 'ATIVO' " +
             "AND (LOWER(c.nome) LIKE LOWER(CONCAT('%',:termo,'%')) OR c.cpf LIKE CONCAT('%',:termo,'%'))")
     List<Custodiado> buscarPorNomeOuCpf(@Param("termo") String termo);
-
-    // ==================== QUERIES TEMPORÁRIAS (mantidas durante transição) ====================
 
     @Query("SELECT c FROM Custodiado c WHERE c.processo = :processo AND c.situacao = 'ATIVO'")
     List<Custodiado> findByProcesso(@Param("processo") String processo);
@@ -164,7 +167,8 @@ public interface CustodiadoRepository extends JpaRepository<Custodiado, Long> {
     List<Custodiado> findReactivatable();
 
     @Query("SELECT c FROM Custodiado c WHERE c.situacao = :situacao AND c.status = :status")
-    List<Custodiado> findBySituacaoAndStatus(@Param("situacao") SituacaoCustodiado situacao, @Param("status") StatusComparecimento status);
+    List<Custodiado> findBySituacaoAndStatus(@Param("situacao") SituacaoCustodiado situacao,
+                                              @Param("status") StatusComparecimento status);
 
     @Query("SELECT COUNT(c) FROM Custodiado c")
     long countAllIncludingArchived();

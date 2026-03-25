@@ -56,9 +56,22 @@ public interface HistoricoComparecimentoRepository extends JpaRepository<Histori
             "CAST(h.tipoValidacao AS string) = :tipoValidacao")
     long countByTipoValidacao(@Param("tipoValidacao") String tipoValidacao);
 
+    @Query("SELECT COUNT(h) FROM HistoricoComparecimento h WHERE " +
+            "CAST(h.tipoValidacao AS string) = :tipoValidacao " +
+            "AND h.dataComparecimento BETWEEN :inicio AND :fim")
+    long countByTipoValidacaoAndPeriodo(
+            @Param("tipoValidacao") String tipoValidacao,
+            @Param("inicio") LocalDate inicio,
+            @Param("fim") LocalDate fim);
+
     @Query("SELECT COUNT(h) FROM HistoricoComparecimento h WHERE h.mudancaEndereco = true")
     long countComMudancaEndereco();
 
+    @Query("SELECT COUNT(h) FROM HistoricoComparecimento h WHERE " +
+            "h.mudancaEndereco = true AND h.dataComparecimento BETWEEN :inicio AND :fim")
+    long countMudancasEnderecoBetween(
+            @Param("inicio") LocalDate inicio,
+            @Param("fim") LocalDate fim);
 
     @Query("SELECT COUNT(h) FROM HistoricoComparecimento h WHERE h.dataComparecimento = :data")
     long countByDataComparecimento(@Param("data") LocalDate data);
@@ -68,4 +81,10 @@ public interface HistoricoComparecimentoRepository extends JpaRepository<Histori
 
     @Query("SELECT COUNT(DISTINCT h.custodiado.id) FROM HistoricoComparecimento h")
     long countCustodiadosDistintos();
+
+    @Query("SELECT COUNT(DISTINCT h.custodiado.id) FROM HistoricoComparecimento h " +
+            "WHERE h.dataComparecimento BETWEEN :inicio AND :fim")
+    long countCustodiadosDistintosBetween(
+            @Param("inicio") LocalDate inicio,
+            @Param("fim") LocalDate fim);
 }
