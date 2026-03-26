@@ -39,6 +39,8 @@ public class ComparecimentoService {
     private final HistoricoEnderecoRepository historicoEnderecoRepository;
     private final ProcessoRepository processoRepository;
 
+    // REGISTRAR COMPARECIMENTO
+
     @Transactional
     public HistoricoComparecimentoResponseDTO registrarComparecimento(ComparecimentoDTO dto) {
         limparEFormatarDadosDTO(dto);
@@ -48,14 +50,19 @@ public class ComparecimentoService {
         Custodiado custodiado;
 
         if (dto.getProcessoId() != null) {
+            // Busca por processoId — caminho preferencial
             processo = processoRepository.findByIdComCustodiado(dto.getProcessoId())
                     .orElseThrow(() -> new EntityNotFoundException(
                             "Processo não encontrado com ID: " + dto.getProcessoId()));
             custodiado = processo.getCustodiado();
+
         } else if (dto.getCustodiadoId() != null) {
+            // Busca por custodiadoId (Long numérico) — compatibilidade legada
             custodiado = custodiadoRepository.findById(dto.getCustodiadoId())
                     .orElseThrow(() -> new EntityNotFoundException(
                             "Custodiado não encontrado com ID: " + dto.getCustodiadoId()));
+
+            // Tentar encontrar processo ativo vinculado
             List<Processo> processosAtivos = processoRepository.findProcessosAtivosByCustodiado(custodiado.getId());
             if (!processosAtivos.isEmpty()) {
                 processo = processosAtivos.get(0);
@@ -64,6 +71,7 @@ public class ComparecimentoService {
             throw new IllegalArgumentException("processoId ou custodiadoId é obrigatório");
         }
 
+        // Criar histórico de comparecimento
         HistoricoComparecimento historico = HistoricoComparecimento.builder()
                 .processo(processo)
                 .custodiado(custodiado)
@@ -79,11 +87,13 @@ public class ComparecimentoService {
 
         HistoricoComparecimento historicoSalvo = historicoComparecimentoRepository.save(historico);
 
+        // Processar mudança de endereço se houver
         if (dto.houveMudancaEndereco()) {
             processarMudancaEndereco(dto, custodiado, historicoSalvo);
             historicoSalvo = historicoComparecimentoRepository.save(historicoSalvo);
         }
 
+        // Atualizar datas de comparecimento (exceto cadastro inicial)
         if (dto.getTipoValidacao() != TipoValidacao.CADASTRO_INICIAL) {
             if (processo != null) {
                 processo.setUltimoComparecimento(dto.getDataComparecimento());
@@ -100,10 +110,18 @@ public class ComparecimentoService {
         return toResponseDTO(historicoSalvo);
     }
 
+    // BUSCAR HISTÓRICO POR CUSTODIADO
+
     @Transactional(readOnly = true)
     public List<HistoricoComparecimentoResponseDTO> buscarHistoricoPorCustodiado(Long custodiadoId) {
         if (custodiadoId == null || custodiadoId <= 0)
             throw new IllegalArgumentException("ID do custodiado deve ser um número positivo");
+
+        // Verificar se custodiado existe
+        if (!custodiadoRepository.existsById(custodiadoId)) {
+            throw new EntityNotFoundException("Custodiado não encontrado com ID: " + custodiadoId);
+        }
+
         return historicoComparecimentoRepository
                 .findByCustodiado_IdOrderByDataComparecimentoDesc(custodiadoId)
                 .stream()
@@ -111,12 +129,15 @@ public class ComparecimentoService {
                 .collect(Collectors.toList());
     }
 
+    // BUSCAR POR PERÍODO
+
     @Transactional(readOnly = true)
     public List<HistoricoComparecimentoResponseDTO> buscarComparecimentosPorPeriodo(LocalDate inicio, LocalDate fim) {
         if (inicio == null || fim == null)
             throw new IllegalArgumentException("Data de início e fim são obrigatórias");
         if (inicio.isAfter(fim))
             throw new IllegalArgumentException("Data de início não pode ser posterior à data de fim");
+
         return historicoComparecimentoRepository
                 .findByDataComparecimentoBetween(inicio, fim)
                 .stream()
@@ -124,16 +145,21 @@ public class ComparecimentoService {
                 .collect(Collectors.toList());
     }
 
+    // BUSCAR COM MUDANÇA DE ENDEREÇO
+
     @Transactional(readOnly = true)
     public List<HistoricoComparecimentoResponseDTO> buscarComparecimentosComMudancaEndereco(Long custodiadoId) {
         if (custodiadoId == null || custodiadoId <= 0)
             throw new IllegalArgumentException("ID do custodiado deve ser um número positivo");
+
         return historicoComparecimentoRepository
                 .findByCustodiado_IdAndMudancaEnderecoTrue(custodiadoId)
                 .stream()
                 .map(this::toResponseDTO)
                 .collect(Collectors.toList());
     }
+
+    // BUSCAR COMPARECIMENTOS DE HOJE
 
     @Transactional(readOnly = true)
     public List<HistoricoComparecimentoResponseDTO> buscarComparecimentosHoje() {
@@ -144,6 +170,8 @@ public class ComparecimentoService {
                 .collect(Collectors.toList());
     }
 
+    // BUSCAR TODOS (PAGINADO)
+
     @Transactional(readOnly = true)
     public Page<HistoricoComparecimentoResponseDTO> buscarTodosComparecimentos(int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("dataComparecimento").descending());
@@ -151,6 +179,8 @@ public class ComparecimentoService {
                 .findAllByOrderByDataComparecimentoDesc(pageable)
                 .map(this::toResponseDTO);
     }
+
+    // BUSCAR COM FILTROS (PAGINADO)
 
     @Transactional(readOnly = true)
     public Page<HistoricoComparecimentoResponseDTO> buscarComparecimentosComFiltros(
@@ -161,6 +191,8 @@ public class ComparecimentoService {
                 .map(this::toResponseDTO);
     }
 
+    // ATUALIZAR OBSERVAÇÕES
+
     @Transactional
     public HistoricoComparecimentoResponseDTO atualizarObservacoes(Long historicoId, String observacoes) {
         HistoricoComparecimento historico = historicoComparecimentoRepository.findById(historicoId)
@@ -169,6 +201,8 @@ public class ComparecimentoService {
         historico.setObservacoes(observacoes != null ? observacoes.trim() : null);
         return toResponseDTO(historicoComparecimentoRepository.save(historico));
     }
+
+    // ESTATÍSTICAS DETALHADAS
 
     @Transactional(readOnly = true)
     public Map<String, Object> buscarEstatisticasDetalhadas() {
@@ -211,8 +245,15 @@ public class ComparecimentoService {
         return estatisticas;
     }
 
+    // ESTATÍSTICAS POR PERÍODO
+
     @Transactional(readOnly = true)
     public EstatisticasComparecimento buscarEstatisticas(LocalDate inicio, LocalDate fim) {
+        if (inicio == null || fim == null)
+            throw new IllegalArgumentException("Data de início e fim são obrigatórias");
+        if (inicio.isAfter(fim))
+            throw new IllegalArgumentException("Data de início não pode ser posterior à data de fim");
+
         List<HistoricoComparecimento> comparecimentos =
                 historicoComparecimentoRepository.findByDataComparecimentoBetween(inicio, fim);
         long total = comparecimentos.size();
@@ -234,6 +275,8 @@ public class ComparecimentoService {
                         .filter(h -> h.getTipoValidacao() == TipoValidacao.ONLINE).count() / total * 100 : 0.0)
                 .build();
     }
+
+    // ESTATÍSTICAS GERAIS
 
     @Transactional(readOnly = true)
     public EstatisticasGerais buscarEstatisticasGerais() {
@@ -262,6 +305,8 @@ public class ComparecimentoService {
                         custodiadosDistintos > 0 ? (double) total / custodiadosDistintos : 0.0)
                 .build();
     }
+
+    // RESUMO DO SISTEMA
 
     @Transactional(readOnly = true)
     public ResumoSistema buscarResumoSistema() {
@@ -304,6 +349,8 @@ public class ComparecimentoService {
                 .analiseAtrasos(calcularAnaliseAtrasos())
                 .build();
     }
+
+    // MIGRAR CADASTROS INICIAIS
 
     @Transactional
     public Map<String, Object> migrarCadastrosIniciais(String validadoPor) {
@@ -354,19 +401,75 @@ public class ComparecimentoService {
     }
 
     public HistoricoComparecimentoResponseDTO toResponseDTO(HistoricoComparecimento h) {
+        // Extrair custodiadoId de forma segura
+        Long custodiadoId = null;
+        try {
+            // Prioridade 1: via processo -> custodiado
+            if (h.getProcesso() != null && h.getProcesso().getCustodiado() != null) {
+                custodiadoId = h.getProcesso().getCustodiado().getId();
+            }
+        } catch (Exception e) {
+            log.debug("Não foi possível obter custodiadoId via processo para comparecimento ID: {}", h.getId());
+        }
+
+        // Prioridade 2: via custodiado direto (fallback)
+        if (custodiadoId == null) {
+            try {
+                if (h.getCustodiado() != null) {
+                    custodiadoId = h.getCustodiado().getId();
+                }
+            } catch (Exception e) {
+                log.warn("Não foi possível obter custodiadoId para comparecimento ID: {}", h.getId());
+            }
+        }
+
+        // Extrair custodiadoNome de forma segura
+        String custodiadoNome = null;
+        try {
+            // Prioridade 1: via processo -> custodiado
+            if (h.getProcesso() != null && h.getProcesso().getCustodiado() != null) {
+                custodiadoNome = h.getProcesso().getCustodiado().getNome();
+            }
+        } catch (Exception e) {
+            log.debug("Não foi possível obter custodiadoNome via processo para comparecimento ID: {}", h.getId());
+        }
+
+        // Prioridade 2: via custodiado direto (fallback)
+        if (custodiadoNome == null) {
+            try {
+                if (h.getCustodiado() != null) {
+                    custodiadoNome = h.getCustodiado().getNome();
+                }
+            } catch (Exception e) {
+                log.warn("Não foi possível obter custodiadoNome para comparecimento ID: {}", h.getId());
+            }
+        }
+
+        // Extrair tipoValidacao de forma segura
+        String tipoValidacaoStr = null;
+        try {
+            if (h.getTipoValidacao() != null) {
+                tipoValidacaoStr = h.getTipoValidacao().name();
+            }
+        } catch (Exception e) {
+            log.warn("Não foi possível obter tipoValidacao para comparecimento ID: {}", h.getId());
+        }
+
         return HistoricoComparecimentoResponseDTO.builder()
                 .id(h.getId())
-                .custodiadoId(h.getCustodiadoId())
-                .custodiadoNome(h.getCustodiadoNome())
+                .custodiadoId(custodiadoId)
+                .custodiadoNome(custodiadoNome)
                 .dataComparecimento(h.getDataComparecimento())
                 .horaComparecimento(h.getHoraComparecimento())
-                .tipoValidacao(h.getTipoValidacao().name())
+                .tipoValidacao(tipoValidacaoStr)
                 .validadoPor(h.getValidadoPor())
                 .observacoes(h.getObservacoes())
                 .mudancaEndereco(h.getMudancaEndereco())
                 .motivoMudancaEndereco(h.getMotivoMudancaEndereco())
                 .build();
     }
+
+    // MÉTODOS PRIVADOS — VALIDAÇÃO E FORMATAÇÃO
 
     private void limparEFormatarDadosDTO(ComparecimentoDTO dto) {
         if (dto.getValidadoPor() != null) dto.setValidadoPor(dto.getValidadoPor().trim());
@@ -415,8 +518,10 @@ public class ComparecimentoService {
 
     private void processarMudancaEndereco(ComparecimentoDTO dto, Custodiado custodiado,
                                            HistoricoComparecimento historico) {
+        // Desativar todos os endereços atuais
         historicoEnderecoRepository.desativarTodosEnderecosPorCustodiado(custodiado.getId());
 
+        // Criar novo endereço
         HistoricoEndereco novoHist = HistoricoEndereco.builder()
                 .custodiado(custodiado)
                 .cep(dto.getNovoEndereco().getCep())
@@ -434,6 +539,8 @@ public class ComparecimentoService {
                 .build();
 
         HistoricoEndereco salvo = historicoEnderecoRepository.save(novoHist);
+
+        // Garantir que apenas o novo endereço ficou ativo
         historicoEnderecoRepository.desativarOutrosEnderecosAtivos(custodiado.getId(), salvo.getId());
 
         if (historico.getEnderecosAlterados() == null)
@@ -441,6 +548,8 @@ public class ComparecimentoService {
         historico.getEnderecosAlterados().add(salvo);
         historico.setMudancaEndereco(Boolean.TRUE);
     }
+
+    // MÉTODOS PROTEGIDOS — CÁLCULOS PARA RESUMO DO SISTEMA
 
     @Transactional(readOnly = true)
     protected RelatorioUltimosMeses calcularRelatorioUltimosMeses(int meses) {
@@ -650,6 +759,8 @@ public class ComparecimentoService {
                 .dataAnalise(hoje)
                 .build();
     }
+
+    // CLASSES INTERNAS (DTOs de resposta)
 
     @lombok.Data @lombok.Builder
     public static class EstatisticasComparecimento {
