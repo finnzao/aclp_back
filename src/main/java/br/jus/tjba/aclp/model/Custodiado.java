@@ -52,10 +52,13 @@ public class Custodiado {
     @Column(name = "rg", length = 20)
     private String rg;
 
-    @NotBlank(message = "Contato é obrigatório")
-    @Pattern(regexp = "\\(?\\d{2}\\)?\\s?\\d{4,5}-?\\d{4}", message = "Contato deve ter formato válido")
+    /**
+     * Contato/Telefone — OPCIONAL.
+     * Default "Pendente" quando não informado.
+     */
     @Column(name = "contato", nullable = false, length = 20)
-    private String contato;
+    @Builder.Default
+    private String contato = "Pendente";
 
     @NotNull
     @Enumerated(EnumType.STRING)
@@ -136,6 +139,7 @@ public class Custodiado {
         if (situacao == null) situacao = SituacaoCustodiado.ATIVO;
         if (publicId == null) publicId = UUID.randomUUID();
         if (status == null) status = br.jus.tjba.aclp.model.enums.StatusComparecimento.EM_CONFORMIDADE;
+        if (contato == null || contato.trim().isEmpty()) contato = "Pendente";
         if (ultimoComparecimento == null && dataComparecimentoInicial != null)
             ultimoComparecimento = dataComparecimentoInicial;
         if (proximoComparecimento == null && situacao.isAtivo() && periodicidade != null)
@@ -145,6 +149,7 @@ public class Custodiado {
     @PreUpdate
     public void preUpdate() {
         atualizadoEm = LocalDateTime.now();
+        if (contato == null || contato.trim().isEmpty()) contato = "Pendente";
         if (situacao.isArquivado()) proximoComparecimento = null;
     }
 
@@ -164,6 +169,14 @@ public class Custodiado {
 
     public void setNome(String nome) {
         this.nome = nome != null ? nome.trim() : null;
+    }
+
+    public void setContato(String contato) {
+        if (contato == null || contato.trim().isEmpty()) {
+            this.contato = "Pendente";
+        } else {
+            this.contato = contato.trim();
+        }
     }
 
     public void calcularProximoComparecimento() {
@@ -213,6 +226,10 @@ public class Custodiado {
 
     public boolean isAtivo() { return situacao != null && situacao.isAtivo(); }
     public boolean isArquivado() { return situacao != null && situacao.isArquivado(); }
+
+    public boolean isContatoPendente() {
+        return "Pendente".equalsIgnoreCase(contato);
+    }
 
     public void arquivar() {
         situacao = SituacaoCustodiado.ARQUIVADO;

@@ -1,11 +1,7 @@
 package br.jus.tjba.aclp.dto;
 
-import br.jus.tjba.aclp.model.enums.StatusComparecimento;
 import com.fasterxml.jackson.annotation.JsonFormat;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -13,17 +9,44 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 
+/**
+ * DTO unificado para cadastro inicial em uma única requisição.
+ * Cria: Custodiado + Endereço + Processo + Primeiro Comparecimento.
+ *
+ * Corresponde ao formulário do frontend com 6 seções:
+ *   1. Dados Pessoais (nome, contato)
+ *   2. Documentos (cpf e/ou rg)
+ *   3. Dados Processuais (processo, vara, comarca, datas)
+ *   4. Periodicidade
+ *   5. Endereço
+ *   6. Observações
+ *
+ * Regras:
+ * - Pelo menos CPF ou RG deve ser informado
+ * - Contato é opcional; se vazio, salva como "Pendente"
+ * - Processo é obrigatório e será criado na tabela processos
+ */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class CustodiadoDTO {
+public class CadastroInicialDTO {
 
-    private Long id;
+    // ======================== 1. DADOS PESSOAIS ========================
 
     @NotBlank(message = "Nome é obrigatório")
     @Size(min = 2, max = 150, message = "Nome deve ter entre 2 e 150 caracteres")
     private String nome;
+
+    /**
+     * Contato/Telefone — OPCIONAL.
+     * Se não informado, será salvo como "Pendente" no banco de dados.
+     */
+    @Pattern(regexp = "[\\d\\s().-]*",
+            message = "Contato deve conter apenas números e caracteres de formatação")
+    private String contato;
+
+    // ======================== 2. DOCUMENTOS ========================
 
     /**
      * CPF — opcional se RG for informado.
@@ -38,15 +61,9 @@ public class CustodiadoDTO {
     @Size(max = 20, message = "RG deve ter no máximo 20 caracteres")
     private String rg;
 
-    /**
-     * Contato/Telefone — OPCIONAL.
-     * Se não informado, será salvo como "Pendente" no banco de dados.
-     */
-    @Pattern(regexp = "[\\d\\s().-]*",
-            message = "Contato deve conter apenas números e caracteres de formatação")
-    private String contato;
+    // ======================== 3. DADOS PROCESSUAIS ========================
 
-    @NotBlank(message = "Processo é obrigatório")
+    @NotBlank(message = "Número do processo é obrigatório")
     @Pattern(regexp = "[\\d.-]+",
             message = "Processo deve conter apenas números, pontos e hífens")
     private String processo;
@@ -63,24 +80,17 @@ public class CustodiadoDTO {
     @NotNull(message = "Data da decisão é obrigatória")
     private LocalDate dataDecisao;
 
-    @NotNull(message = "Periodicidade é obrigatória")
-    private Integer periodicidade;
-
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate dataComparecimentoInicial;
 
-    private StatusComparecimento status;
+    // ======================== 4. PERIODICIDADE ========================
 
-    @JsonFormat(pattern = "yyyy-MM-dd")
-    private LocalDate ultimoComparecimento;
+    @NotNull(message = "Periodicidade é obrigatória")
+    @Min(value = 1, message = "Periodicidade mínima é 1 dia")
+    @Max(value = 365, message = "Periodicidade máxima é 365 dias")
+    private Integer periodicidade;
 
-    @JsonFormat(pattern = "yyyy-MM-dd")
-    private LocalDate proximoComparecimento;
-
-    @Size(max = 500, message = "Observações deve ter no máximo 500 caracteres")
-    private String observacoes;
-
-    // === CAMPOS DE ENDEREÇO ===
+    // ======================== 5. ENDEREÇO ========================
 
     @NotBlank(message = "CEP é obrigatório")
     @Pattern(regexp = "\\d{5}-?\\d{3}|\\d{8}", message = "CEP deve ter o formato 00000-000 ou apenas números")
@@ -109,17 +119,21 @@ public class CustodiadoDTO {
     @Pattern(regexp = "[A-Z]{2}", message = "Estado deve ser uma sigla válida com 2 letras maiúsculas")
     private String estado;
 
-    public boolean hasDocumento() {
-        return (cpf != null && !cpf.trim().isEmpty()) ||
-                (rg != null && !rg.trim().isEmpty());
-    }
+    // ======================== 6. OBSERVAÇÕES ========================
 
-    public boolean hasEnderecoCompleto() {
-        return cep != null && !cep.trim().isEmpty() &&
-                logradouro != null && !logradouro.trim().isEmpty() &&
-                bairro != null && !bairro.trim().isEmpty() &&
-                cidade != null && !cidade.trim().isEmpty() &&
-                estado != null && !estado.trim().isEmpty();
+    @Size(max = 500, message = "Observações deve ter no máximo 500 caracteres")
+    private String observacoes;
+
+    // ======================== VALIDAÇÕES ========================
+
+    /**
+     * Pelo menos CPF ou RG deve ser informado.
+     */
+    @AssertTrue(message = "Pelo menos CPF ou RG deve ser informado")
+    public boolean isDocumentoValido() {
+        boolean temCpf = cpf != null && !cpf.trim().isEmpty();
+        boolean temRg = rg != null && !rg.trim().isEmpty();
+        return temCpf || temRg;
     }
 
     /**
@@ -132,6 +146,9 @@ public class CustodiadoDTO {
         return contato.trim();
     }
 
+    /**
+     * Limpa e formata os dados antes do processamento.
+     */
     public void limparEFormatarDados() {
         if (nome != null) nome = nome.trim().toUpperCase();
         if (cpf != null) cpf = cpf.trim();

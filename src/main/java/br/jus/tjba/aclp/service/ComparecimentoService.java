@@ -24,7 +24,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
@@ -41,7 +40,7 @@ public class ComparecimentoService {
     private final ProcessoRepository processoRepository;
 
     @Transactional
-    public HistoricoComparecimento registrarComparecimento(ComparecimentoDTO dto) {
+    public HistoricoComparecimentoResponseDTO registrarComparecimento(ComparecimentoDTO dto) {
         limparEFormatarDadosDTO(dto);
         validarComparecimento(dto);
 
@@ -98,35 +97,51 @@ public class ComparecimentoService {
             custodiadoRepository.save(custodiado);
         }
 
-        return historicoSalvo;
+        return toResponseDTO(historicoSalvo);
     }
 
     @Transactional(readOnly = true)
-    public List<HistoricoComparecimento> buscarHistoricoPorCustodiado(Long custodiadoId) {
+    public List<HistoricoComparecimentoResponseDTO> buscarHistoricoPorCustodiado(Long custodiadoId) {
         if (custodiadoId == null || custodiadoId <= 0)
             throw new IllegalArgumentException("ID do custodiado deve ser um número positivo");
-        return historicoComparecimentoRepository.findByCustodiado_IdOrderByDataComparecimentoDesc(custodiadoId);
+        return historicoComparecimentoRepository
+                .findByCustodiado_IdOrderByDataComparecimentoDesc(custodiadoId)
+                .stream()
+                .map(this::toResponseDTO)
+                .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
-    public List<HistoricoComparecimento> buscarComparecimentosPorPeriodo(LocalDate inicio, LocalDate fim) {
+    public List<HistoricoComparecimentoResponseDTO> buscarComparecimentosPorPeriodo(LocalDate inicio, LocalDate fim) {
         if (inicio == null || fim == null)
             throw new IllegalArgumentException("Data de início e fim são obrigatórias");
         if (inicio.isAfter(fim))
             throw new IllegalArgumentException("Data de início não pode ser posterior à data de fim");
-        return historicoComparecimentoRepository.findByDataComparecimentoBetween(inicio, fim);
+        return historicoComparecimentoRepository
+                .findByDataComparecimentoBetween(inicio, fim)
+                .stream()
+                .map(this::toResponseDTO)
+                .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
-    public List<HistoricoComparecimento> buscarComparecimentosComMudancaEndereco(Long custodiadoId) {
+    public List<HistoricoComparecimentoResponseDTO> buscarComparecimentosComMudancaEndereco(Long custodiadoId) {
         if (custodiadoId == null || custodiadoId <= 0)
             throw new IllegalArgumentException("ID do custodiado deve ser um número positivo");
-        return historicoComparecimentoRepository.findByCustodiado_IdAndMudancaEnderecoTrue(custodiadoId);
+        return historicoComparecimentoRepository
+                .findByCustodiado_IdAndMudancaEnderecoTrue(custodiadoId)
+                .stream()
+                .map(this::toResponseDTO)
+                .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
-    public List<HistoricoComparecimento> buscarComparecimentosHoje() {
-        return historicoComparecimentoRepository.findByDataComparecimento(LocalDate.now());
+    public List<HistoricoComparecimentoResponseDTO> buscarComparecimentosHoje() {
+        return historicoComparecimentoRepository
+                .findByDataComparecimento(LocalDate.now())
+                .stream()
+                .map(this::toResponseDTO)
+                .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
@@ -147,12 +162,12 @@ public class ComparecimentoService {
     }
 
     @Transactional
-    public HistoricoComparecimento atualizarObservacoes(Long historicoId, String observacoes) {
+    public HistoricoComparecimentoResponseDTO atualizarObservacoes(Long historicoId, String observacoes) {
         HistoricoComparecimento historico = historicoComparecimentoRepository.findById(historicoId)
                 .orElseThrow(() -> new EntityNotFoundException(
                         "Histórico não encontrado com ID: " + historicoId));
         historico.setObservacoes(observacoes != null ? observacoes.trim() : null);
-        return historicoComparecimentoRepository.save(historico);
+        return toResponseDTO(historicoComparecimentoRepository.save(historico));
     }
 
     @Transactional(readOnly = true)
@@ -338,7 +353,7 @@ public class ComparecimentoService {
                 "detalhesErros", erros);
     }
 
-    private HistoricoComparecimentoResponseDTO toResponseDTO(HistoricoComparecimento h) {
+    public HistoricoComparecimentoResponseDTO toResponseDTO(HistoricoComparecimento h) {
         return HistoricoComparecimentoResponseDTO.builder()
                 .id(h.getId())
                 .custodiadoId(h.getCustodiadoId())

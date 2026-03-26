@@ -2,7 +2,6 @@ package br.jus.tjba.aclp.controller;
 
 import br.jus.tjba.aclp.dto.ComparecimentoDTO;
 import br.jus.tjba.aclp.dto.HistoricoComparecimentoResponseDTO;
-import br.jus.tjba.aclp.model.HistoricoComparecimento;
 import br.jus.tjba.aclp.service.ComparecimentoService;
 import br.jus.tjba.aclp.service.StatusSchedulerService;
 import br.jus.tjba.aclp.util.ApiResponseUtil;
@@ -34,7 +33,7 @@ public class ComparecimentoController {
     private final ComparecimentoService comparecimentoService;
     private final StatusSchedulerService statusSchedulerService;
 
-    @PostMapping("/registrar")  // ← MUDANÇA APLICADA AQUI
+    @PostMapping("/registrar")
     @Operation(summary = "Registrar comparecimento",
             description = "Registra um novo comparecimento (presencial ou online) com possível mudança de endereço")
     @ApiResponses(value = {
@@ -49,7 +48,7 @@ public class ComparecimentoController {
                 dto.getCustodiadoId(), dto.getTipoValidacao(), dto.houveMudancaEndereco());
 
         try {
-            HistoricoComparecimento historico = comparecimentoService.registrarComparecimento(dto);
+            HistoricoComparecimentoResponseDTO historico = comparecimentoService.registrarComparecimento(dto);
             log.info("Comparecimento registrado com sucesso - ID: {}", historico.getId());
             return ApiResponseUtil.created(historico, "Comparecimento registrado com sucesso");
         } catch (Exception e) {
@@ -71,7 +70,8 @@ public class ComparecimentoController {
         log.info("Buscando histórico de comparecimentos - Custodiado ID: {}", custodiadoId);
 
         try {
-            List<HistoricoComparecimento> historico = comparecimentoService.buscarHistoricoPorCustodiado(custodiadoId);
+            List<HistoricoComparecimentoResponseDTO> historico =
+                    comparecimentoService.buscarHistoricoPorCustodiado(custodiadoId);
             return ApiResponseUtil.success(historico, "Histórico de comparecimentos encontrado");
         } catch (IllegalArgumentException e) {
             return ApiResponseUtil.badRequest(e.getMessage());
@@ -93,7 +93,7 @@ public class ComparecimentoController {
         log.info("Buscando comparecimentos por período: {} a {}", inicio, fim);
 
         try {
-            List<HistoricoComparecimento> comparecimentos =
+            List<HistoricoComparecimentoResponseDTO> comparecimentos =
                     comparecimentoService.buscarComparecimentosPorPeriodo(inicio, fim);
             return ApiResponseUtil.success(comparecimentos, "Comparecimentos encontrados para o período");
         } catch (IllegalArgumentException e) {
@@ -108,7 +108,8 @@ public class ComparecimentoController {
     public ResponseEntity<Map<String, Object>> buscarComparecimentosHoje() {
         log.info("Buscando comparecimentos de hoje");
 
-        List<HistoricoComparecimento> comparecimentos = comparecimentoService.buscarComparecimentosHoje();
+        List<HistoricoComparecimentoResponseDTO> comparecimentos =
+                comparecimentoService.buscarComparecimentosHoje();
         return ApiResponseUtil.success(comparecimentos, "Comparecimentos de hoje encontrados");
     }
 
@@ -116,10 +117,8 @@ public class ComparecimentoController {
     @Operation(summary = "Listar todos os comparecimentos",
             description = "Retorna todos os comparecimentos registrados no sistema com paginação")
     @ApiResponses(value = {
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
-                    description = "Lista de comparecimentos retornada com sucesso"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500",
-                    description = "Erro interno do servidor")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lista de comparecimentos retornada com sucesso"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "Erro interno do servidor")
     })
     public ResponseEntity<Map<String, Object>> listarTodosComparecimentos(
             @Parameter(description = "Número da página (inicia em 0)")
@@ -149,7 +148,6 @@ public class ComparecimentoController {
         }
     }
 
-    // NOVO ENDPOINT
     @GetMapping("/filtrar")
     public ResponseEntity<Map<String, Object>> filtrarComparecimentos(
             @Parameter(description = "Data inicial (formato: YYYY-MM-DD)")
@@ -197,7 +195,7 @@ public class ComparecimentoController {
         log.info("Buscando comparecimentos com mudança de endereço - Custodiado ID: {}", custodiadoId);
 
         try {
-            List<HistoricoComparecimento> comparecimentos =
+            List<HistoricoComparecimentoResponseDTO> comparecimentos =
                     comparecimentoService.buscarComparecimentosComMudancaEndereco(custodiadoId);
             return ApiResponseUtil.success(comparecimentos, "Comparecimentos com mudança de endereço encontrados");
         } catch (IllegalArgumentException e) {
@@ -219,7 +217,8 @@ public class ComparecimentoController {
         log.info("Atualizando observações do comparecimento ID: {}", historicoId);
 
         try {
-            HistoricoComparecimento historico = comparecimentoService.atualizarObservacoes(historicoId, observacoes);
+            HistoricoComparecimentoResponseDTO historico =
+                    comparecimentoService.atualizarObservacoes(historicoId, observacoes);
             return ApiResponseUtil.success(historico, "Observações atualizadas com sucesso");
         } catch (Exception e) {
             return ApiResponseUtil.badRequest(e.getMessage());
@@ -291,13 +290,10 @@ public class ComparecimentoController {
         }
     }
 
-
-
     @GetMapping("/estatisticas/detalhadas")
     @Operation(summary = "Estatísticas detalhadas",
             description = "Retorna estatísticas completas sobre comparecimentos")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
-            description = "Estatísticas retornadas com sucesso")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Estatísticas retornadas com sucesso")
     public ResponseEntity<Map<String, Object>> buscarEstatisticasDetalhadas() {
         log.info("Buscando estatísticas detalhadas de comparecimentos");
 

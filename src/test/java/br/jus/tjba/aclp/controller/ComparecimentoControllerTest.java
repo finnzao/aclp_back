@@ -1,15 +1,12 @@
 package br.jus.tjba.aclp.controller;
 
 import br.jus.tjba.aclp.dto.ComparecimentoDTO;
-import br.jus.tjba.aclp.model.Custodiado;
-import br.jus.tjba.aclp.model.HistoricoComparecimento;
+import br.jus.tjba.aclp.dto.HistoricoComparecimentoResponseDTO;
 import br.jus.tjba.aclp.model.enums.TipoValidacao;
 import br.jus.tjba.aclp.service.ComparecimentoService;
 import br.jus.tjba.aclp.service.StatusSchedulerService;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -46,33 +43,23 @@ class ComparecimentoControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    private HistoricoComparecimento historico;
+    private HistoricoComparecimentoResponseDTO historicoDTO;
     private ComparecimentoDTO comparecimentoDTO;
-    private Custodiado custodiado;
 
     @BeforeEach
     void setUp() {
-        // Preparar custodiado
-        custodiado = Custodiado.builder()
+        historicoDTO = HistoricoComparecimentoResponseDTO.builder()
                 .id(1L)
-                .nome("João da Silva")
-                .cpf("123.456.789-00")
-                .processo("0000001-00.2024.8.05.0001")
-                .build();
-
-        // Preparar histórico de comparecimento
-        historico = HistoricoComparecimento.builder()
-                .id(1L)
-                .custodiado(custodiado)
+                .custodiadoId(1L)
+                .custodiadoNome("João da Silva")
                 .dataComparecimento(LocalDate.of(2024, 9, 5))
                 .horaComparecimento(LocalTime.of(14, 30))
-                .tipoValidacao(TipoValidacao.PRESENCIAL)
+                .tipoValidacao("PRESENCIAL")
                 .validadoPor("João Silva - Servidor TJBA")
                 .observacoes("Comparecimento regular")
-                .mudancaEndereco(false)
+                .mudancaEndereco(Boolean.FALSE)
                 .build();
 
-        // Preparar DTO
         comparecimentoDTO = ComparecimentoDTO.builder()
                 .custodiadoId(1L)
                 .dataComparecimento(LocalDate.of(2024, 9, 5))
@@ -84,15 +71,13 @@ class ComparecimentoControllerTest {
                 .build();
     }
 
-    // ========== TESTES DE REGISTRO DE COMPARECIMENTO ==========
-
     @Test
     @DisplayName("Deve registrar comparecimento com sucesso")
     void testRegistrarComparecimento() throws Exception {
         when(comparecimentoService.registrarComparecimento(any(ComparecimentoDTO.class)))
-                .thenReturn(historico);
+                .thenReturn(historicoDTO);
 
-        mockMvc.perform(post("/api/comparecimentos")
+        mockMvc.perform(post("/api/comparecimentos/registrar")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(comparecimentoDTO)))
                 .andExpect(status().isCreated())
@@ -118,13 +103,21 @@ class ComparecimentoControllerTest {
         comparecimentoDTO.setMotivoMudancaEndereco("Mudança por questões familiares");
         comparecimentoDTO.setNovoEndereco(novoEndereco);
 
-        historico.setMudancaEndereco(true);
-        historico.setMotivoMudancaEndereco("Mudança por questões familiares");
+        HistoricoComparecimentoResponseDTO dtoCom = HistoricoComparecimentoResponseDTO.builder()
+                .id(1L)
+                .custodiadoId(1L)
+                .custodiadoNome("João da Silva")
+                .dataComparecimento(LocalDate.of(2024, 9, 5))
+                .tipoValidacao("PRESENCIAL")
+                .validadoPor("João Silva - Servidor TJBA")
+                .mudancaEndereco(Boolean.TRUE)
+                .motivoMudancaEndereco("Mudança por questões familiares")
+                .build();
 
         when(comparecimentoService.registrarComparecimento(any(ComparecimentoDTO.class)))
-                .thenReturn(historico);
+                .thenReturn(dtoCom);
 
-        mockMvc.perform(post("/api/comparecimentos")
+        mockMvc.perform(post("/api/comparecimentos/registrar")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(comparecimentoDTO)))
                 .andExpect(status().isCreated())
@@ -136,20 +129,17 @@ class ComparecimentoControllerTest {
     @DisplayName("Deve retornar erro ao registrar comparecimento com dados inválidos")
     void testRegistrarComparecimentoInvalido() throws Exception {
         ComparecimentoDTO invalidDTO = new ComparecimentoDTO();
-        // DTO sem campos obrigatórios
 
-        mockMvc.perform(post("/api/comparecimentos")
+        mockMvc.perform(post("/api/comparecimentos/registrar")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidDTO)))
                 .andExpect(status().isBadRequest());
     }
 
-    // ========== TESTES DE BUSCA DE HISTÓRICO ==========
-
     @Test
     @DisplayName("Deve buscar histórico por custodiado")
     void testBuscarHistoricoPorCustodiado() throws Exception {
-        List<HistoricoComparecimento> historicos = Arrays.asList(historico);
+        List<HistoricoComparecimentoResponseDTO> historicos = Arrays.asList(historicoDTO);
         when(comparecimentoService.buscarHistoricoPorCustodiado(1L)).thenReturn(historicos);
 
         mockMvc.perform(get("/api/comparecimentos/custodiado/1"))
@@ -172,12 +162,10 @@ class ComparecimentoControllerTest {
                 .andExpect(jsonPath("$.message", containsString("número positivo")));
     }
 
-    // ========== TESTES DE BUSCA POR PERÍODO ==========
-
     @Test
     @DisplayName("Deve buscar comparecimentos por período")
     void testBuscarComparecimentosPorPeriodo() throws Exception {
-        List<HistoricoComparecimento> historicos = Arrays.asList(historico);
+        List<HistoricoComparecimentoResponseDTO> historicos = Arrays.asList(historicoDTO);
         LocalDate inicio = LocalDate.of(2024, 9, 1);
         LocalDate fim = LocalDate.of(2024, 9, 30);
 
@@ -195,7 +183,7 @@ class ComparecimentoControllerTest {
     @Test
     @DisplayName("Deve buscar comparecimentos de hoje")
     void testBuscarComparecimentosHoje() throws Exception {
-        List<HistoricoComparecimento> historicos = Arrays.asList(historico);
+        List<HistoricoComparecimentoResponseDTO> historicos = Arrays.asList(historicoDTO);
         when(comparecimentoService.buscarComparecimentosHoje()).thenReturn(historicos);
 
         mockMvc.perform(get("/api/comparecimentos/hoje"))
@@ -205,13 +193,20 @@ class ComparecimentoControllerTest {
                 .andExpect(jsonPath("$.data", hasSize(1)));
     }
 
-    // ========== TESTES DE MUDANÇA DE ENDEREÇO ==========
-
     @Test
     @DisplayName("Deve buscar comparecimentos com mudança de endereço")
     void testBuscarComparecimentosComMudancaEndereco() throws Exception {
-        historico.setMudancaEndereco(true);
-        List<HistoricoComparecimento> historicos = Arrays.asList(historico);
+        HistoricoComparecimentoResponseDTO dtoMudanca = HistoricoComparecimentoResponseDTO.builder()
+                .id(1L)
+                .custodiadoId(1L)
+                .custodiadoNome("João da Silva")
+                .dataComparecimento(LocalDate.of(2024, 9, 5))
+                .tipoValidacao("PRESENCIAL")
+                .validadoPor("João Silva - Servidor TJBA")
+                .mudancaEndereco(Boolean.TRUE)
+                .build();
+
+        List<HistoricoComparecimentoResponseDTO> historicos = Arrays.asList(dtoMudanca);
 
         when(comparecimentoService.buscarComparecimentosComMudancaEndereco(1L))
                 .thenReturn(historicos);
@@ -223,16 +218,24 @@ class ComparecimentoControllerTest {
                 .andExpect(jsonPath("$.data[0].mudancaEndereco", is(true)));
     }
 
-    // ========== TESTES DE ATUALIZAÇÃO ==========
-
     @Test
     @DisplayName("Deve atualizar observações do comparecimento")
     void testAtualizarObservacoes() throws Exception {
         String novasObservacoes = "Observações atualizadas";
-        historico.setObservacoes(novasObservacoes);
+
+        HistoricoComparecimentoResponseDTO dtoAtualizado = HistoricoComparecimentoResponseDTO.builder()
+                .id(1L)
+                .custodiadoId(1L)
+                .custodiadoNome("João da Silva")
+                .dataComparecimento(LocalDate.of(2024, 9, 5))
+                .tipoValidacao("PRESENCIAL")
+                .validadoPor("João Silva - Servidor TJBA")
+                .observacoes(novasObservacoes)
+                .mudancaEndereco(Boolean.FALSE)
+                .build();
 
         when(comparecimentoService.atualizarObservacoes(1L, novasObservacoes))
-                .thenReturn(historico);
+                .thenReturn(dtoAtualizado);
 
         mockMvc.perform(put("/api/comparecimentos/1/observacoes")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -242,8 +245,6 @@ class ComparecimentoControllerTest {
                 .andExpect(jsonPath("$.message", is("Observações atualizadas com sucesso")))
                 .andExpect(jsonPath("$.data.observacoes", is(novasObservacoes)));
     }
-
-    // ========== TESTES DE VERIFICAÇÃO DE INADIMPLENTES ==========
 
     @Test
     @DisplayName("Deve verificar inadimplentes")
@@ -268,8 +269,6 @@ class ComparecimentoControllerTest {
                 .andExpect(jsonPath("$.message", containsString("Nenhum custodiado")))
                 .andExpect(jsonPath("$.data.custodiadosMarcados", is(0)));
     }
-
-    // ========== TESTES DE ESTATÍSTICAS ==========
 
     @Test
     @DisplayName("Deve buscar estatísticas por período")
@@ -341,8 +340,6 @@ class ComparecimentoControllerTest {
                 .andExpect(jsonPath("$.data.totalCustodiados", is(100)));
     }
 
-    // ========== TESTES DE MIGRAÇÃO ==========
-
     @Test
     @DisplayName("Deve migrar cadastros iniciais")
     void testMigrarCadastrosIniciais() throws Exception {
@@ -360,8 +357,6 @@ class ComparecimentoControllerTest {
                 .andExpect(jsonPath("$.success", is(true)))
                 .andExpect(jsonPath("$.data.custodiadosMigrados", is(8)));
     }
-
-    // ========== TESTE DE OPTIONS (CORS) ==========
 
     @Test
     @DisplayName("Deve responder ao OPTIONS request")

@@ -17,6 +17,7 @@ import java.time.LocalDate;
 public class CustodiadoListDTO {
 
     private String id;
+    private Long numericId;
     private String nome;
     private String cpf;
     private String rg;
@@ -50,6 +51,7 @@ public class CustodiadoListDTO {
 
         return CustodiadoListDTO.builder()
                 .id(custodiado.getPublicId() != null ? custodiado.getPublicId().toString() : null)
+                .numericId(custodiado.getId())
                 .nome(custodiado.getNome())
                 .cpf(custodiado.getCpf())
                 .rg(custodiado.getRg())
