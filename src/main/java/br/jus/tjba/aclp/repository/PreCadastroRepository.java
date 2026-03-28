@@ -50,6 +50,8 @@ public interface PreCadastroRepository extends JpaRepository<PreCadastro, Long> 
     /**
      * Remove pré-cadastros expirados (job de limpeza)
      */
+    @Modifying
+    @Transactional
     @Query("DELETE FROM PreCadastro p WHERE p.verificado = false AND p.expiraEm < :dataAtual")
     void deleteExpirados(@Param("dataAtual") LocalDateTime dataAtual);
 }
