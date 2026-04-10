@@ -3,19 +3,22 @@ package br.jus.tjba.aclp.scheduler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.Duration;
+
 /**
  * Self-Ping Scheduler — Evita que o Render free tier desligue o serviço.
- * 
- * O Render desliga web services gratuitos após 15 minutos sem tráfego.
- * Este scheduler faz GET no próprio health check a cada 5 minutos.
- * 
- * Controle via variáveis de ambiente:
- *   ACLP_SELF_PING_ENABLED=true
- *   ACLP_SELF_PING_URL=https://seu-app.onrender.com/api/setup/health
+ *
+ * CORREÇÃO DE PERFORMANCE: RestTemplate agora configurado com timeouts
+ * para evitar que o thread do scheduler fique bloqueado indefinidamente.
+ *
+ * Timeouts:
+ * - Connection timeout: 5 segundos
+ * - Read timeout: 10 segundos
  */
 @Component
 public class SelfPingScheduler {
@@ -27,36 +30,32 @@ public class SelfPingScheduler {
     private final String selfUrl;
 
     public SelfPingScheduler(
-            @Value("${aclp.self-ping.enabled:false}") boolean enabled,
-            @Value("${aclp.self-ping.url:}") String selfUrl) {
+            @Value("${scc.self-ping.enabled:false}") boolean enabled,
+            @Value("${scc.self-ping.url:}") String selfUrl) {
         this.enabled = enabled;
         this.selfUrl = selfUrl;
-        this.restTemplate = new RestTemplate();
+
+        // CORREÇÃO: Configurar RestTemplate com timeouts explícitos
+        this.restTemplate = new RestTemplateBuilder()
+                .connectTimeout(Duration.ofSeconds(5))
+                .readTimeout(Duration.ofSeconds(10))
+                .build();
 
         if (enabled && selfUrl != null && !selfUrl.isBlank()) {
-            log.info("✅ Self-Ping habilitado. URL: {}", selfUrl);
+            log.info("Self-Ping habilitado. URL: {} (timeouts: connect=5s, read=10s)", selfUrl);
         } else if (enabled) {
-            log.warn("⚠️  Self-Ping habilitado mas URL não configurada (ACLP_SELF_PING_URL)");
-        } else {
-            log.info("⏸️  Self-Ping desabilitado.");
+            log.warn("Self-Ping habilitado mas URL não configurada");
         }
     }
 
-    /**
-     * Ping a cada 5 minutos (300.000 ms).
-     * Delay inicial de 60 segundos para o app inicializar.
-     */
     @Scheduled(fixedRate = 300000, initialDelay = 60000)
     public void ping() {
-        if (!enabled || selfUrl == null || selfUrl.isBlank()) {
-            return;
-        }
-
+        if (!enabled || selfUrl == null || selfUrl.isBlank()) return;
         try {
-            String response = restTemplate.getForObject(selfUrl, String.class);
-            log.debug("🏓 Self-Ping OK");
+            restTemplate.getForObject(selfUrl, String.class);
+            log.debug("Self-Ping OK");
         } catch (Exception e) {
-            log.warn("⚠️ Self-Ping falhou: {}", e.getMessage());
+            log.debug("Self-Ping falhou (esperado em cold start): {}", e.getMessage());
         }
     }
 }

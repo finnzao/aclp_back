@@ -21,6 +21,13 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+/**
+ * Configuração de segurança.
+ *
+ * Nenhuma regra de segurança foi relaxada — os novos endpoints
+ * (/custodiados/exportar, /processos/batch) exigem autenticação
+ * como qualquer outro endpoint protegido via .anyRequest().authenticated().
+ */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity(prePostEnabled = true)
@@ -35,16 +42,13 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
-
                 .cors(cors -> {})
-
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-
                 .authorizeHttpRequests(authz -> authz
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // ==================== AUTENTICAÇÃO (público) ====================
+                        // Autenticação (público)
                         .requestMatchers("/api/auth/login").permitAll()
                         .requestMatchers("/api/auth/refresh").permitAll()
                         .requestMatchers("/api/auth/forgot-password").permitAll()
@@ -53,47 +57,48 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/check-setup").permitAll()
                         .requestMatchers("/api/auth/validate").permitAll()
 
-                        // ==================== PERFIL (autenticado) ====================
+                        // Perfil (autenticado)
                         .requestMatchers("/api/auth/perfil").authenticated()
                         .requestMatchers("/api/auth/perfil/**").authenticated()
 
-                        // ==================== SETUP (público, uso único) ====================
+                        // Setup (público, uso único)
                         .requestMatchers("/api/setup/status").permitAll()
                         .requestMatchers("/api/setup/admin").permitAll()
                         .requestMatchers("/api/setup/health").permitAll()
                         .requestMatchers("/api/setup/audit").permitAll()
 
-                        // ==================== CONVITES (público apenas validar/ativar) ====================
+                        // Convites (público apenas validar/ativar)
                         .requestMatchers("/api/usuarios/convites/validar/**").permitAll()
                         .requestMatchers("/api/usuarios/convites/ativar").permitAll()
 
-                        // ==================== DOCUMENTAÇÃO ====================
+                        // Documentação
                         .requestMatchers("/v3/api-docs/**").permitAll()
                         .requestMatchers("/swagger-ui/**").permitAll()
                         .requestMatchers("/swagger-ui.html").permitAll()
                         .requestMatchers("/swagger-resources/**").permitAll()
                         .requestMatchers("/webjars/**").permitAll()
 
-                        // ==================== HEALTH CHECKS ====================
+                        // Health checks
                         .requestMatchers("/actuator/health/**").permitAll()
 
-                        // ==================== FRONTEND ====================
+                        // Frontend estático
                         .requestMatchers("/", "/index.html", "/setup/**").permitAll()
                         .requestMatchers("/css/**", "/js/**", "/images/**", "/static/**").permitAll()
 
-                        // ==================== ADMINISTRATIVO ====================
+                        // Administrativo
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/usuarios/**").hasRole("ADMIN")
                         .requestMatchers("/api/usuarios/convites").hasRole("ADMIN")
 
-                        // ==================== TUDO MAIS: AUTENTICADO ====================
+                        // Tudo mais: autenticado (inclui novos endpoints de performance)
+                        // GET  /api/custodiados?page=&size=   (paginação server-side)
+                        // GET  /api/custodiados/exportar       (exportação com filtros)
+                        // POST /api/processos/batch            (busca em lote)
+                        // GET  /api/comparecimentos/todos      (com filtros server-side)
                         .anyRequest().authenticated()
                 )
-
                 .authenticationProvider(authenticationProvider())
-
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-
                 .headers(headers -> headers
                         .frameOptions(HeadersConfigurer.FrameOptionsConfig::deny)
                         .contentTypeOptions(contentType -> {})
