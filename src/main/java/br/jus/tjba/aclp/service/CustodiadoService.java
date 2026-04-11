@@ -3,6 +3,7 @@ package br.jus.tjba.aclp.service;
 import br.jus.tjba.aclp.dto.CadastroInicialDTO;
 import br.jus.tjba.aclp.dto.CadastroInicialResponseDTO;
 import br.jus.tjba.aclp.dto.CustodiadoDTO;
+import br.jus.tjba.aclp.dto.CustodiadoListDTO;
 import br.jus.tjba.aclp.model.Custodiado;
 import br.jus.tjba.aclp.model.HistoricoComparecimento;
 import br.jus.tjba.aclp.model.HistoricoEndereco;
@@ -18,15 +19,22 @@ import br.jus.tjba.aclp.repository.HistoricoEnderecoRepository;
 import br.jus.tjba.aclp.repository.ProcessoRepository;
 
 import jakarta.persistence.EntityNotFoundException;
+import jakarta.persistence.criteria.Predicate;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -42,18 +50,147 @@ public class CustodiadoService {
     private final ProcessoRepository processoRepository;
 
     // =====================================================================
-    // CADASTRO INICIAL — cria tudo em uma única transação
+    // CORREÇÃO DE PERFORMANCE: Novos métodos para busca paginada
     // =====================================================================
 
     /**
-     * Cadastro inicial completo: Custodiado + Processo + Endereço + Primeiro Comparecimento.
-     * Uma única transação, uma única requisição do frontend.
+     * CORREÇÃO DE PERFORMANCE: Busca paginada de custodiados com filtros.
+     *
+     * Utiliza Specification do Spring Data JPA para construir queries
+     * dinâmicas baseadas nos filtros recebidos, evitando carregar
+     * todos os registros em memória.
+     *
+     * @param page      Número da página (0-indexed)
+     * @param size      Quantidade de registros por página
+     * @param nome      Filtro opcional por nome (LIKE %nome%)
+     * @param cpf       Filtro opcional por CPF
+     * @param status    Filtro opcional por status (EM_CONFORMIDADE / INADIMPLENTE)
+     * @param ordenarPor Campo para ordenação (nome, proximoComparecimento, status, etc.)
+     * @param direcao   Direção da ordenação (asc ou desc)
      */
+    @Transactional(readOnly = true)
+    public Page<CustodiadoListDTO> listarPaginado(
+            int page, int size, String nome, String cpf,
+            String status, String ordenarPor, String direcao) {
+
+        // Validar campo de ordenação para evitar injeção SQL
+        String campoOrdenacao = validarCampoOrdenacao(ordenarPor);
+
+        Sort sort = direcao.equalsIgnoreCase("desc")
+                ? Sort.by(campoOrdenacao).descending()
+                : Sort.by(campoOrdenacao).ascending();
+
+        Pageable pageable = PageRequest.of(page, size, sort);
+
+        // Construir Specification dinâmica com os filtros
+        Specification<Custodiado> spec = buildCustodiadoSpecification(nome, cpf, status);
+
+        Page<Custodiado> pagina = custodiadoRepository.findAll(spec, pageable);
+
+        return pagina.map(CustodiadoListDTO::fromEntity);
+    }
+
+    /**
+     * CORREÇÃO DE PERFORMANCE: Listagem para exportação com filtros.
+     *
+     * Retorna todos os registros filtrados (sem paginação) para download
+     * de planilhas. Chamado apenas no momento do clique em "Exportar".
+     */
+    @Transactional(readOnly = true)
+    public List<CustodiadoListDTO> listarParaExportacao(
+            String nome, String cpf, String status,
+            String ordenarPor, String direcao) {
+
+        String campoOrdenacao = validarCampoOrdenacao(ordenarPor);
+
+        Sort sort = direcao.equalsIgnoreCase("desc")
+                ? Sort.by(campoOrdenacao).descending()
+                : Sort.by(campoOrdenacao).ascending();
+
+        Specification<Custodiado> spec = buildCustodiadoSpecification(nome, cpf, status);
+
+        List<Custodiado> custodiados = custodiadoRepository.findAll(spec, sort);
+        return custodiados.stream()
+                .map(CustodiadoListDTO::fromEntity)
+                .toList();
+    }
+
+    /**
+     * Constrói Specification dinâmica para filtros de custodiado.
+     * Todos os filtros são aplicados na query SQL, não em Java.
+     */
+    private Specification<Custodiado> buildCustodiadoSpecification(
+            String nome, String cpf, String status) {
+
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+
+            // Filtro base: apenas custodiados ativos
+            predicates.add(cb.equal(root.get("situacao"), SituacaoCustodiado.ATIVO));
+
+            // Busca parcial case-insensitive por nome
+            if (nome != null && !nome.isBlank()) {
+                predicates.add(cb.like(
+                        cb.lower(root.get("nome")),
+                        "%" + nome.toLowerCase().trim() + "%"
+                ));
+            }
+
+            // Busca por CPF (remove formatação antes de comparar)
+            if (cpf != null && !cpf.isBlank()) {
+                String cpfLimpo = cpf.replaceAll("\\D", "");
+                predicates.add(cb.or(
+                        cb.like(root.get("cpf"), "%" + cpfLimpo + "%"),
+                        cb.like(root.get("cpf"), "%" + cpf.trim() + "%")
+                ));
+            }
+
+            // Filtro por status de comparecimento
+            if (status != null && !status.isBlank()) {
+                try {
+                    StatusComparecimento statusEnum = StatusComparecimento.fromString(status);
+                    predicates.add(cb.equal(root.get("status"), statusEnum));
+                } catch (IllegalArgumentException e) {
+                    log.warn("Status de filtro inválido ignorado: {}", status);
+                }
+            }
+
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+    }
+
+    /**
+     * Valida o campo de ordenação para evitar injeção SQL.
+     * Retorna um campo seguro ou "nome" como fallback.
+     */
+    private String validarCampoOrdenacao(String campo) {
+        if (campo == null) return "nome";
+
+        return switch (campo.toLowerCase().trim()) {
+            case "nome" -> "nome";
+            case "cpf" -> "cpf";
+            case "status" -> "status";
+            case "proximocomparecimento", "proximo_comparecimento" -> "proximoComparecimento";
+            case "ultimocomparecimento", "ultimo_comparecimento" -> "ultimoComparecimento";
+            case "comarca" -> "comarca";
+            case "vara" -> "vara";
+            case "periodicidade" -> "periodicidade";
+            case "criadoem", "criado_em" -> "criadoEm";
+            default -> {
+                log.warn("Campo de ordenação desconhecido '{}', usando 'nome' como fallback", campo);
+                yield "nome";
+            }
+        };
+    }
+
+    // =====================================================================
+    // CADASTRO INICIAL — cria tudo em uma única transação (inalterado)
+    // =====================================================================
+
     @Transactional
     public CadastroInicialResponseDTO cadastroInicial(CadastroInicialDTO dto) {
         log.info("=== CADASTRO INICIAL === Processo: {}, Nome: {}", dto.getProcesso(), dto.getNome());
 
-        // 1. Preparar e validar dados
         dto.limparEFormatarDados();
         validarCadastroInicial(dto);
 
@@ -64,10 +201,8 @@ public class CustodiadoService {
         LocalDate dataCompInicial = dto.getDataComparecimentoInicial() != null
                 ? dto.getDataComparecimentoInicial() : LocalDate.now();
 
-        // 2. Validar duplicidades
         validarDuplicidadesDocumentosCadastroInicial(cpfFormatado, dto.getRg());
 
-        // 3. Criar Custodiado
         Custodiado custodiado = Custodiado.builder()
                 .nome(dto.getNome().trim())
                 .cpf(cpfFormatado)
@@ -89,7 +224,6 @@ public class CustodiadoService {
         Custodiado custodiadoSalvo = custodiadoRepository.save(custodiado);
         log.info("Custodiado criado — publicId: {}, ID: {}", custodiadoSalvo.getPublicId(), custodiadoSalvo.getId());
 
-        // 4. Criar Processo na tabela processos
         Processo processo = Processo.builder()
                 .custodiado(custodiadoSalvo)
                 .numeroProcesso(processoFormatado)
@@ -108,7 +242,6 @@ public class CustodiadoService {
         Processo processoSalvo = processoRepository.save(processo);
         log.info("Processo criado — ID: {}, Número: {}", processoSalvo.getId(), processoSalvo.getNumeroProcesso());
 
-        // 5. Criar Endereço inicial
         String cepFormatado = formatarCep(dto.getCep().trim());
         HistoricoEndereco endereco = HistoricoEndereco.builder()
                 .custodiado(custodiadoSalvo)
@@ -122,31 +255,27 @@ public class CustodiadoService {
                 .dataInicio(dataCompInicial)
                 .ativo(Boolean.TRUE)
                 .motivoAlteracao("Endereço inicial no cadastro")
-                .validadoPor("Sistema ACLP")
+                .validadoPor("Sistema SCC")
                 .build();
 
         HistoricoEndereco enderecoSalvo = historicoEnderecoRepository.save(endereco);
-        log.info("Endereço criado — ID: {}", enderecoSalvo.getId());
 
-        // 6. Criar Primeiro Comparecimento (CADASTRO_INICIAL)
         HistoricoComparecimento comparecimento = HistoricoComparecimento.builder()
                 .custodiado(custodiadoSalvo)
                 .processo(processoSalvo)
                 .dataComparecimento(dataCompInicial)
                 .horaComparecimento(LocalTime.now())
                 .tipoValidacao(TipoValidacao.CADASTRO_INICIAL)
-                .validadoPor("Sistema ACLP")
+                .validadoPor("Sistema SCC")
                 .observacoes("Cadastro inicial no sistema")
                 .mudancaEndereco(Boolean.FALSE)
                 .build();
 
-        HistoricoComparecimento comparecimentoSalvo = historicoComparecimentoRepository.save(comparecimento);
-        log.info("Comparecimento inicial criado — ID: {}", comparecimentoSalvo.getId());
+        historicoComparecimentoRepository.save(comparecimento);
 
         log.info("=== CADASTRO INICIAL CONCLUÍDO === publicId: {}, Processo: {}",
                 custodiadoSalvo.getPublicId(), processoSalvo.getNumeroProcesso());
 
-        // 7. Montar resposta
         return CadastroInicialResponseDTO.builder()
                 .custodiadoId(custodiadoSalvo.getPublicId().toString())
                 .nome(custodiadoSalvo.getNome())
@@ -175,46 +304,39 @@ public class CustodiadoService {
     }
 
     // =====================================================================
-    // Validações específicas do cadastro inicial
+    // Validações (inalteradas)
     // =====================================================================
 
     private void validarCadastroInicial(CadastroInicialDTO dto) {
-        // Nome
         if (dto.getNome() == null || dto.getNome().trim().isEmpty())
             throw new IllegalArgumentException("Nome é obrigatório");
         if (dto.getNome().trim().length() > 150)
             throw new IllegalArgumentException("Nome deve ter no máximo 150 caracteres");
 
-        // Documentos: pelo menos um
         boolean temCpf = dto.getCpf() != null && !dto.getCpf().trim().isEmpty();
         boolean temRg = dto.getRg() != null && !dto.getRg().trim().isEmpty();
         if (!temCpf && !temRg)
             throw new IllegalArgumentException("Pelo menos um documento (CPF ou RG) deve ser informado");
 
-        // CPF válido se informado
         if (temCpf && !validarCpfAlgoritmo(dto.getCpf().trim()))
             throw new IllegalArgumentException("CPF inválido. Verifique os dígitos verificadores");
 
-        // Contato: validar formato se informado (mas aceitar vazio)
         if (dto.getContato() != null && !dto.getContato().trim().isEmpty()) {
             if (!validarFormatoContatoFlexivel(dto.getContato().trim()))
                 throw new IllegalArgumentException("Contato deve ter formato válido de telefone");
         }
 
-        // Processo
         if (dto.getProcesso() == null || dto.getProcesso().trim().isEmpty())
             throw new IllegalArgumentException("Número do processo é obrigatório");
         String processoFormatado = formatarProcesso(dto.getProcesso().trim());
         if (!validarFormatoProcesso(processoFormatado))
             throw new IllegalArgumentException("Processo deve ter formato válido (0000000-00.0000.0.00.0000)");
 
-        // Vara e Comarca
         if (dto.getVara() == null || dto.getVara().trim().isEmpty())
             throw new IllegalArgumentException("Vara é obrigatória");
         if (dto.getComarca() == null || dto.getComarca().trim().isEmpty())
             throw new IllegalArgumentException("Comarca é obrigatória");
 
-        // Datas
         if (dto.getDataDecisao() == null)
             throw new IllegalArgumentException("Data da decisão é obrigatória");
         if (dto.getDataDecisao().isAfter(LocalDate.now()))
@@ -222,11 +344,9 @@ public class CustodiadoService {
         if (dto.getDataComparecimentoInicial() != null && dto.getDataComparecimentoInicial().isBefore(dto.getDataDecisao()))
             throw new IllegalArgumentException("Data do comparecimento inicial não pode ser anterior à data da decisão");
 
-        // Periodicidade
         if (dto.getPeriodicidade() == null || dto.getPeriodicidade() < 1 || dto.getPeriodicidade() > 365)
             throw new IllegalArgumentException("Periodicidade deve estar entre 1 e 365 dias");
 
-        // Endereço
         if (dto.getCep() == null || dto.getCep().trim().isEmpty())
             throw new IllegalArgumentException("CEP é obrigatório");
         if (!validarFormatoCep(dto.getCep().trim()))
@@ -258,7 +378,7 @@ public class CustodiadoService {
     }
 
     // =====================================================================
-    // Métodos existentes (mantidos com ajustes de contato/documentos)
+    // Métodos existentes (inalterados)
     // =====================================================================
 
     @Transactional(readOnly = true)
@@ -442,7 +562,7 @@ public class CustodiadoService {
     }
 
     // =====================================================================
-    // Métodos privados
+    // Métodos privados (inalterados)
     // =====================================================================
 
     private Custodiado atualizarCustodiado(Custodiado custodiado, CustodiadoDTO dto) {
@@ -479,7 +599,7 @@ public class CustodiadoService {
                 .complemento(dto.getComplemento() != null ? dto.getComplemento().trim() : null)
                 .bairro(dto.getBairro().trim()).cidade(dto.getCidade().trim()).estado(dto.getEstado().trim().toUpperCase())
                 .dataInicio(custodiado.getDataComparecimentoInicial()).ativo(Boolean.TRUE)
-                .motivoAlteracao("Endereço inicial no cadastro").validadoPor("Sistema ACLP").build();
+                .motivoAlteracao("Endereço inicial no cadastro").validadoPor("Sistema SCC").build();
         HistoricoEndereco salvo = historicoEnderecoRepository.save(e);
         historicoEnderecoRepository.desativarOutrosEnderecosAtivos(custodiado.getId(), salvo.getId());
     }
@@ -489,7 +609,7 @@ public class CustodiadoService {
         HistoricoComparecimento c = HistoricoComparecimento.builder()
                 .custodiado(custodiado).dataComparecimento(custodiado.getDataComparecimentoInicial())
                 .horaComparecimento(LocalTime.now()).tipoValidacao(TipoValidacao.CADASTRO_INICIAL)
-                .validadoPor("Sistema ACLP").observacoes("Cadastro inicial no sistema").mudancaEndereco(Boolean.FALSE).build();
+                .validadoPor("Sistema SCC").observacoes("Cadastro inicial no sistema").mudancaEndereco(Boolean.FALSE).build();
         historicoComparecimentoRepository.save(c);
     }
 

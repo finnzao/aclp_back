@@ -31,7 +31,7 @@ public interface ProcessoRepository extends JpaRepository<Processo, Long> {
     @Query("SELECT p FROM Processo p JOIN FETCH p.custodiado c WHERE p.proximoComparecimento = CURRENT_DATE AND p.situacaoProcesso = 'ATIVO'")
     List<Processo> findComparecimentosHojeComCustodiado();
 
-    // Listagem paginada com filtros - query principal do sistema
+    // Listagem paginada com filtros — query principal do sistema
     @Query(value = "SELECT p FROM Processo p JOIN FETCH p.custodiado c " +
             "WHERE p.situacaoProcesso = 'ATIVO' " +
             "AND (:termo IS NULL OR LOWER(c.nome) LIKE LOWER(CONCAT('%',:termo,'%')) " +
@@ -73,4 +73,40 @@ public interface ProcessoRepository extends JpaRepository<Processo, Long> {
     // Verificar se custodiado tem processos ativos não encerrados
     @Query("SELECT COUNT(p) > 0 FROM Processo p WHERE p.custodiado.id = :custodiadoId AND p.situacaoProcesso NOT IN ('ENCERRADO', 'SUSPENSO')")
     boolean existsProcessosAtivos(@Param("custodiadoId") Long custodiadoId);
+
+    /**
+     * CORREÇÃO DE PERFORMANCE: Busca processos de múltiplos custodiados em uma única query.
+     * Substitui o padrão N+1 de chamar findByCustodiadoId() em loop.
+     *
+     * Usado pelo endpoint POST /processos/batch e internamente para evitar
+     * que o frontend precise fazer dezenas de requisições individuais.
+     */
+    @Query("SELECT p FROM Processo p JOIN FETCH p.custodiado c " +
+           "WHERE p.custodiado.id IN :custodiadoIds " +
+           "ORDER BY p.custodiado.id, p.criadoEm DESC")
+    List<Processo> findByCustodiadoIdIn(@Param("custodiadoIds") List<Long> custodiadoIds);
+
+    /**
+     * CORREÇÃO DE PERFORMANCE: Busca apenas processos ativos de múltiplos custodiados.
+     * Versão filtrada da busca em lote.
+     */
+    @Query("SELECT p FROM Processo p JOIN FETCH p.custodiado c " +
+           "WHERE p.custodiado.id IN :custodiadoIds " +
+           "AND p.situacaoProcesso = :situacao " +
+           "ORDER BY p.custodiado.id, p.criadoEm DESC")
+    List<Processo> findByCustodiadoIdInAndSituacaoProcesso(
+        @Param("custodiadoIds") List<Long> custodiadoIds,
+        @Param("situacao") SituacaoProcesso situacao
+    );
+
+    /**
+     * CORREÇÃO DE PERFORMANCE: Busca processos de um custodiado por situação.
+     * Usado como fallback na conversão de comparecimentos para DTO.
+     */
+    @Query("SELECT p FROM Processo p WHERE p.custodiado.id = :custodiadoId " +
+           "AND p.situacaoProcesso = :situacao ORDER BY p.criadoEm DESC")
+    List<Processo> findByCustodiadoIdAndSituacaoProcesso(
+        @Param("custodiadoId") Long custodiadoId,
+        @Param("situacao") SituacaoProcesso situacao
+    );
 }

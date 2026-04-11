@@ -12,7 +12,7 @@
     <artifactId>aclp</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>aclp</name>
-    <description>Acompanhamento de Comparecimento de Liberdade Provisória (ACLP)</description>
+    <description>Acompanhamento de Comparecimento </description>
 
     <properties>
         <java.version>17</java.version>
@@ -67,6 +67,12 @@
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.2.5</version>
         </dependency>
 
         <dependency>

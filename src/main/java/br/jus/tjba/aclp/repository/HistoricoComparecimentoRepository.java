@@ -1,10 +1,10 @@
 package br.jus.tjba.aclp.repository;
 
-import br.jus.tjba.aclp.model.Custodiado;
 import br.jus.tjba.aclp.model.HistoricoComparecimento;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -12,8 +12,14 @@ import org.springframework.stereotype.Repository;
 import java.time.LocalDate;
 import java.util.List;
 
+/**
+ * CORREÇÃO DE PERFORMANCE: Adicionado JpaSpecificationExecutor para suportar
+ * queries dinâmicas com paginação e filtros server-side nos comparecimentos.
+ */
 @Repository
-public interface HistoricoComparecimentoRepository extends JpaRepository<HistoricoComparecimento, Long> {
+public interface HistoricoComparecimentoRepository
+        extends JpaRepository<HistoricoComparecimento, Long>,
+                JpaSpecificationExecutor<HistoricoComparecimento> {
 
     @Query("SELECT h FROM HistoricoComparecimento h " +
             "LEFT JOIN FETCH h.custodiado c " +
@@ -61,6 +67,10 @@ public interface HistoricoComparecimentoRepository extends JpaRepository<Histori
             "WHERE h.custodiado.id = :custodiadoId AND h.tipoValidacao = 'CADASTRO_INICIAL'")
     boolean existsCadastroInicialPorCustodiado(@Param("custodiadoId") Long custodiadoId);
 
+    /**
+     * CORREÇÃO DE PERFORMANCE: Query paginada com JOIN FETCH para evitar N+1.
+     * Carrega custodiado e processo em uma única query SQL.
+     */
     @Query(value = "SELECT h FROM HistoricoComparecimento h " +
             "LEFT JOIN FETCH h.custodiado c " +
             "LEFT JOIN FETCH h.processo p " +
@@ -68,9 +78,11 @@ public interface HistoricoComparecimentoRepository extends JpaRepository<Histori
             countQuery = "SELECT COUNT(h) FROM HistoricoComparecimento h")
     Page<HistoricoComparecimento> findAllByOrderByDataComparecimentoDesc(Pageable pageable);
 
-    @Query("SELECT COUNT(h) FROM HistoricoComparecimento h")
-    long countTotal();
-
+    /**
+     * CORREÇÃO DE PERFORMANCE: Query paginada com JOIN FETCH e filtros.
+     * Todos os relacionamentos são carregados em uma única query,
+     * eliminando o problema N+1 que gerava centenas de queries extras.
+     */
     @Query(value = "SELECT h FROM HistoricoComparecimento h " +
             "LEFT JOIN FETCH h.custodiado c " +
             "LEFT JOIN FETCH h.processo p " +
@@ -98,6 +110,9 @@ public interface HistoricoComparecimentoRepository extends JpaRepository<Histori
     Page<HistoricoComparecimento> findByTipoValidacao(
             @Param("tipoValidacao") String tipoValidacao,
             Pageable pageable);
+
+    @Query("SELECT COUNT(h) FROM HistoricoComparecimento h")
+    long countTotal();
 
     @Query("SELECT COUNT(h) FROM HistoricoComparecimento h " +
             "WHERE CAST(h.tipoValidacao AS string) = :tipoValidacao")
