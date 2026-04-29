@@ -11,14 +11,8 @@ import org.springframework.web.client.RestTemplate;
 import java.time.Duration;
 
 /**
- * Self-Ping Scheduler — Evita que o Render free tier desligue o serviço.
- *
- * CORREÇÃO DE PERFORMANCE: RestTemplate agora configurado com timeouts
- * para evitar que o thread do scheduler fique bloqueado indefinidamente.
- *
- * Timeouts:
- * - Connection timeout: 5 segundos
- * - Read timeout: 10 segundos
+ * Self-Ping Scheduler — mantém o serviço acordado no Render durante
+ * o horário comercial (segunda a sexta, 08:00 às 13:55, fuso America/Bahia).
  */
 @Component
 public class SelfPingScheduler {
@@ -30,25 +24,24 @@ public class SelfPingScheduler {
     private final String selfUrl;
 
     public SelfPingScheduler(
-            @Value("${scc.self-ping.enabled:false}") boolean enabled,
-            @Value("${scc.self-ping.url:}") String selfUrl) {
+            @Value("${aclp.self-ping.enabled:false}") boolean enabled,
+            @Value("${aclp.self-ping.url:}") String selfUrl) {
         this.enabled = enabled;
         this.selfUrl = selfUrl;
 
-        // CORREÇÃO: Configurar RestTemplate com timeouts explícitos
         this.restTemplate = new RestTemplateBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
                 .readTimeout(Duration.ofSeconds(10))
                 .build();
 
         if (enabled && selfUrl != null && !selfUrl.isBlank()) {
-            log.info("Self-Ping habilitado. URL: {} (timeouts: connect=5s, read=10s)", selfUrl);
+            log.info("Self-Ping habilitado. URL: {} | Janela: seg-sex 08:00-14:00 (America/Bahia)", selfUrl);
         } else if (enabled) {
             log.warn("Self-Ping habilitado mas URL não configurada");
         }
     }
 
-    @Scheduled(fixedRate = 300000, initialDelay = 60000)
+    @Scheduled(cron = "0 0/5 8-13 * * MON-FRI", zone = "America/Bahia")
     public void ping() {
         if (!enabled || selfUrl == null || selfUrl.isBlank()) return;
         try {
