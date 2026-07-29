@@ -151,6 +151,7 @@ public class Processo {
         if (situacaoProcesso == null) situacaoProcesso = SituacaoProcesso.ATIVO;
         if (ultimoComparecimento == null) ultimoComparecimento = dataComparecimentoInicial;
         if (proximoComparecimento == null && situacaoProcesso.isAtivo()) calcularProximoComparecimento();
+        atualizarStatusBaseadoEmData(); // nasce coerente com a data (importação de base legada)
     }
 
     @PreUpdate

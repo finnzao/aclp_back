@@ -7,7 +7,6 @@ import br.jus.tjba.aclp.model.HistoricoComparecimento;
 import br.jus.tjba.aclp.model.HistoricoEndereco;
 import br.jus.tjba.aclp.model.Processo;
 import br.jus.tjba.aclp.model.enums.SituacaoProcesso;
-import br.jus.tjba.aclp.model.enums.StatusComparecimento;
 import br.jus.tjba.aclp.model.enums.TipoValidacao;
 import br.jus.tjba.aclp.repository.CustodiadoRepository;
 import br.jus.tjba.aclp.repository.HistoricoComparecimentoRepository;
@@ -29,6 +28,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.YearMonth;
+import java.time.format.TextStyle;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -69,6 +70,15 @@ public class ComparecimentoService {
             if (numeroProcesso != null && !numeroProcesso.isBlank()) {
                 Join<HistoricoComparecimento, Processo> pj = root.join("processo", JoinType.LEFT);
                 predicates.add(cb.like(pj.get("numeroProcesso"), "%" + numeroProcesso.trim() + "%"));
+            }
+
+            // Sem estes fetch, cada linha da página dispara selects de custodiado/processo
+            // (N+1: ~200 queries numa página de 50). O guard é obrigatório: a count query
+            // da paginação não aceita fetch join e quebraria com "query specified join fetching".
+            if (Long.class != query.getResultType()) {
+                root.fetch("custodiado", JoinType.LEFT);
+                root.fetch("processo", JoinType.LEFT);
+                query.distinct(true);
             }
 
             return predicates.isEmpty() ? cb.conjunction() : cb.and(predicates.toArray(new Predicate[0]));
@@ -196,7 +206,7 @@ public class ComparecimentoService {
         Map<String, Object> est = new HashMap<>();
         long totalCustodiados = custodiadoRepository.countActive();
         long totalComp = historicoComparecimentoRepository.countTotal();
-        long inadimplentes = custodiadoRepository.countByStatus(StatusComparecimento.INADIMPLENTE);
+        long inadimplentes = custodiadoRepository.countInadimplentesAtivos();
         long presenciais = historicoComparecimentoRepository.countByTipoValidacao(TipoValidacao.PRESENCIAL.name());
         long online = historicoComparecimentoRepository.countByTipoValidacao(TipoValidacao.ONLINE.name());
 
@@ -256,8 +266,11 @@ public class ComparecimentoService {
     @Transactional(readOnly = true)
     public ResumoSistema buscarResumoSistema() {
         LocalDate hoje = LocalDate.now();
-        long tc = custodiadoRepository.countActive();
-        long inad = custodiadoRepository.countByStatus(StatusComparecimento.INADIMPLENTE);
+        // ponytail: agrega em memória sobre os ativos (dezenas/centenas de registros).
+        // Se a base crescer para dezenas de milhares, trocar por counts SQL agrupados.
+        List<Custodiado> ativos = custodiadoRepository.findAllActive();
+        long tc = ativos.size();
+        long inad = ativos.stream().filter(Custodiado::isInadimplente).count();
         LocalDate inicioMes = hoje.withDayOfMonth(1);
         return ResumoSistema.builder()
                 .totalCustodiados(tc).custodiadosEmConformidade(tc-inad).custodiadosInadimplentes(inad)
@@ -270,8 +283,113 @@ public class ComparecimentoService {
                 .custodiadosSemEnderecoAtivo(historicoEnderecoRepository.countCustodiadosSemEnderecoAtivo())
                 .percentualConformidade(tc > 0 ? (double)(tc-inad)/tc*100 : 0)
                 .percentualInadimplencia(tc > 0 ? (double)inad/tc*100 : 0)
+                .proximosComparecimentos(montarProximosComparecimentos(ativos, hoje))
+                .analiseAtrasos(montarAnaliseAtrasos(ativos))
+                .relatorioUltimosMeses(montarRelatorioUltimosMeses(hoje))
+                // 12 meses carregados para ter o comparecimento ANTERIOR de cada custodiado;
+                // só os 6 últimos entram no gráfico.
+                .tendenciaConformidade(calcularTendencia(
+                        historicoComparecimentoRepository.findByDataComparecimentoBetween(hoje.minusMonths(12), hoje), hoje))
                 .dataConsulta(hoje)
                 .build();
+    }
+
+    /**
+     * Taxa de pontualidade por mês, derivada do próprio histórico: um comparecimento
+     * está no prazo quando ocorre até (comparecimento anterior + periodicidade).
+     * O primeiro registro de cada custodiado é ignorado — não há prazo anterior.
+     * ponytail: agrega em memória; virar query agregada se o histórico crescer muito.
+     */
+    static List<TendenciaMensalDTO> calcularTendencia(List<HistoricoComparecimento> historico, LocalDate hoje) {
+        YearMonth ultimoMes = YearMonth.from(hoje);
+        Map<YearMonth, long[]> meses = new LinkedHashMap<>(); // [total, noPrazo]
+        for (int i = 5; i >= 0; i--) meses.put(ultimoMes.minusMonths(i), new long[2]);
+
+        Map<Long, List<HistoricoComparecimento>> porCustodiado = historico.stream()
+                .filter(h -> h.getCustodiado() != null && h.getDataComparecimento() != null)
+                .collect(Collectors.groupingBy(h -> h.getCustodiado().getId()));
+
+        for (List<HistoricoComparecimento> registros : porCustodiado.values()) {
+            registros.sort(Comparator.comparing(HistoricoComparecimento::getDataComparecimento));
+            for (int i = 1; i < registros.size(); i++) {
+                LocalDate data = registros.get(i).getDataComparecimento();
+                long[] mes = meses.get(YearMonth.from(data));
+                if (mes == null) continue; // fora da janela do gráfico (serve só de contexto)
+                Integer periodicidade = registros.get(i).getCustodiado().getPeriodicidade();
+                if (periodicidade == null) continue;
+                mes[0]++;
+                if (!data.isAfter(registros.get(i - 1).getDataComparecimento().plusDays(periodicidade))) mes[1]++;
+            }
+        }
+
+        if (meses.values().stream().noneMatch(m -> m[0] > 0)) return null; // front mostra estado vazio
+
+        Locale ptBr = Locale.forLanguageTag("pt-BR");
+        return meses.entrySet().stream().map(e -> {
+            long total = e.getValue()[0], noPrazo = e.getValue()[1];
+            double taxa = total > 0 ? (double) noPrazo / total * 100 : 0;
+            return TendenciaMensalDTO.builder()
+                    .mes(e.getKey().toString())
+                    .mesNome(e.getKey().getMonth().getDisplayName(TextStyle.SHORT, ptBr) + "/" + (e.getKey().getYear() % 100))
+                    .emConformidade(noPrazo).inadimplentes(total - noPrazo)
+                    .taxaConformidade(taxa).taxaInadimplencia(total > 0 ? 100 - taxa : 0)
+                    .totalComparecimentos(total).build();
+        }).collect(Collectors.toList());
+    }
+
+    private ProximosComparecimentosDTO montarProximosComparecimentos(List<Custodiado> ativos, LocalDate hoje) {
+        LocalDate limite = hoje.plusDays(7);
+        long previstos = 0, atrasados = 0, comparecemHoje = 0, comparecemAmanha = 0;
+        for (Custodiado c : ativos) {
+            LocalDate prox = c.getProximoComparecimento();
+            if (prox == null) continue;
+            if (prox.isBefore(hoje)) atrasados++;
+            else if (!prox.isAfter(limite)) previstos++;
+            if (prox.equals(hoje)) comparecemHoje++;
+            if (prox.equals(hoje.plusDays(1))) comparecemAmanha++;
+        }
+        return ProximosComparecimentosDTO.builder()
+                .diasAnalisados(7).totalPrevistoProximosDias(previstos).totalAtrasados(atrasados)
+                .comparecimentosHoje(comparecemHoje).comparecimentosAmanha(comparecemAmanha).build();
+    }
+
+    private AnaliseAtrasosDTO montarAnaliseAtrasos(List<Custodiado> ativos) {
+        long b30 = 0, b60 = 0, b90 = 0, bMais = 0, somaDias = 0, totalAtrasados = 0;
+        Custodiado maior = null;
+        for (Custodiado c : ativos) {
+            long dias = c.getDiasAtraso();
+            if (dias <= 0) continue;
+            totalAtrasados++;
+            somaDias += dias;
+            if (dias <= 30) b30++;
+            else if (dias <= 60) b60++;
+            else if (dias <= 90) b90++;
+            else bMais++;
+            if (maior == null || dias > maior.getDiasAtraso()) maior = c;
+        }
+        AnaliseAtrasosDTO.MaiorAtraso maiorDTO = maior == null ? null
+                : new AnaliseAtrasosDTO.MaiorAtraso(maior.getNome(), maior.getDiasAtraso());
+        return AnaliseAtrasosDTO.builder()
+                .totalCustodiadosAtrasados(totalAtrasados)
+                .totalAtrasados30Dias(b30).totalAtrasados60Dias(b60)
+                .totalAtrasados90Dias(b90).totalAtrasadosMais90Dias(bMais)
+                .mediaDiasAtraso(totalAtrasados > 0 ? (double) somaDias / totalAtrasados : 0)
+                .custodiadoMaiorAtraso(maiorDTO).dataAnalise(LocalDate.now()).build();
+    }
+
+    private RelatorioUltimosMesesDTO montarRelatorioUltimosMeses(LocalDate hoje) {
+        LocalDate inicio = hoje.minusMonths(6).withDayOfMonth(1);
+        long total = historicoComparecimentoRepository.countByDataComparecimentoBetween(inicio, hoje);
+        long presenciais = historicoComparecimentoRepository.countByTipoValidacaoAndPeriodo(TipoValidacao.PRESENCIAL.name(), inicio, hoje);
+        long online = historicoComparecimentoRepository.countByTipoValidacaoAndPeriodo(TipoValidacao.ONLINE.name(), inicio, hoje);
+        long mudancas = historicoComparecimentoRepository.countMudancasEnderecoBetween(inicio, hoje);
+        if (total == 0) return null; // frontend mostra estado vazio honesto
+        return RelatorioUltimosMesesDTO.builder()
+                .mesesAnalisados(6).periodoInicio(inicio).periodoFim(hoje)
+                .totalComparecimentos(total).comparecimentosPresenciais(presenciais).comparecimentosOnline(online)
+                .mudancasEndereco(mudancas).mediaComparecimentosMensal((double) total / 6)
+                .percentualPresencial(total > 0 ? (double) presenciais / total * 100 : 0)
+                .percentualOnline(total > 0 ? (double) online / total * 100 : 0).build();
     }
 
     @Transactional
@@ -407,5 +525,39 @@ public class ComparecimentoService {
         private long totalMudancasEndereco; private long enderecosAtivos; private long custodiadosSemHistorico;
         private long custodiadosSemEnderecoAtivo; private double percentualConformidade; private double percentualInadimplencia;
         private LocalDate dataConsulta;
+        private ProximosComparecimentosDTO proximosComparecimentos;
+        private AnaliseAtrasosDTO analiseAtrasos;
+        private RelatorioUltimosMesesDTO relatorioUltimosMeses;
+        private List<TendenciaMensalDTO> tendenciaConformidade;
+    }
+
+    @lombok.Data @lombok.Builder
+    public static class TendenciaMensalDTO {
+        private String mes; private String mesNome; private long emConformidade; private long inadimplentes;
+        private double taxaConformidade; private double taxaInadimplencia; private long totalComparecimentos;
+    }
+
+    @lombok.Data @lombok.Builder
+    public static class ProximosComparecimentosDTO {
+        private int diasAnalisados; private long totalPrevistoProximosDias; private long totalAtrasados;
+        private long comparecimentosHoje; private long comparecimentosAmanha;
+    }
+
+    @lombok.Data @lombok.Builder
+    public static class AnaliseAtrasosDTO {
+        private long totalCustodiadosAtrasados; private long totalAtrasados30Dias; private long totalAtrasados60Dias;
+        private long totalAtrasados90Dias; private long totalAtrasadosMais90Dias; private double mediaDiasAtraso;
+        private MaiorAtraso custodiadoMaiorAtraso; private LocalDate dataAnalise;
+
+        @lombok.Data @lombok.AllArgsConstructor
+        public static class MaiorAtraso { private String nome; private long diasAtraso; }
+    }
+
+    @lombok.Data @lombok.Builder
+    public static class RelatorioUltimosMesesDTO {
+        private int mesesAnalisados; private LocalDate periodoInicio; private LocalDate periodoFim;
+        private long totalComparecimentos; private long comparecimentosPresenciais; private long comparecimentosOnline;
+        private long mudancasEndereco; private double mediaComparecimentosMensal;
+        private double percentualPresencial; private double percentualOnline;
     }
 }

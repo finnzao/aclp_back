@@ -20,7 +20,11 @@ import java.util.UUID;
                 @Index(name = "idx_custodiado_rg", columnList = "rg"),
                 @Index(name = "idx_custodiado_situacao", columnList = "situacao"),
                 @Index(name = "idx_custodiado_nome", columnList = "nome"),
-                @Index(name = "idx_custodiado_public_id", columnList = "public_id", unique = true)
+                @Index(name = "idx_custodiado_public_id", columnList = "public_id", unique = true),
+                // situacao sozinha tem cardinalidade 2 (quase inútil); toda consulta do
+                // dashboard filtra situacao='ATIVO' + status ou + proximo_comparecimento
+                @Index(name = "idx_custodiado_situacao_status", columnList = "situacao, status"),
+                @Index(name = "idx_custodiado_situacao_proximo", columnList = "situacao, proximo_comparecimento")
         }
 )
 @Data
@@ -144,6 +148,7 @@ public class Custodiado {
             ultimoComparecimento = dataComparecimentoInicial;
         if (proximoComparecimento == null && situacao.isAtivo() && periodicidade != null)
             calcularProximoComparecimento();
+        atualizarStatusBaseadoEmData(); // nasce coerente com a data (importação de base legada)
     }
 
     @PreUpdate
@@ -192,6 +197,17 @@ public class Custodiado {
         } else if (situacao.isAtivo()) {
             status = br.jus.tjba.aclp.model.enums.StatusComparecimento.EM_CONFORMIDADE;
         }
+    }
+
+    /**
+     * Status real calculado a partir da data, não do campo persistido (que fica
+     * defasado até o StatusSchedulerService rodar). Use isto para exibição/contagem.
+     */
+    public br.jus.tjba.aclp.model.enums.StatusComparecimento getStatusEfetivo() {
+        if (!isAtivo()) return status;
+        return isInadimplente()
+                ? br.jus.tjba.aclp.model.enums.StatusComparecimento.INADIMPLENTE
+                : br.jus.tjba.aclp.model.enums.StatusComparecimento.EM_CONFORMIDADE;
     }
 
     public long getDiasAtraso() {

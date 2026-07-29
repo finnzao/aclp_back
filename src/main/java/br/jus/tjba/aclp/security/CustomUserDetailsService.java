@@ -55,11 +55,15 @@ public class CustomUserDetailsService implements UserDetailsService {
     private Collection<? extends GrantedAuthority> getAuthorities(Usuario usuario) {
         Set<GrantedAuthority> authorities = new HashSet<>();
 
+        // BUG CORRIGIDO: a condição era invertida — só ADMIN ganhava ROLE_USER, então um
+        // hasRole('USER') negaria todos os usuários comuns e liberaria apenas os admins.
+        // Regra: todo autenticado é USER; ADMIN acumula ROLE_ADMIN por cima.
         String roleName = "ROLE_" + usuario.getTipo().name();
         authorities.add(new SimpleGrantedAuthority(roleName));
+        authorities.add(new SimpleGrantedAuthority("ROLE_USER"));
 
         if (usuario.isAdmin()) {
-            authorities.add(new SimpleGrantedAuthority("ROLE_USER"));
+            authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
         }
 
         log.debug("Authorities geradas para {}: {}", usuario.getEmail(), authorities);

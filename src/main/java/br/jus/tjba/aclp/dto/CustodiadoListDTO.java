@@ -59,7 +59,7 @@ public class CustodiadoListDTO {
                 .processo(custodiado.getProcesso())
                 .vara(custodiado.getVara())
                 .comarca(custodiado.getComarca())
-                .status(custodiado.getStatus())
+                .status(custodiado.getStatusEfetivo())
                 .situacao(custodiado.getSituacao())
                 .ultimoComparecimento(custodiado.getUltimoComparecimento())
                 .proximoComparecimento(custodiado.getProximoComparecimento())

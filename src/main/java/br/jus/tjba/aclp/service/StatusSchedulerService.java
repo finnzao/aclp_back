@@ -7,6 +7,8 @@ import br.jus.tjba.aclp.repository.CustodiadoRepository;
 import br.jus.tjba.aclp.repository.ProcessoRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +23,19 @@ public class StatusSchedulerService {
 
     private final CustodiadoRepository custodiadoRepository;
     private final ProcessoRepository processoRepository;
+
+    /**
+     * Sem isto, um container novo (ou base recém-importada) exibia todo mundo
+     * "EM_CONFORMIDADE" até o cron das 01h — que é exatamente o bug relatado.
+     * ponytail: varre a tabela no boot; se a base passar de dezenas de milhares,
+     * trocar por um UPDATE em massa condicional à data.
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    @Transactional // self-invocation não passa pelo proxy: a transação tem que estar aqui
+    public void sincronizarStatusNoStartup() {
+        log.info("Sincronizando status na inicialização");
+        reprocessarTodosStatus();
+    }
 
     @Scheduled(cron = "0 0 1 * * *")
     @Transactional

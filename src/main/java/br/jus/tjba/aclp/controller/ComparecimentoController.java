@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -176,6 +177,7 @@ public class ComparecimentoController {
     }
 
     @PostMapping("/verificar-inadimplentes")
+    @PreAuthorize("hasRole('ADMIN')") // operação em massa: só administrador
     public ResponseEntity<Map<String, Object>> verificarStatusInadimplentes() {
         try {
             long custodiadosMarcados = statusSchedulerService.verificarStatusManual();
@@ -218,6 +220,7 @@ public class ComparecimentoController {
     }
 
     @PostMapping("/migrar/cadastros-iniciais")
+    @PreAuthorize("hasRole('ADMIN')") // migração de dados: só administrador
     public ResponseEntity<Map<String, Object>> migrarCadastrosIniciais(
             @RequestParam(defaultValue = "Sistema SCC") String validadoPor) {
         try {

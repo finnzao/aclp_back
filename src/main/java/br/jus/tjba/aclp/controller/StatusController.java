@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -24,6 +25,7 @@ public class StatusController {
     private final StatusSchedulerService statusSchedulerService;
 
     @PostMapping("/verificar-inadimplentes")
+    @PreAuthorize("hasRole('ADMIN')") // operação em massa: só administrador
     @Operation(summary = "Verificar inadimplentes manualmente",
             description = "Executa verificação manual do status de todas as pessoas")
     @ApiResponse(responseCode = "200", description = "Verificação executada com sucesso")
@@ -51,6 +53,7 @@ public class StatusController {
     }
 
     @PostMapping("/reprocessar-todos")
+    @PreAuthorize("hasRole('ADMIN')") // reescreve status de toda a base: só administrador
     @Operation(summary = "Reprocessar todos os status",
             description = "Recalcula o status de TODAS as pessoas baseado na data atual")
     @ApiResponse(responseCode = "200", description = "Reprocessamento executado com sucesso")

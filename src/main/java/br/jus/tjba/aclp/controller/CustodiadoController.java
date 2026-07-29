@@ -16,6 +16,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -126,7 +127,7 @@ public class CustodiadoController {
                     .dataDecisao(custodiado.getDataDecisao()).periodicidade(custodiado.getPeriodicidade())
                     .periodicidadeDescricao(custodiado.getPeriodicidadeDescricao())
                     .dataComparecimentoInicial(custodiado.getDataComparecimentoInicial())
-                    .status(custodiado.getStatus()).ultimoComparecimento(custodiado.getUltimoComparecimento())
+                    .status(custodiado.getStatusEfetivo()).ultimoComparecimento(custodiado.getUltimoComparecimento())
                     .proximoComparecimento(custodiado.getProximoComparecimento())
                     .diasAtraso(custodiado.getDiasAtraso()).observacoes(custodiado.getObservacoes())
                     .endereco(enderecoDetalhado).criadoEm(custodiado.getCriadoEm())
@@ -339,6 +340,7 @@ public class CustodiadoController {
     }
 
     @DeleteMapping("/{publicId}")
+    @PreAuthorize("hasRole('ADMIN')") // destrutivo: só administrador
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable String publicId) {
         try {
             custodiadoService.deleteByPublicId(publicId);

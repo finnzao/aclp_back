@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -135,6 +136,7 @@ public class ProcessoController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')") // destrutivo: só administrador
     public ResponseEntity<ApiResponse<ProcessoResponseDTO>> encerrar(@PathVariable Long id) {
         try {
             return ResponseEntity.ok(ApiResponse.success("Processo encerrado", processoService.encerrarProcesso(id)));
@@ -144,6 +146,7 @@ public class ProcessoController {
     }
 
     @PostMapping("/{id}/suspender")
+    @PreAuthorize("hasRole('ADMIN')") // altera situação processual: só administrador
     public ResponseEntity<ApiResponse<ProcessoResponseDTO>> suspender(@PathVariable Long id) {
         try {
             return ResponseEntity.ok(ApiResponse.success("Suspenso", processoService.suspenderProcesso(id)));
@@ -153,6 +156,7 @@ public class ProcessoController {
     }
 
     @PostMapping("/{id}/reativar")
+    @PreAuthorize("hasRole('ADMIN')") // altera situação processual: só administrador
     public ResponseEntity<ApiResponse<ProcessoResponseDTO>> reativar(@PathVariable Long id) {
         try {
             return ResponseEntity.ok(ApiResponse.success("Reativado", processoService.reativarProcesso(id)));

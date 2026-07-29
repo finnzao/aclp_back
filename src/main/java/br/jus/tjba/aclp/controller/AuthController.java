@@ -8,11 +8,15 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -33,6 +37,38 @@ import java.util.Map;
 public class AuthController {
 
     private final AuthService authService;
+
+    public static final String ACCESS_COOKIE = "auth-token";
+    public static final String REFRESH_COOKIE = "refresh-token";
+
+    /** false em dev: cookie Secure não é gravado sobre http://localhost. */
+    @Value("${aclp.auth.cookie-secure:true}")
+    private boolean cookieSecure;
+
+    /**
+     * Cookie httpOnly: o JavaScript da página não consegue ler. Mesmo com XSS o atacante
+     * pode usar a sessão na aba, mas não exfiltra o token para reutilizar em outro lugar.
+     * SameSite=Lax barra o envio em POST cross-site, que é a proteção CSRF desta arquitetura.
+     */
+    private ResponseCookie authCookie(String nome, String valor, long maxAgeSegundos, String path) {
+        return ResponseCookie.from(nome, valor != null ? valor : "")
+                .httpOnly(true)
+                .secure(cookieSecure)
+                .sameSite("Lax")
+                .path(path)
+                .maxAge(valor != null ? maxAgeSegundos : 0) // valor nulo = instrução de remoção
+                .build();
+    }
+
+    private String cookieValue(HttpServletRequest request, String nome) {
+        if (request.getCookies() == null) return null;
+        for (Cookie c : request.getCookies()) {
+            if (nome.equals(c.getName()) && c.getValue() != null && !c.getValue().isBlank()) {
+                return c.getValue();
+            }
+        }
+        return null;
+    }
 
     /**
      * Realiza o login do usuário
@@ -63,15 +99,24 @@ public class AuthController {
                 ));
             }
 
-            return ResponseEntity.ok(response);
+            long expiraEm = response.getExpiresIn() != null ? response.getExpiresIn() : 3600L;
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.SET_COOKIE,
+                            authCookie(ACCESS_COOKIE, response.getAccessToken(), expiraEm, "/").toString())
+                    // refresh restrito a /api/auth: não acompanha requisição comum
+                    .header(HttpHeaders.SET_COOKIE,
+                            authCookie(REFRESH_COOKIE, response.getRefreshToken(), 604800L, "/api/auth").toString())
+                    .body(response);
 
         } catch (Exception e) {
-            log.error("Erro no login - Email: {}, Erro: {}", request.getEmail(), e.getMessage());
+            // Mensagem constante: mensagens distintas por causa da falha (usuário inexistente
+            // vs senha errada vs conta bloqueada) viram oráculo de enumeração de contas.
+            log.error("Falha no login - Email: {}", request.getEmail(), e);
 
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of(
                             "success", false,
-                            "message", e.getMessage()
+                            "message", "Credenciais inválidas"
                     ));
         }
     }
@@ -84,26 +129,25 @@ public class AuthController {
     @SecurityRequirement(name = "bearer-auth")
     @ApiResponse(responseCode = "200", description = "Logout realizado com sucesso")
     public ResponseEntity<?> logout(
-            @RequestHeader("Authorization") String authHeader,
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
             HttpServletRequest request) {
 
         try {
-            String token = extractTokenFromHeader(authHeader);
-            authService.logout(token, request);
-
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "message", "Logout realizado com sucesso"
-            ));
+            // O header deixou de ser obrigatório: com cookie httpOnly o front não o envia.
+            String token = authHeader != null ? extractTokenFromHeader(authHeader)
+                                              : cookieValue(request, ACCESS_COOKIE);
+            if (token != null) authService.logout(token, request);
 
         } catch (Exception e) {
             log.error("Erro no logout", e);
-            // Logout sempre retorna sucesso para o cliente
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "message", "Logout realizado"
-            ));
         }
+
+        // Logout sempre responde sucesso E sempre apaga os cookies, mesmo se a
+        // invalidação no servidor falhar — senão a sessão ficaria presa no browser.
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, authCookie(ACCESS_COOKIE, null, 0, "/").toString())
+                .header(HttpHeaders.SET_COOKIE, authCookie(REFRESH_COOKIE, null, 0, "/api/auth").toString())
+                .body(Map.of("success", true, "message", "Logout realizado com sucesso"));
     }
 
     /**
@@ -117,23 +161,40 @@ public class AuthController {
             @ApiResponse(responseCode = "401", description = "Refresh token inválido ou expirado")
     })
     public ResponseEntity<?> refresh(
-            @Valid @RequestBody RefreshTokenRequestDTO request,
+            @RequestBody(required = false) RefreshTokenRequestDTO request,
             HttpServletRequest httpRequest) {
 
         log.debug("Renovação de token solicitada");
 
         try {
-            RefreshTokenResponseDTO response = authService.refreshToken(request, httpRequest);
-            return ResponseEntity.ok(response);
+            // Corpo opcional: com cookie httpOnly o refresh token não passa mais pelo JS.
+            // O @Valid saiu daqui porque @NotBlank rejeitaria o corpo ausente com 400.
+            String refreshToken = (request != null && request.getRefreshToken() != null
+                    && !request.getRefreshToken().isBlank())
+                    ? request.getRefreshToken()
+                    : cookieValue(httpRequest, REFRESH_COOKIE);
+
+            if (refreshToken == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("success", false, "message", "Refresh token ausente"));
+            }
+
+            RefreshTokenResponseDTO response = authService.refreshToken(
+                    new RefreshTokenRequestDTO(refreshToken), httpRequest);
+
+            long expiraEm = response.getExpiresIn() != null ? response.getExpiresIn() : 3600L;
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.SET_COOKIE,
+                            authCookie(ACCESS_COOKIE, response.getAccessToken(), expiraEm, "/").toString())
+                    .header(HttpHeaders.SET_COOKIE,
+                            authCookie(REFRESH_COOKIE, response.getRefreshToken(), 604800L, "/api/auth").toString())
+                    .body(response);
 
         } catch (Exception e) {
-            log.error("Erro ao renovar token: {}", e.getMessage());
+            log.error("Erro ao renovar token", e);
 
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of(
-                            "success", false,
-                            "message", e.getMessage()
-                    ));
+                    .body(Map.of("success", false, "message", "Sessão expirada"));
         }
     }
 

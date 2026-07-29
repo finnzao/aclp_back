@@ -6,7 +6,10 @@ import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.Builder;
 import lombok.Data;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -19,7 +22,10 @@ import java.util.*;
 
 @Slf4j
 @RestControllerAdvice
+@RequiredArgsConstructor
 public class GlobalExceptionHandler {
+
+    private final Environment environment;
 
     // === CLASSE DE RESPOSTA INTERNA ===
     @Data
@@ -286,8 +292,13 @@ public class GlobalExceptionHandler {
         return ResponseEntity.internalServerError().body(error);
     }
 
+    /**
+     * BUG CORRIGIDO: usava System.getProperty("spring.profiles.active"), que lê propriedade
+     * de JVM (-D...). O profile aqui vem de env var/properties, então retornava sempre o
+     * default "dev" — e a mensagem interna da exceção era exposta ao cliente EM PRODUÇÃO.
+     * O Environment é a única fonte que enxerga os profiles realmente ativos.
+     */
     private boolean isDevEnvironment() {
-        String profile = System.getProperty("spring.profiles.active", "dev");
-        return profile.contains("dev") || profile.contains("test");
+        return environment.acceptsProfiles(Profiles.of("dev", "test"));
     }
 }

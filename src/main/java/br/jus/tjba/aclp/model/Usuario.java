@@ -1,6 +1,8 @@
 package br.jus.tjba.aclp.model;
 
 import br.jus.tjba.aclp.model.enums.TipoUsuario;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -44,6 +46,7 @@ public class Usuario {
 
     @NotBlank(message = "Senha é obrigatória")
     @Column(name = "senha", nullable = false)
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY) // aceita na entrada, nunca serializa na saída
     private String senha;
 
     @NotNull(message = "Tipo é obrigatório")
@@ -98,6 +101,7 @@ public class Usuario {
     private Boolean mfaEnabled = false;
 
     @Column(name = "mfa_secret", length = 100)
+    @JsonIgnore // segredo TOTP: nunca sai da aplicação
     private String mfaSecret;
 
     @Column(name = "email_verificado", nullable = false)
@@ -125,6 +129,7 @@ public class Usuario {
     private LocalDateTime ultimoResetSenha;
 
     @Column(name = "password_reset_token", length = 255)
+    @JsonIgnore // quem lê a listagem de usuários poderia resetar a senha alheia
     private String passwordResetToken;
 
     @Column(name = "password_reset_expiry")

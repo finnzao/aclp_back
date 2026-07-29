@@ -147,6 +147,11 @@ public interface CustodiadoRepository
     @Query("SELECT COUNT(c) FROM Custodiado c WHERE c.status = :status AND c.situacao = 'ATIVO'")
     long countByStatus(@Param("status") StatusComparecimento status);
 
+    /** Inadimplente pela DATA, não pelo campo persistido (que pode estar defasado). */
+    @Query("SELECT COUNT(c) FROM Custodiado c WHERE c.situacao = 'ATIVO' " +
+            "AND (c.status = 'INADIMPLENTE' OR c.proximoComparecimento < CURRENT_DATE)")
+    long countInadimplentesAtivos();
+
     @Query("SELECT c FROM Custodiado c WHERE c.processo = :processo ORDER BY c.nome")
     List<Custodiado> findAllByProcessoIncludingArchived(@Param("processo") String processo);
 
