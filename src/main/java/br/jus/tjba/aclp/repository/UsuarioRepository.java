@@ -16,20 +16,18 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
     // ==================== BUSCA POR EMAIL ====================
 
     /**
-     * Busca usuário por email
-     */
-    Optional<Usuario> findByEmail(String email);
-
-    /**
-     * Verifica se email já existe
-     */
-    boolean existsByEmail(String email);
-
-    /**
-     * Busca usuário por email ignorando case
+     Busca usuário por email.
      */
     @Query("SELECT u FROM Usuario u WHERE LOWER(u.email) = LOWER(:email)")
-    Optional<Usuario> findByEmailIgnoreCase(@Param("email") String email);
+    Optional<Usuario> findByEmail(@Param("email") String email);
+
+    /**
+     * Verifica se email já existe. Mesma normalização de findByEmail — se divergirem,
+     * a checagem de duplicidade deixa passar um par como "a@x" / "A@x" e a busca
+     * subsequente encontra duas linhas para o mesmo login.
+     */
+    @Query("SELECT CASE WHEN COUNT(u) > 0 THEN true ELSE false END FROM Usuario u WHERE LOWER(u.email) = LOWER(:email)")
+    boolean existsByEmail(@Param("email") String email);
 
     // ==================== BUSCA POR STATUS ATIVO ====================
 
@@ -159,7 +157,7 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
     /**
      * Verifica se existe outro usuário com o mesmo email (exceto o próprio)
      */
-    @Query("SELECT CASE WHEN COUNT(u) > 0 THEN true ELSE false END FROM Usuario u WHERE u.email = :email AND u.id <> :id")
+    @Query("SELECT CASE WHEN COUNT(u) > 0 THEN true ELSE false END FROM Usuario u WHERE LOWER(u.email) = LOWER(:email) AND u.id <> :id")
     boolean existsByEmailAndIdNot(@Param("email") String email, @Param("id") Long id);
 
     // ==================== BUSCA PARA CONVITES ====================
@@ -173,7 +171,7 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
     /**
      * Busca usuário por email e não ativado
      */
-    @Query("SELECT u FROM Usuario u WHERE u.email = :email AND u.ativo = false")
+    @Query("SELECT u FROM Usuario u WHERE LOWER(u.email) = LOWER(:email) AND u.ativo = false")
     Optional<Usuario> findByEmailAndAtivoFalse(@Param("email") String email);
 
 }
