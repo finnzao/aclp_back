@@ -1,6 +1,7 @@
 package br.jus.tjba.aclp.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -20,7 +21,9 @@ public class AlterarSenhaDTO {
     private String senhaAtual;
 
     @NotBlank(message = "Nova senha é obrigatória")
-    @Size(min = 6, message = "Nova senha deve ter no mínimo 6 caracteres")
+    @Size(min = PoliticaSenha.TAMANHO_MINIMO, max = PoliticaSenha.TAMANHO_MAXIMO,
+            message = PoliticaSenha.MENSAGEM_TAMANHO)
+    @Pattern(regexp = PoliticaSenha.REGEX, message = PoliticaSenha.MENSAGEM_COMPOSICAO)
     private String novaSenha;
 
     @NotBlank(message = "Confirmação de senha é obrigatória")

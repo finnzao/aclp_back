@@ -63,9 +63,15 @@ public class CadastroInicialDTO {
 
     // ======================== 3. DADOS PROCESSUAIS ========================
 
+    /**
+     * Número CNJ. O formato é o mesmo exigido em ProcessoDTO e CustodiadoCreateDTO —
+     * antes esta rota aceitava qualquer sequência de dígitos, pontos e hífens, então
+     * o mesmo processo entrava com máscara diferente conforme a tela usada e as buscas
+     * por número deixavam de casar. O formulário do frontend já envia mascarado.
+     */
     @NotBlank(message = "Número do processo é obrigatório")
-    @Pattern(regexp = "[\\d.-]+",
-            message = "Processo deve conter apenas números, pontos e hífens")
+    @Pattern(regexp = "\\d{7}-\\d{2}\\.\\d{4}\\.\\d{1}\\.\\d{2}\\.\\d{4}",
+            message = "Processo deve ter o formato CNJ: 0000000-00.0000.0.00.0000")
     private String processo;
 
     @NotBlank(message = "Vara é obrigatória")

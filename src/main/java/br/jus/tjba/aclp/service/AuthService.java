@@ -1,6 +1,7 @@
 package br.jus.tjba.aclp.service;
 
 import br.jus.tjba.aclp.dto.AuthDTO.*;
+import br.jus.tjba.aclp.dto.PoliticaSenha;
 import br.jus.tjba.aclp.model.Usuario;
 import br.jus.tjba.aclp.model.RefreshToken;
 import br.jus.tjba.aclp.model.LoginAttempt;
@@ -26,6 +27,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletRequest;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
@@ -74,6 +76,23 @@ public class AuthService {
 
     private final SecureRandom secureRandom = new SecureRandom();
 
+    /**
+     * Impede subir com MFA "ligado" enquanto ele não existe.
+     *
+     * A propriedade promete um segundo fator que nenhum código verifica. Aceitá-la
+     * daria a operadores a impressão de proteção que não há — e é o tipo de engano
+     * que só aparece depois de um incidente. Mesma postura fail-closed do middleware
+     * do frontend quando falta JWT_SECRET.
+     */
+    @PostConstruct
+    void validarConfiguracaoMfa() {
+        if (mfaEnabled) {
+            throw new IllegalStateException(
+                    "aclp.auth.mfa-enabled=true, mas a autenticacao multifator nao esta implementada. " +
+                            "Defina a propriedade como false ate que o TOTP seja implementado.");
+        }
+    }
+
     // =====================================================================
     // FIX #6: Job para limpeza de sessões expiradas (a cada 5 minutos)
     // Evita memory leak progressivo no ConcurrentHashMap
@@ -115,28 +134,22 @@ public class AuthService {
                     new UsernamePasswordAuthenticationToken(request.getEmail(), request.getSenha())
             );
 
-            // =====================================================================
-            // FIX #3 + #7: MFA corrigido
-            // - Se MFA está habilitado e não enviou código, retorna requiresMfa
-            // - Se MFA está habilitado e enviou código inválido, lança exceção
-            // - Se MFA está habilitado e código válido, continua o fluxo normal
-            //   (antes retornava null, causando NullPointerException)
-            // - validateMfaCode agora lança UnsupportedOperationException
-            //   (MFA não está implementado, não deve aceitar qualquer código)
-            // =====================================================================
-            if (usuario.getMfaEnabled() && mfaEnabled) {
-                if (request.getMfaCode() == null || request.getMfaCode().isEmpty()) {
-                    return LoginResponseDTO.builder()
-                            .success(false)
-                            .requiresMfa(true)
-                            .message("Codigo de autenticacao necessario")
-                            .build();
-                }
-
-                if (!validateMfaCode(usuario, request.getMfaCode())) {
-                    throw new AuthenticationException("Codigo de autenticacao invalido");
-                }
-                // MFA válido — continua o fluxo normal de login abaixo
+            // MFA não está implementado: não há verificação TOTP nem provisionamento de
+            // segredo (a coluna mfa_secret nunca é preenchida). A conta com mfa_enabled=true
+            // não pode ser autenticada — deixar passar seria ignorar um segundo fator que o
+            // usuário pediu, e prosseguir para uma validação inexistente devolvia erro
+            // genérico de servidor, sem dizer o que fazer. Fail-closed, com saída acionável.
+            //
+            // A checagem fica DEPOIS de authenticate() de propósito: revelar antes quais
+            // contas têm MFA daria um oráculo de enumeração a quem não sabe a senha.
+            //
+            // Ao implementar TOTP, este bloco volta a ser o fluxo de desafio/resposta.
+            if (Boolean.TRUE.equals(usuario.getMfaEnabled())) {
+                log.warn("Login bloqueado: MFA habilitado para {} mas não implementado no sistema",
+                        usuario.getEmail());
+                throw new AuthenticationException(
+                        "Autenticacao multifator esta habilitada nesta conta, mas ainda nao foi " +
+                                "implementada no sistema. Peca a um administrador para desativa-la.");
             }
 
             handleConcurrentSessions(usuario, request.isForceLogin());
@@ -599,22 +612,12 @@ public class AuthService {
         return token.getCreatedAt().isBefore(LocalDateTime.now().minusDays(1));
     }
 
-    // =====================================================================
-    // FIX #3: MFA validateMfaCode agora rejeita tudo (não está implementado)
-    // Antes retornava true sempre — qualquer código seria aceito.
-    // Agora lança exceção explicando que MFA não está implementado.
-    // Quando for implementar TOTP, substituir este método.
-    // =====================================================================
-    private boolean validateMfaCode(Usuario usuario, String code) {
-        // MFA ainda não implementado — rejeitar para evitar bypass de segurança
-        log.warn("Tentativa de validação MFA para usuario {} mas MFA não está implementado", usuario.getEmail());
-        throw new UnsupportedOperationException(
-                "Autenticação multifator (MFA) ainda não está implementada. " +
-                        "Desative o MFA para este usuário ou aguarde a implementação.");
-    }
-
+    /**
+     * Espelha {@link br.jus.tjba.aclp.dto.PoliticaSenha} em mensagens por regra: o DTO
+     * barra antes, mas quando falha diz só qual política foi violada, não qual regra.
+     */
     private void validatePasswordStrength(String password) {
-        if (password == null || password.length() < 8) {
+        if (password == null || password.length() < PoliticaSenha.TAMANHO_MINIMO) {
             throw new IllegalArgumentException("Senha deve ter pelo menos 8 caracteres");
         }
 
@@ -630,7 +633,7 @@ public class AuthService {
             throw new IllegalArgumentException("Senha deve conter pelo menos um numero");
         }
 
-        if (!password.matches(".*[@$!%*?&#].*")) {
+        if (!password.matches(".*[^A-Za-z0-9].*")) {
             throw new IllegalArgumentException("Senha deve conter pelo menos um caractere especial");
         }
     }

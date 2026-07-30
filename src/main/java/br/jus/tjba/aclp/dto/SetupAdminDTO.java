@@ -24,9 +24,9 @@ public class SetupAdminDTO {
     private String email;
 
     @NotBlank(message = "Senha é obrigatória")
-    @Size(min = 8, max = 100, message = "Senha deve ter entre 8 e 100 caracteres")
-    @Pattern(regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]+$",
-            message = "Senha deve conter: 1 minúscula, 1 maiúscula, 1 número e 1 símbolo (@$!%*?&)")
+    @Size(min = PoliticaSenha.TAMANHO_MINIMO, max = PoliticaSenha.TAMANHO_MAXIMO,
+            message = PoliticaSenha.MENSAGEM_TAMANHO)
+    @Pattern(regexp = PoliticaSenha.REGEX, message = PoliticaSenha.MENSAGEM_COMPOSICAO)
     private String senha;
 
     @NotBlank(message = "Confirmação de senha é obrigatória")
@@ -78,15 +78,10 @@ public class SetupAdminDTO {
      * Valida força da senha
      */
     public boolean isSenhaForte() {
-        if (senha == null || senha.length() < 8) {
+        if (senha == null || senha.length() < PoliticaSenha.TAMANHO_MINIMO) {
             return false;
         }
 
-        boolean temMinuscula = senha.chars().anyMatch(Character::isLowerCase);
-        boolean temMaiuscula = senha.chars().anyMatch(Character::isUpperCase);
-        boolean temNumero = senha.chars().anyMatch(Character::isDigit);
-        boolean temSimbolo = senha.chars().anyMatch(ch -> "@$!%*?&".indexOf(ch) >= 0);
-
-        return temMinuscula && temMaiuscula && temNumero && temSimbolo;
+        return senha.matches(PoliticaSenha.REGEX);
     }
 }

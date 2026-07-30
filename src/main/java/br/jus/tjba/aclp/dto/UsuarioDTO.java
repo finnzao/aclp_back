@@ -4,6 +4,8 @@ import br.jus.tjba.aclp.model.enums.TipoUsuario;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -25,6 +27,9 @@ public class UsuarioDTO {
     private String email;
 
     @NotBlank(message = "Senha é obrigatória")
+    @Size(min = PoliticaSenha.TAMANHO_MINIMO, max = PoliticaSenha.TAMANHO_MAXIMO,
+            message = PoliticaSenha.MENSAGEM_TAMANHO)
+    @Pattern(regexp = PoliticaSenha.REGEX, message = PoliticaSenha.MENSAGEM_COMPOSICAO)
     private String senha;
 
     @NotNull(message = "Tipo é obrigatório")

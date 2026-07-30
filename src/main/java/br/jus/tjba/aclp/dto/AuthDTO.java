@@ -169,9 +169,9 @@ public class AuthDTO {
         private String token;
 
         @NotBlank(message = "Nova senha é obrigatória")
-        @Size(min = 8, message = "Senha deve ter pelo menos 8 caracteres")
-        @Pattern(regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&#])[A-Za-z\\d@$!%*?&#]+$",
-                message = "Senha deve conter: maiúscula, minúscula, número e símbolo")
+        @Size(min = PoliticaSenha.TAMANHO_MINIMO, max = PoliticaSenha.TAMANHO_MAXIMO,
+                message = PoliticaSenha.MENSAGEM_TAMANHO)
+        @Pattern(regexp = PoliticaSenha.REGEX, message = PoliticaSenha.MENSAGEM_COMPOSICAO)
         private String novaSenha;
 
         @NotBlank(message = "Confirmação de senha é obrigatória")
@@ -195,9 +195,9 @@ public class AuthDTO {
         private String senhaAtual;
 
         @NotBlank(message = "Nova senha é obrigatória")
-        @Size(min = 8, message = "Senha deve ter pelo menos 8 caracteres")
-        @Pattern(regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&#])[A-Za-z\\d@$!%*?&#]+$",
-                message = "Senha deve conter: maiúscula, minúscula, número e símbolo")
+        @Size(min = PoliticaSenha.TAMANHO_MINIMO, max = PoliticaSenha.TAMANHO_MAXIMO,
+                message = PoliticaSenha.MENSAGEM_TAMANHO)
+        @Pattern(regexp = PoliticaSenha.REGEX, message = PoliticaSenha.MENSAGEM_COMPOSICAO)
         private String novaSenha;
 
         @NotBlank(message = "Confirmação de senha é obrigatória")
