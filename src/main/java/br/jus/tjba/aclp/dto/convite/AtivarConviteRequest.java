@@ -1,6 +1,8 @@
 package br.jus.tjba.aclp.dto.convite;
 
+import br.jus.tjba.aclp.dto.PoliticaSenha;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Builder;
 import lombok.Data;
@@ -16,7 +18,9 @@ public class AtivarConviteRequest {
     private String nome;
 
     @NotBlank(message = "Senha é obrigatória")
-    @Size(min = 8, message = "Senha deve ter no mínimo 8 caracteres")
+    @Size(min = PoliticaSenha.TAMANHO_MINIMO, max = PoliticaSenha.TAMANHO_MAXIMO,
+            message = PoliticaSenha.MENSAGEM_TAMANHO)
+    @Pattern(regexp = PoliticaSenha.REGEX, message = PoliticaSenha.MENSAGEM_COMPOSICAO)
     private String senha;
 
     @NotBlank(message = "Confirmação de senha é obrigatória")
