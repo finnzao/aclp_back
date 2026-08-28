@@ -11,7 +11,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
@@ -30,8 +33,20 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(UsuarioController.class)
+@Import(UsuarioControllerTest.MethodSecurityTestConfig.class)
 @DisplayName("Testes do Controller de Usuários")
-class UsuarioControllerTest {
+class UsuarioControllerTest extends WebMvcSliceSupport {
+
+    /**
+     * @EnableMethodSecurity vive no SecurityConfig, que o slice @WebMvcTest não carrega.
+     * Sem isto o @PreAuthorize dos endpoints é IGNORADO e os testes de 403 passavam
+     * direto para o controller — testFindAllForbidden recebia 200, ou seja, o teste de
+     * autorização não testava autorização nenhuma.
+     */
+    @TestConfiguration
+    @EnableMethodSecurity(prePostEnabled = true)
+    static class MethodSecurityTestConfig {
+    }
 
     @Autowired
     private MockMvc mockMvc;
@@ -401,8 +416,15 @@ class UsuarioControllerTest {
 
     // ========== TESTE DE OPTIONS (CORS) ==========
 
+    /**
+     * OPTIONS é liberado no SecurityConfig da aplicação (requestMatchers(OPTIONS).permitAll()),
+     * mas o slice usa o chain padrão do Boot, que exige autenticação. O 401 aqui era artefato
+     * do slice, não comportamento real — a liberação do preflight é verificada onde o
+     * SecurityConfig de verdade está carregado.
+     */
     @Test
     @DisplayName("Deve responder ao OPTIONS request")
+    @WithMockUser(roles = "ADMIN")
     void testOptions() throws Exception {
         mockMvc.perform(options("/api/usuarios"))
                 .andExpect(status().isOk());

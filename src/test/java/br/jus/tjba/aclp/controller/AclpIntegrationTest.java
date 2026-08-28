@@ -11,16 +11,17 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 
 import static org.hamcrest.Matchers.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -29,13 +30,29 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @TestPropertySource(properties = {
-        "spring.datasource.url=jdbc:h2:mem:testdb",
+        // driver-class-name junto da URL: application.properties fixa o driver do
+        // PostgreSQL e ele venceria só a troca de URL, deixando o dialect insolúvel.
+        "spring.datasource.url=jdbc:h2:mem:testdb;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+        "spring.datasource.driver-class-name=org.h2.Driver",
+        "spring.datasource.username=sa",
+        "spring.datasource.password=",
+        "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
         "spring.jpa.hibernate.ddl-auto=create-drop",
+        "spring.flyway.enabled=false",
         "aclp.email.enabled=false"
 })
+// Escrito antes da autenticacao existir: chamava tudo anonimo e, com o
+// SecurityConfig real carregado (.anyRequest().authenticated()), todo endpoint
+// respondia 403. ADMIN porque o fluxo passa por /api/usuarios, que exige ADMIN.
+// CSRF esta ativo: toda requisicao mutavel leva .with(csrf()).
+@WithMockUser(roles = {"ADMIN", "USUARIO"})
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @DisplayName("Teste de Integração Completo do Sistema ACLP")
 class AclpIntegrationTest {
+
+    // Sem @Transactional nos metodos: esta classe e um fluxo encadeado (@Order +
+    // campos static com os IDs). O rollback por teste apagava o que o passo
+    // seguinte precisava encontrar.
 
     @Autowired
     private MockMvc mockMvc;
@@ -43,6 +60,7 @@ class AclpIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    private static String custodiadoPublicId;
     private static Long custodiadoId;
     private static Long usuarioId;
     private static Long comparecimentoId;
@@ -63,7 +81,6 @@ class AclpIntegrationTest {
 
     @Test
     @Order(2)
-    @Transactional
     @DisplayName("Deve criar um usuário administrador")
     void testCreateAdminUser() throws Exception {
         UsuarioDTO admin = UsuarioDTO.builder()
@@ -75,6 +92,7 @@ class AclpIntegrationTest {
                 .build();
 
         MvcResult result = mockMvc.perform(post("/api/usuarios")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(admin)))
                 .andExpect(status().isCreated())
@@ -101,20 +119,21 @@ class AclpIntegrationTest {
 
     @Test
     @Order(4)
-    @Transactional
     @DisplayName("Deve criar um custodiado com endereço completo")
     void testCreateCustodiado() throws Exception {
         CustodiadoDTO custodiado = CustodiadoDTO.builder()
                 .nome("João Pedro Silva")
-                .cpf("123.456.789-00")
+                .cpf("529.982.247-25")
                 .rg("1234567")
                 .contato("(71) 98765-4321")
                 .processo("0000001-00.2024.8.05.0001")
                 .vara("1ª Vara Criminal")
                 .comarca("Salvador")
-                .dataDecisao(LocalDate.of(2024, 1, 15))
+                .dataDecisao(LocalDate.now().minusMonths(2))
                 .periodicidade(30)
-                .dataComparecimentoInicial(LocalDate.of(2024, 2, 1))
+                // Relativa ao hoje: data fixa deixaria o proximo comparecimento no
+                // passado e o custodiado nasceria INADIMPLENTE.
+                .dataComparecimentoInicial(LocalDate.now().minusDays(5))
                 .observacoes("Custodiado em liberdade provisória")
                 // Endereço obrigatório
                 .cep("40070-110")
@@ -127,46 +146,49 @@ class AclpIntegrationTest {
                 .build();
 
         MvcResult result = mockMvc.perform(post("/api/custodiados")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(custodiado)))
-                .andExpect(status().isCreated())
+                                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.success", is(true)))
-                .andExpect(jsonPath("$.data.nome", is("João Pedro Silva")))
+                // O servico normaliza o nome para maiusculas ao salvar.
+                .andExpect(jsonPath("$.data.nome", is("JOÃO PEDRO SILVA")))
                 .andExpect(jsonPath("$.data.processo", is("0000001-00.2024.8.05.0001")))
                 .andExpect(jsonPath("$.data.status", is("EM_CONFORMIDADE")))
                 .andReturn();
 
         String response = result.getResponse().getContentAsString();
-        custodiadoId = objectMapper.readTree(response).path("data").path("id").asLong();
+        // CustodiadoResponseDTO.id passou a ser o publicId (UUID em String).
+        custodiadoPublicId = objectMapper.readTree(response).path("data").path("id").asText();
     }
 
     @Test
     @Order(5)
     @DisplayName("Deve buscar custodiado criado")
     void testGetCustodiado() throws Exception {
-        mockMvc.perform(get("/api/custodiados/" + custodiadoId))
+        mockMvc.perform(get("/api/custodiados/" + custodiadoPublicId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success", is(true)))
-                .andExpect(jsonPath("$.data.id", is(custodiadoId.intValue())))
-                .andExpect(jsonPath("$.data.nome", is("João Pedro Silva")));
+                .andExpect(jsonPath("$.data.id", is(custodiadoPublicId)))
+                .andExpect(jsonPath("$.data.nome", is("JOÃO PEDRO SILVA")));
+
+        // O id numerico nao vem em CustodiadoResponseDTO, mas os endpoints de
+        // comparecimento e endereco ainda o exigem. A listagem expoe numericId.
+        MvcResult lista = mockMvc.perform(get("/api/custodiados"))
+                .andExpect(status().isOk())
+                .andReturn();
+        custodiadoId = objectMapper.readTree(lista.getResponse().getContentAsString())
+                .path("data").get(0).path("numericId").asLong();
     }
 
-    @Test
-    @Order(6)
-    @DisplayName("Deve buscar custodiados por processo")
-    void testGetCustodiadoByProcesso() throws Exception {
-        mockMvc.perform(get("/api/custodiados/processo/0000001-00.2024.8.05.0001"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success", is(true)))
-                .andExpect(jsonPath("$.data", hasSize(greaterThan(0))))
-                .andExpect(jsonPath("$.data[0].processo", is("0000001-00.2024.8.05.0001")));
-    }
+    // Removido testGetCustodiadoByProcesso: GET /api/custodiados/processo/{n} nao
+    // existe mais — a busca por numero de processo esta em ProcessoController
+    // (GET /api/processos/numero/{numero}).
 
     // ========== TESTES DE COMPARECIMENTOS ==========
 
     @Test
     @Order(7)
-    @Transactional
     @DisplayName("Deve registrar comparecimento presencial")
     void testRegisterComparecimento() throws Exception {
         ComparecimentoDTO comparecimento = ComparecimentoDTO.builder()
@@ -179,7 +201,8 @@ class AclpIntegrationTest {
                 .mudancaEndereco(false)
                 .build();
 
-        MvcResult result = mockMvc.perform(post("/api/comparecimentos")
+        MvcResult result = mockMvc.perform(post("/api/comparecimentos/registrar")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(comparecimento)))
                 .andExpect(status().isCreated())
@@ -204,7 +227,6 @@ class AclpIntegrationTest {
 
     @Test
     @Order(9)
-    @Transactional
     @DisplayName("Deve registrar comparecimento com mudança de endereço")
     void testRegisterComparecimentoComMudancaEndereco() throws Exception {
         ComparecimentoDTO.EnderecoDTO novoEndereco = ComparecimentoDTO.EnderecoDTO.builder()
@@ -228,7 +250,8 @@ class AclpIntegrationTest {
                 .novoEndereco(novoEndereco)
                 .build();
 
-        mockMvc.perform(post("/api/comparecimentos")
+        mockMvc.perform(post("/api/comparecimentos/registrar")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(comparecimento)))
                 .andExpect(status().isCreated())
@@ -264,7 +287,8 @@ class AclpIntegrationTest {
     @Order(12)
     @DisplayName("Deve verificar inadimplentes")
     void testVerificarInadimplentes() throws Exception {
-        mockMvc.perform(post("/api/status/verificar-inadimplentes"))
+        mockMvc.perform(post("/api/status/verificar-inadimplentes")
+                        .with(csrf()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success", is(true)))
                 .andExpect(jsonPath("$.data.pessoasMarcadas", isA(Number.class)));
@@ -334,7 +358,7 @@ class AclpIntegrationTest {
     void testCreateCustodiadoDuplicateCPF() throws Exception {
         CustodiadoDTO custodiado = CustodiadoDTO.builder()
                 .nome("Outro Nome")
-                .cpf("123.456.789-00") // CPF já cadastrado
+                .cpf("529.982.247-25") // CPF já cadastrado
                 .contato("(71) 99999-9999")
                 .processo("0000002-00.2024.8.05.0001")
                 .vara("2ª Vara Criminal")
@@ -350,6 +374,7 @@ class AclpIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/custodiados")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(custodiado)))
                 .andExpect(status().isBadRequest())
@@ -369,6 +394,7 @@ class AclpIntegrationTest {
                 .build();
 
         mockMvc.perform(post("/api/usuarios")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(usuario)))
                 .andExpect(status().isBadRequest())
@@ -380,7 +406,6 @@ class AclpIntegrationTest {
 
     @Test
     @Order(20)
-    @Transactional
     @DisplayName("Deve limpar dados de teste")
     void testCleanup() throws Exception {
         // Este teste não faz nada, mas garante que o @Transactional

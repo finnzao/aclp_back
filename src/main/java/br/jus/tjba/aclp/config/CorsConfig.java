@@ -1,6 +1,7 @@
 package br.jus.tjba.aclp.config;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -60,7 +61,10 @@ public class CorsConfig {
         configuration.setAllowedHeaders(Arrays.asList(
                 "Authorization", "Content-Type", "Accept", "Origin",
                 "Access-Control-Request-Method", "Access-Control-Request-Headers",
-                "X-Requested-With", "X-CSRF-TOKEN"
+                // X-XSRF-TOKEN: header do padrão double-submit emitido pelo
+                // CookieCsrfTokenRepository. Sem ele na allowlist, o preflight
+                // reprova toda requisição mutável vinda de outra origem.
+                "X-Requested-With", "X-CSRF-TOKEN", "X-XSRF-TOKEN"
         ));
 
         configuration.setExposedHeaders(Arrays.asList(
@@ -77,9 +81,23 @@ public class CorsConfig {
         return source;
     }
 
+    /**
+     * O SecurityConfig já ativa CORS via .cors(), e o Spring Security monta o próprio
+     * filtro a partir do CorsConfigurationSource acima. Este bean existe para os
+     * caminhos que não passam pelo chain do Security, mas o Boot o auto-registraria
+     * no chain do servlet — resultando em CORS avaliado DUAS vezes por requisição.
+     * O FilterRegistrationBean abaixo desliga essa auto-registro.
+     */
     @Bean
     public CorsFilter corsFilter() {
         return new CorsFilter(corsConfigurationSource());
+    }
+
+    @Bean
+    public FilterRegistrationBean<CorsFilter> desabilitarRegistroCors(CorsFilter filtro) {
+        FilterRegistrationBean<CorsFilter> registro = new FilterRegistrationBean<>(filtro);
+        registro.setEnabled(false);
+        return registro;
     }
 
     private boolean isDevProfile() {

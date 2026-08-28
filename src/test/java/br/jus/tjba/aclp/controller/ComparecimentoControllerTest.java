@@ -8,6 +8,7 @@ import br.jus.tjba.aclp.service.StatusSchedulerService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
@@ -28,8 +29,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(ComparecimentoController.class)
+// Sem filtros de seguranca: o slice @WebMvcTest nao carrega o SecurityConfig da
+// aplicacao (usa o chain padrao do Boot), entao autenticar aqui nao testaria a
+// seguranca real — so obrigaria @WithMockUser e csrf() em cada metodo por causa de
+// um chain que nem e o de producao. A seguranca de verdade e coberta por
+// SegurancaOwaspTest, que sobe o contexto completo. @PreAuthorize continua ativo.
+@AutoConfigureMockMvc(addFilters = false)
 @DisplayName("Testes do Controller de Comparecimentos")
-class ComparecimentoControllerTest {
+class ComparecimentoControllerTest extends WebMvcSliceSupport {
 
     @Autowired
     private MockMvc mockMvc;
@@ -145,7 +152,7 @@ class ComparecimentoControllerTest {
         mockMvc.perform(get("/api/comparecimentos/custodiado/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success", is(true)))
-                .andExpect(jsonPath("$.message", is("Histórico de comparecimentos encontrado")))
+                .andExpect(jsonPath("$.message", is("Histórico encontrado")))
                 .andExpect(jsonPath("$.data", hasSize(1)))
                 .andExpect(jsonPath("$.data[0].id", is(1)));
     }
@@ -159,7 +166,9 @@ class ComparecimentoControllerTest {
         mockMvc.perform(get("/api/comparecimentos/custodiado/0"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success", is(false)))
-                .andExpect(jsonPath("$.message", containsString("número positivo")));
+                // ApiResponseUtil.error() monta {success, error, timestamp}: em resposta
+                // de erro o campo e 'error', nao 'message'.
+                .andExpect(jsonPath("$.error", containsString("número positivo")));
     }
 
     @Test
@@ -189,7 +198,7 @@ class ComparecimentoControllerTest {
         mockMvc.perform(get("/api/comparecimentos/hoje"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success", is(true)))
-                .andExpect(jsonPath("$.message", is("Comparecimentos de hoje encontrados")))
+                .andExpect(jsonPath("$.message", is("Comparecimentos de hoje")))
                 .andExpect(jsonPath("$.data", hasSize(1)));
     }
 
@@ -242,7 +251,7 @@ class ComparecimentoControllerTest {
                         .content(novasObservacoes))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success", is(true)))
-                .andExpect(jsonPath("$.message", is("Observações atualizadas com sucesso")))
+                .andExpect(jsonPath("$.message", is("Observações atualizadas")))
                 .andExpect(jsonPath("$.data.observacoes", is(novasObservacoes)));
     }
 
@@ -254,7 +263,7 @@ class ComparecimentoControllerTest {
         mockMvc.perform(post("/api/comparecimentos/verificar-inadimplentes"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success", is(true)))
-                .andExpect(jsonPath("$.message", containsString("3 custodiado(s)")))
+                .andExpect(jsonPath("$.message", containsString("3 marcados")))
                 .andExpect(jsonPath("$.data.custodiadosMarcados", is(3)));
     }
 
@@ -361,7 +370,8 @@ class ComparecimentoControllerTest {
     @Test
     @DisplayName("Deve responder ao OPTIONS request")
     void testOptions() throws Exception {
-        mockMvc.perform(options("/api/comparecimentos"))
+        // Caminho mapeado: /api/comparecimentos (raiz) nao tem handler, so os sub-recursos.
+        mockMvc.perform(options("/api/comparecimentos/hoje"))
                 .andExpect(status().isOk());
     }
 }

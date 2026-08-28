@@ -7,6 +7,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -22,8 +23,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(HistoricoEnderecoController.class)
+// Sem filtros de seguranca: o slice @WebMvcTest nao carrega o SecurityConfig da
+// aplicacao (usa o chain padrao do Boot), entao autenticar aqui nao testaria a
+// seguranca real — so obrigaria @WithMockUser e csrf() em cada metodo por causa de
+// um chain que nem e o de producao. A seguranca de verdade e coberta por
+// SegurancaOwaspTest, que sobe o contexto completo. @PreAuthorize continua ativo.
+@AutoConfigureMockMvc(addFilters = false)
 @DisplayName("Testes do Controller de Histórico de Endereços")
-class HistoricoEnderecoControllerTest {
+class HistoricoEnderecoControllerTest extends WebMvcSliceSupport {
 
     @Autowired
     private MockMvc mockMvc;

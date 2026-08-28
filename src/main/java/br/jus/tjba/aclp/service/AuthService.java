@@ -1,4 +1,5 @@
 package br.jus.tjba.aclp.service;
+import br.jus.tjba.aclp.util.ClientIpUtil;
 
 import br.jus.tjba.aclp.dto.AuthDTO.*;
 import br.jus.tjba.aclp.model.Usuario;
@@ -100,8 +101,9 @@ public class AuthService {
         log.info("Tentativa de login - Email: {}, IP: {}", request.getEmail(), ipAddress);
 
         try {
-            checkRateLimiting(ipAddress);
-
+            // Rate limiting saiu daqui para o RateLimitFilter: lá ele responde 429 (aqui
+            // virava 401 no controller), cobre também forgot/reset-password e não gasta
+            // um COUNT em login_attempts por tentativa.
             Usuario usuario = usuarioRepository.findByEmail(request.getEmail())
                     .orElseThrow(() -> new BadCredentialsException("Credenciais invalidas"));
 
@@ -480,15 +482,6 @@ public class AuthService {
         log.info("Todas as sessoes invalidadas - Usuario: {}", userEmail);
     }
 
-    private void checkRateLimiting(String ipAddress) {
-        long recentAttempts = loginAttemptRepository.countRecentAttemptsByIp(
-                ipAddress, LocalDateTime.now().minusMinutes(1));
-
-        if (recentAttempts > 10) {
-            throw new AuthenticationException("Muitas tentativas. Aguarde antes de tentar novamente.");
-        }
-    }
-
     private void checkAccountLocked(Usuario usuario) {
         if (usuario.getBloqueadoAte() != null &&
                 usuario.getBloqueadoAte().isAfter(LocalDateTime.now())) {
@@ -642,17 +635,7 @@ public class AuthService {
     }
 
     private String extractIpAddress(HttpServletRequest request) {
-        String xForwardedFor = request.getHeader("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
-            return xForwardedFor.split(",")[0].trim();
-        }
-
-        String xRealIp = request.getHeader("X-Real-IP");
-        if (xRealIp != null && !xRealIp.isEmpty()) {
-            return xRealIp;
-        }
-
-        return request.getRemoteAddr();
+        return ClientIpUtil.extrair(request);
     }
 
     private UsuarioDTO toUsuarioDTO(Usuario usuario) {

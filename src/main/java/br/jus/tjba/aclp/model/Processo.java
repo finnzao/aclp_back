@@ -1,5 +1,6 @@
 package br.jus.tjba.aclp.model;
 
+import br.jus.tjba.aclp.model.enums.NaturezaVinculo;
 import br.jus.tjba.aclp.model.enums.SituacaoProcesso;
 import br.jus.tjba.aclp.model.enums.StatusComparecimento;
 import com.fasterxml.jackson.annotation.JsonFormat;
@@ -37,7 +38,8 @@ import java.util.Objects;
                 @Index(name = "idx_processo_situacao",         columnList = "situacao_processo"),
                 @Index(name = "idx_processo_proximo",          columnList = "proximo_comparecimento"),
                 @Index(name = "idx_processo_status_proximo",   columnList = "status, proximo_comparecimento"),
-                @Index(name = "idx_processo_custodiado_situacao", columnList = "custodiado_id, situacao_processo")
+                @Index(name = "idx_processo_custodiado_situacao", columnList = "custodiado_id, situacao_processo"),
+                @Index(name = "idx_processo_natureza",           columnList = "natureza_vinculo")
         }
 )
 @Data
@@ -117,6 +119,17 @@ public class Processo {
     @Builder.Default
     private SituacaoProcesso situacaoProcesso = SituacaoProcesso.ATIVO;
 
+    /**
+     * Discriminador cautelar × execução de pena. DEFAULT 'CAUTELAR' no banco
+     * garante que linhas pré-existentes continuam se comportando como hoje.
+     */
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(name = "natureza_vinculo", nullable = false, length = 30,
+            columnDefinition = "VARCHAR(30) NOT NULL DEFAULT 'CAUTELAR'")
+    @Builder.Default
+    private NaturezaVinculo naturezaVinculo = NaturezaVinculo.CAUTELAR;
+
     @Size(max = 500)
     @Column(name = "observacoes", length = 500)
     private String observacoes;
@@ -149,6 +162,7 @@ public class Processo {
         if (version == null) version = 0L;
         if (status == null) status = StatusComparecimento.EM_CONFORMIDADE;
         if (situacaoProcesso == null) situacaoProcesso = SituacaoProcesso.ATIVO;
+        if (naturezaVinculo == null) naturezaVinculo = NaturezaVinculo.CAUTELAR;
         if (ultimoComparecimento == null) ultimoComparecimento = dataComparecimentoInicial;
         if (proximoComparecimento == null && situacaoProcesso.isAtivo()) calcularProximoComparecimento();
         atualizarStatusBaseadoEmData(); // nasce coerente com a data (importação de base legada)
@@ -177,6 +191,11 @@ public class Processo {
         } else if (situacaoProcesso.isAtivo()) {
             status = StatusComparecimento.EM_CONFORMIDADE;
         }
+    }
+
+    /** Ponto único para distinguir execução de pena — nunca espalhar comparação de enum por serviço. */
+    public boolean isExecucao() {
+        return naturezaVinculo == NaturezaVinculo.EXECUCAO_REGIME_ABERTO;
     }
 
     public long getDiasAtraso() {

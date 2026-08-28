@@ -9,6 +9,7 @@ import br.jus.tjba.aclp.model.HistoricoComparecimento;
 import br.jus.tjba.aclp.model.HistoricoEndereco;
 import br.jus.tjba.aclp.model.Processo;
 import br.jus.tjba.aclp.model.enums.EstadoBrasil;
+import br.jus.tjba.aclp.model.enums.NaturezaVinculo;
 import br.jus.tjba.aclp.model.enums.SituacaoCustodiado;
 import br.jus.tjba.aclp.model.enums.SituacaoProcesso;
 import br.jus.tjba.aclp.model.enums.StatusComparecimento;
@@ -235,6 +236,8 @@ public class CustodiadoService {
                 .ultimoComparecimento(dataCompInicial)
                 .status(StatusComparecimento.EM_CONFORMIDADE)
                 .situacaoProcesso(SituacaoProcesso.ATIVO)
+                .naturezaVinculo(dto.getNaturezaVinculo() != null
+                        ? dto.getNaturezaVinculo() : NaturezaVinculo.CAUTELAR)
                 .observacoes(dto.getObservacoes())
                 .build();
 

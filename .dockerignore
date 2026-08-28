@@ -1,0 +1,15 @@
+6+3902# O "COPY src ./src" é específico, mas o contexto de build inteiro é enviado ao daemon
+# Docker antes disso. Ignorar target/ e .idea/ deixa o upload do contexto bem menor.
+target
+.idea
+.git
+.gitignore
+Dockerfile
+.dockerignore
+HELP.md
+*.log
+
+# Segredos vêm das variáveis de ambiente do Render.
+.env
+.env.*
+src/main/resources/application-dev.properties

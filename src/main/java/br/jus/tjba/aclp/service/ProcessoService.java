@@ -6,6 +6,7 @@ import br.jus.tjba.aclp.dto.ProcessoResumoDTO;
 import br.jus.tjba.aclp.dto.ProcessoResponseDTO;
 import br.jus.tjba.aclp.model.Custodiado;
 import br.jus.tjba.aclp.model.Processo;
+import br.jus.tjba.aclp.model.enums.NaturezaVinculo;
 import br.jus.tjba.aclp.model.enums.SituacaoProcesso;
 import br.jus.tjba.aclp.model.enums.StatusComparecimento;
 import br.jus.tjba.aclp.repository.CustodiadoRepository;
@@ -122,6 +123,8 @@ public class ProcessoService {
                 .dataComparecimentoInicial(dto.getDataComparecimentoInicial())
                 .ultimoComparecimento(dto.getDataComparecimentoInicial())
                 .status(StatusComparecimento.EM_CONFORMIDADE).situacaoProcesso(SituacaoProcesso.ATIVO)
+                .naturezaVinculo(dto.getNaturezaVinculo() != null
+                        ? dto.getNaturezaVinculo() : NaturezaVinculo.CAUTELAR)
                 .observacoes(dto.getObservacoes()).build();
 
         processo.calcularProximoComparecimento();

@@ -13,9 +13,12 @@ import org.springframework.core.env.Profiles;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -260,6 +263,85 @@ public class GlobalExceptionHandler {
                 .build();
 
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
+
+    /**
+     * Negação de autorização (@PreAuthorize) é lançada dentro do DispatcherServlet, então
+     * este @RestControllerAdvice a captura antes do ExceptionTranslationFilter do Spring
+     * Security. Sem este handler ela caía no handleGeneral abaixo e virava 500:
+     *
+     *   - status errado para o cliente (500 em vez de 403);
+     *   - tentativa de acesso indevido sumia do monitoramento, confundida com falha do servidor;
+     *   - em dev, o handler genérico ainda expunha a mensagem interna da exceção.
+     *
+     * A mensagem é fixa de propósito: dizer QUAL papel faltou entrega o mapa de permissões.
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex,
+                                                            HttpServletRequest request) {
+        log.warn("Acesso negado - Path: {}, Motivo: {}", request.getRequestURI(), ex.getMessage());
+
+        ErrorResponse error = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.FORBIDDEN.value())
+                .error("Forbidden")
+                .code("ACESSO_NEGADO")
+                .message("Você não tem permissão para acessar este recurso")
+                .path(request.getRequestURI())
+                .suggestions(List.of("Verifique se seu perfil possui a permissão necessária"))
+                .build();
+
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+    }
+
+    /**
+     * Parâmetro obrigatório ausente é erro do cliente (400), não do servidor.
+     * Caía no handleGeneral e virava 500 — ruído no log de erros e status enganoso.
+     */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ErrorResponse> handleMissingParam(MissingServletRequestParameterException ex,
+                                                            HttpServletRequest request) {
+        ErrorResponse error = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.BAD_REQUEST.value())
+                .error("Bad Request")
+                .code("PARAMETRO_OBRIGATORIO_AUSENTE")
+                .message("Parâmetro obrigatório não informado: " + ex.getParameterName())
+                .path(request.getRequestURI())
+                .suggestions(List.of("Informe o parâmetro '" + ex.getParameterName() + "' na requisição"))
+                .build();
+
+        return ResponseEntity.badRequest().body(error);
+    }
+
+    /**
+     * Tipo inválido em path/query — por exemplo um valor que não existe no enum, ou
+     * texto onde se espera número. É erro do cliente (400); caía no handleGeneral e
+     * virava 500, poluindo o log de erros do servidor com entrada malformada.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex,
+                                                             HttpServletRequest request) {
+        String esperado = ex.getRequiredType() != null ? ex.getRequiredType().getSimpleName() : "válido";
+
+        List<String> sugestoes = new ArrayList<>();
+        if (ex.getRequiredType() != null && ex.getRequiredType().isEnum()) {
+            sugestoes.add("Valores aceitos: " + Arrays.toString(ex.getRequiredType().getEnumConstants()));
+        } else {
+            sugestoes.add("Informe um valor do tipo " + esperado);
+        }
+
+        ErrorResponse error = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.BAD_REQUEST.value())
+                .error("Bad Request")
+                .code("PARAMETRO_INVALIDO")
+                .message("Valor inválido para o parâmetro '" + ex.getName() + "'")
+                .path(request.getRequestURI())
+                .suggestions(sugestoes)
+                .build();
+
+        return ResponseEntity.badRequest().body(error);
     }
 
     @ExceptionHandler(Exception.class)

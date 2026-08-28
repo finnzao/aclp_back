@@ -1,4 +1,5 @@
 package br.jus.tjba.aclp.service;
+import br.jus.tjba.aclp.util.ClientIpUtil;
 
 import br.jus.tjba.aclp.dto.ConviteDTO.*;
 import br.jus.tjba.aclp.model.Convite;
@@ -555,13 +556,6 @@ public class EmailVerificationService {
     }
 
     private String extractIpAddress(HttpServletRequest request) {
-        if (request == null) {
-            return "unknown";
-        }
-        String xForwardedFor = request.getHeader("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
-            return xForwardedFor.split(",")[0].trim();
-        }
-        return request.getRemoteAddr();
+        return ClientIpUtil.extrair(request);
     }
 }

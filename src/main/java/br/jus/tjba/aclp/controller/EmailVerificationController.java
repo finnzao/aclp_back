@@ -1,4 +1,5 @@
 package br.jus.tjba.aclp.controller;
+import br.jus.tjba.aclp.util.ClientIpUtil;
 
 import br.jus.tjba.aclp.service.EmailVerificationService;
 import br.jus.tjba.aclp.service.EmailVerificationService.*;
@@ -282,23 +283,7 @@ public class EmailVerificationController {
      * Extrai endereço IP do cliente considerando proxies
      */
     private String getClientIpAddress(HttpServletRequest request) {
-        String xForwardedFor = request.getHeader("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
-            // Pegar o primeiro IP da lista (cliente original)
-            return xForwardedFor.split(",")[0].trim();
-        }
-
-        String xRealIp = request.getHeader("X-Real-IP");
-        if (xRealIp != null && !xRealIp.isEmpty()) {
-            return xRealIp;
-        }
-
-        String xOriginalForwardedFor = request.getHeader("X-Original-Forwarded-For");
-        if (xOriginalForwardedFor != null && !xOriginalForwardedFor.isEmpty()) {
-            return xOriginalForwardedFor.split(",")[0].trim();
-        }
-
-        return request.getRemoteAddr();
+        return ClientIpUtil.extrair(request);
     }
 
     /**

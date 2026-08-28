@@ -1,5 +1,6 @@
 package br.jus.tjba.aclp.dto;
 
+import br.jus.tjba.aclp.model.enums.NaturezaVinculo;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
@@ -82,6 +83,9 @@ public class CadastroInicialDTO {
 
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate dataComparecimentoInicial;
+
+    /** Opcional — ausente = CAUTELAR (comportamento atual preservado). */
+    private NaturezaVinculo naturezaVinculo;
 
     // ======================== 4. PERIODICIDADE ========================
 

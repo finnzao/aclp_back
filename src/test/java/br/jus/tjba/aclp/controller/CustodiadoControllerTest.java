@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
@@ -27,8 +28,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(CustodiadoController.class)
+// Sem filtros de seguranca: o slice @WebMvcTest nao carrega o SecurityConfig da
+// aplicacao (usa o chain padrao do Boot), entao autenticar aqui nao testaria a
+// seguranca real — so obrigaria @WithMockUser e csrf() em cada metodo por causa de
+// um chain que nem e o de producao. A seguranca de verdade e coberta por
+// SegurancaOwaspTest, que sobe o contexto completo. @PreAuthorize continua ativo.
+@AutoConfigureMockMvc(addFilters = false)
 @DisplayName("Testes do Controller de Custodiados")
-class CustodiadoControllerTest {
+class CustodiadoControllerTest extends WebMvcSliceSupport {
 
     @Autowired
     private MockMvc mockMvc;
@@ -36,8 +43,17 @@ class CustodiadoControllerTest {
     @MockBean
     private CustodiadoService custodiadoService;
 
+    // CustodiadoController injeta este serviço no construtor — específico deste
+    // controller, por isso fica aqui e não na base compartilhada.
+    @MockBean
+    private br.jus.tjba.aclp.service.HistoricoEnderecoService historicoEnderecoService;
+
     @Autowired
     private ObjectMapper objectMapper;
+
+    // O controller identifica o custodiado por publicId (UUID), nao pelo id numerico.
+    private static final java.util.UUID PUBLIC_ID =
+            java.util.UUID.fromString("11111111-2222-3333-4444-555555555555");
 
     private Custodiado custodiado;
     private CustodiadoDTO custodiadoDTO;
@@ -47,6 +63,7 @@ class CustodiadoControllerTest {
         // Preparar custodiado de teste
         custodiado = Custodiado.builder()
                 .id(1L)
+                .publicId(PUBLIC_ID)
                 .nome("João da Silva")
                 .cpf("123.456.789-00")
                 .rg("1234567")
@@ -58,8 +75,8 @@ class CustodiadoControllerTest {
                 .periodicidade(30)
                 .dataComparecimentoInicial(LocalDate.of(2024, 2, 1))
                 .status(StatusComparecimento.EM_CONFORMIDADE)
-                .ultimoComparecimento(LocalDate.of(2024, 9, 1))
-                .proximoComparecimento(LocalDate.of(2024, 10, 1))
+                .ultimoComparecimento(LocalDate.now().minusDays(10))
+                .proximoComparecimento(LocalDate.now().plusDays(20))
                 .observacoes("Custodiado em conformidade")
                 .build();
 
@@ -87,11 +104,17 @@ class CustodiadoControllerTest {
 
     // ========== TESTES DE LISTAGEM ==========
 
+    // Removidos: testFindByProcesso e testCountByProcesso.
+    // As rotas GET /api/custodiados/processo/{n} e .../count nao existem mais em
+    // nenhum controller — a busca por numero de processo migrou para
+    // ProcessoController (GET /api/processos/numero/{numero}). Os testes exercitavam
+    // endpoints inexistentes e por isso respondiam 500.
+
     @Test
     @DisplayName("Deve listar todos os custodiados")
     void testFindAll() throws Exception {
         List<Custodiado> custodiados = Arrays.asList(custodiado);
-        when(custodiadoService.findAll()).thenReturn(custodiados);
+        when(custodiadoService.findAllActive()).thenReturn(custodiados);
         when(custodiadoService.getEnderecoResumido(1L)).thenReturn("Centro, Salvador - BA");
         when(custodiadoService.getEnderecoCompleto(1L)).thenReturn("Av. Sete de Setembro, 1234, Centro, Salvador - BA");
         when(custodiadoService.getCidadeEstado(1L)).thenReturn("Salvador - BA");
@@ -108,16 +131,17 @@ class CustodiadoControllerTest {
     @Test
     @DisplayName("Deve buscar custodiado por ID")
     void testFindById() throws Exception {
-        when(custodiadoService.findById(1L)).thenReturn(Optional.of(custodiado));
+        when(custodiadoService.findByPublicId(PUBLIC_ID.toString())).thenReturn(Optional.of(custodiado));
         when(custodiadoService.getEnderecoResumido(1L)).thenReturn("Centro, Salvador - BA");
         when(custodiadoService.getEnderecoCompleto(1L)).thenReturn("Av. Sete de Setembro, 1234, Centro, Salvador - BA");
         when(custodiadoService.getCidadeEstado(1L)).thenReturn("Salvador - BA");
 
-        mockMvc.perform(get("/api/custodiados/1"))
+        mockMvc.perform(get("/api/custodiados/" + PUBLIC_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success", is(true)))
-                .andExpect(jsonPath("$.message", is("Custodiado encontrado com sucesso")))
-                .andExpect(jsonPath("$.data.id", is(1)))
+                .andExpect(jsonPath("$.message", is("Custodiado encontrado")))
+                // O DTO expoe id = publicId (UUID) e numericId = id interno.
+                .andExpect(jsonPath("$.data.id", is(PUBLIC_ID.toString())))
                 .andExpect(jsonPath("$.data.nome", is("João da Silva")));
     }
 
@@ -130,22 +154,6 @@ class CustodiadoControllerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.success", is(false)))
                 .andExpect(jsonPath("$.message", containsString("não encontrado")));
-    }
-
-    @Test
-    @DisplayName("Deve buscar custodiados por processo")
-    void testFindByProcesso() throws Exception {
-        List<Custodiado> custodiados = Arrays.asList(custodiado);
-        when(custodiadoService.findByProcesso("0000001-00.2024.8.05.0001")).thenReturn(custodiados);
-        when(custodiadoService.getEnderecoResumido(1L)).thenReturn("Centro, Salvador - BA");
-        when(custodiadoService.getEnderecoCompleto(1L)).thenReturn("Av. Sete de Setembro, 1234, Centro, Salvador - BA");
-        when(custodiadoService.getCidadeEstado(1L)).thenReturn("Salvador - BA");
-
-        mockMvc.perform(get("/api/custodiados/processo/0000001-00.2024.8.05.0001"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success", is(true)))
-                .andExpect(jsonPath("$.data", hasSize(1)))
-                .andExpect(jsonPath("$.data[0].processo", is("0000001-00.2024.8.05.0001")));
     }
 
     // ========== TESTES DE CRIAÇÃO ==========
@@ -163,7 +171,7 @@ class CustodiadoControllerTest {
                         .content(objectMapper.writeValueAsString(custodiadoDTO)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.success", is(true)))
-                .andExpect(jsonPath("$.message", is("Custodiado cadastrado com sucesso")))
+                .andExpect(jsonPath("$.message", is("Custodiado cadastrado")))
                 .andExpect(jsonPath("$.data.nome", is("João da Silva")));
     }
 
@@ -198,17 +206,17 @@ class CustodiadoControllerTest {
     @Test
     @DisplayName("Deve atualizar custodiado")
     void testUpdate() throws Exception {
-        when(custodiadoService.update(eq(1L), any(CustodiadoDTO.class))).thenReturn(custodiado);
+        when(custodiadoService.updateByPublicId(eq(PUBLIC_ID.toString()), any(CustodiadoDTO.class))).thenReturn(custodiado);
         when(custodiadoService.getEnderecoResumido(1L)).thenReturn("Centro, Salvador - BA");
         when(custodiadoService.getEnderecoCompleto(1L)).thenReturn("Av. Sete de Setembro, 1234, Centro, Salvador - BA");
         when(custodiadoService.getCidadeEstado(1L)).thenReturn("Salvador - BA");
 
-        mockMvc.perform(put("/api/custodiados/1")
+        mockMvc.perform(put("/api/custodiados/" + PUBLIC_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(custodiadoDTO)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success", is(true)))
-                .andExpect(jsonPath("$.message", is("Custodiado atualizado com sucesso")));
+                .andExpect(jsonPath("$.message", is("Custodiado atualizado")));
     }
 
     // ========== TESTES DE EXCLUSÃO ==========
@@ -307,19 +315,6 @@ class CustodiadoControllerTest {
     }
 
     // ========== TESTES DE CONTAGEM ==========
-
-    @Test
-    @DisplayName("Deve contar custodiados por processo")
-    void testCountByProcesso() throws Exception {
-        List<Custodiado> custodiados = Arrays.asList(custodiado, custodiado);
-        when(custodiadoService.findByProcesso("0000001-00.2024.8.05.0001")).thenReturn(custodiados);
-
-        mockMvc.perform(get("/api/custodiados/processo/0000001-00.2024.8.05.0001/count"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success", is(true)))
-                .andExpect(jsonPath("$.data", is(2)))
-                .andExpect(jsonPath("$.message", containsString("2 custodiado(s)")));
-    }
 
     // ========== TESTE DE OPTIONS (CORS) ==========
 

@@ -1,6 +1,7 @@
 package br.jus.tjba.aclp.dto;
 
 import br.jus.tjba.aclp.model.Processo;
+import br.jus.tjba.aclp.model.enums.NaturezaVinculo;
 import br.jus.tjba.aclp.model.enums.SituacaoProcesso;
 import br.jus.tjba.aclp.model.enums.StatusComparecimento;
 import com.fasterxml.jackson.annotation.JsonFormat;
@@ -60,6 +61,8 @@ public class ProcessoResponseDTO {
     private LocalDate proximoComparecimento;
 
     private SituacaoProcesso situacaoProcesso;
+    private NaturezaVinculo naturezaVinculo;
+    private String naturezaVinculoDescricao;
     private String observacoes;
 
     private Long diasAtraso;
@@ -105,6 +108,9 @@ public class ProcessoResponseDTO {
                 .ultimoComparecimento(p.getUltimoComparecimento())
                 .proximoComparecimento(p.getProximoComparecimento())
                 .situacaoProcesso(p.getSituacaoProcesso())
+                .naturezaVinculo(p.getNaturezaVinculo())
+                .naturezaVinculoDescricao(p.getNaturezaVinculo() != null
+                        ? p.getNaturezaVinculo().getDescricao() : null)
                 .observacoes(p.getObservacoes())
                 .diasAtraso(p.getDiasAtraso())
                 .inadimplente(p.isInadimplente())
