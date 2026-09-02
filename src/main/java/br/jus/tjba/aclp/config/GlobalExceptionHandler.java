@@ -244,7 +244,7 @@ public class GlobalExceptionHandler {
         if (message.toLowerCase().contains("custodiado")) {
             code = "CUSTODIADO_NAO_ENCONTRADO";
             suggestions.add("Verifique se o ID do custodiado está correto");
-            suggestions.add("Use o endpoint GET /api/custodiados para listar custodiados disponíveis");
+            suggestions.add("Use o endpoint GET /api/pessoas-monitoradas para listar custodiados disponíveis");
             suggestions.add("Certifique-se de que o custodiado existe antes de registrar comparecimento");
         } else {
             suggestions.add("Verifique se o ID está correto");
@@ -374,12 +374,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.internalServerError().body(error);
     }
 
-    /**
-     * BUG CORRIGIDO: usava System.getProperty("spring.profiles.active"), que lê propriedade
-     * de JVM (-D...). O profile aqui vem de env var/properties, então retornava sempre o
-     * default "dev" — e a mensagem interna da exceção era exposta ao cliente EM PRODUÇÃO.
-     * O Environment é a única fonte que enxerga os profiles realmente ativos.
-     */
+    // Environment, nunca System.getProperty: so ele enxerga os profiles ativos
     private boolean isDevEnvironment() {
         return environment.acceptsProfiles(Profiles.of("dev", "test"));
     }

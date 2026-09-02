@@ -8,19 +8,19 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * Define se o custodiado está ativo (em observação) ou arquivado
  */
 @Schema(description = "Status do custodiado no sistema")
-public enum StatusCustodiado {
+public enum StatusPessoaMonitorada {
 
-    @Schema(description = "Custodiado ativo, deve comparecer regularmente")
-    ATIVO("ATIVO", "Ativo", "Custodiado em acompanhamento ativo"),
+    @Schema(description = "Pessoa monitorada ativa, deve comparecer regularmente")
+    ATIVO("ATIVO", "Ativo", "Pessoa monitorada em acompanhamento ativa"),
 
-    @Schema(description = "Custodiado arquivado, não precisa mais comparecer")
-    ARQUIVADO("ARQUIVADO", "Arquivado", "Custodiado arquivado - fora de observação");
+    @Schema(description = "Pessoa monitorada arquivada, não precisa mais comparecer")
+    ARQUIVADO("ARQUIVADO", "Arquivado", "Pessoa monitorada arquivada - fora de observação");
 
     private final String code;
     private final String label;
     private final String description;
 
-    StatusCustodiado(String code, String label, String description) {
+    StatusPessoaMonitorada(String code, String label, String description) {
         this.code = code;
         this.label = label;
         this.description = description;
@@ -53,10 +53,10 @@ public enum StatusCustodiado {
         return this == ARQUIVADO;
     }
 
-    public static StatusCustodiado fromString(String value) {
+    public static StatusPessoaMonitorada fromString(String value) {
         if (value == null) return null;
 
-        for (StatusCustodiado status : StatusCustodiado.values()) {
+        for (StatusPessoaMonitorada status : StatusPessoaMonitorada.values()) {
             if (status.code.equalsIgnoreCase(value) || status.name().equalsIgnoreCase(value)) {
                 return status;
             }

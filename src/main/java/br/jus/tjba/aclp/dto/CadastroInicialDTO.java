@@ -2,6 +2,7 @@ package br.jus.tjba.aclp.dto;
 
 import br.jus.tjba.aclp.model.enums.NaturezaVinculo;
 import com.fasterxml.jackson.annotation.JsonFormat;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -12,7 +13,7 @@ import java.time.LocalDate;
 
 /**
  * DTO unificado para cadastro inicial em uma única requisição.
- * Cria: Custodiado + Endereço + Processo + Primeiro Comparecimento.
+ * Cria: Pessoa monitorada + Endereço + Processo + Primeiro Comparecimento.
  *
  * Corresponde ao formulário do frontend com 6 seções:
  *   1. Dados Pessoais (nome, contato)
@@ -65,7 +66,7 @@ public class CadastroInicialDTO {
     // ======================== 3. DADOS PROCESSUAIS ========================
 
     /**
-     * Número CNJ. O formato é o mesmo exigido em ProcessoDTO e CustodiadoCreateDTO —
+     * Número CNJ. O formato é o mesmo exigido em ProcessoDTO e PessoaMonitoradaCreateDTO —
      * antes esta rota aceitava qualquer sequência de dígitos, pontos e hífens, então
      * o mesmo processo entrava com máscara diferente conforme a tela usada e as buscas
      * por número deixavam de casar. O formulário do frontend já envia mascarado.
@@ -92,6 +93,11 @@ public class CadastroInicialDTO {
 
     /** Opcional — ausente = CAUTELAR (comportamento atual preservado). */
     private NaturezaVinculo naturezaVinculo;
+
+    // obrigatorio quando naturezaVinculo = EXECUCAO_REGIME_ABERTO (validado no service);
+    // processoId e ignorado — o service usa o processo criado nesta transacao
+    @Valid
+    private ExecucaoPenalDTO.RegistroPenaRequest pena;
 
     // ======================== 4. PERIODICIDADE ========================
 

@@ -20,7 +20,7 @@ import java.time.LocalDateTime;
 @Builder
 public class CadastroInicialResponseDTO {
 
-    // ---- Custodiado ----
+    // ---- Pessoa monitorada ----
     private String custodiadoId;  // UUID público
     private String nome;
     private String cpf;

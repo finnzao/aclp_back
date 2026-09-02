@@ -1,7 +1,7 @@
 package br.jus.tjba.aclp.controller;
 
 import br.jus.tjba.aclp.dto.HistoricoEnderecoDTO;
-import br.jus.tjba.aclp.model.Custodiado;
+import br.jus.tjba.aclp.model.PessoaMonitorada;
 import br.jus.tjba.aclp.service.HistoricoEnderecoService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -39,12 +39,12 @@ class HistoricoEnderecoControllerTest extends WebMvcSliceSupport {
     private HistoricoEnderecoService historicoEnderecoService;
 
     private HistoricoEnderecoDTO enderecoDTO;
-    private Custodiado custodiado;
+    private PessoaMonitorada custodiado;
 
     @BeforeEach
     void setUp() {
         // Preparar custodiado
-        custodiado = Custodiado.builder()
+        custodiado = PessoaMonitorada.builder()
                 .id(1L)
                 .nome("João da Silva")
                 .cpf("123.456.789-00")
@@ -181,9 +181,9 @@ class HistoricoEnderecoControllerTest extends WebMvcSliceSupport {
 
     @Test
     @DisplayName("Deve buscar custodiados por cidade")
-    void testBuscarCustodiadosPorCidade() throws Exception {
-        List<Custodiado> custodiados = Arrays.asList(custodiado);
-        when(historicoEnderecoService.buscarCustodiadosPorCidade("Salvador"))
+    void testBuscarPessoasMonitoradasPorCidade() throws Exception {
+        List<PessoaMonitorada> custodiados = Arrays.asList(custodiado);
+        when(historicoEnderecoService.buscarPessoasMonitoradasPorCidade("Salvador"))
                 .thenReturn(custodiados);
 
         mockMvc.perform(get("/api/historico-enderecos/cidade/Salvador/pessoas"))
@@ -195,9 +195,9 @@ class HistoricoEnderecoControllerTest extends WebMvcSliceSupport {
 
     @Test
     @DisplayName("Deve buscar custodiados por estado")
-    void testBuscarCustodiadosPorEstado() throws Exception {
-        List<Custodiado> custodiados = Arrays.asList(custodiado);
-        when(historicoEnderecoService.buscarCustodiadosPorEstado("BA"))
+    void testBuscarPessoasMonitoradasPorEstado() throws Exception {
+        List<PessoaMonitorada> custodiados = Arrays.asList(custodiado);
+        when(historicoEnderecoService.buscarPessoasMonitoradasPorEstado("BA"))
                 .thenReturn(custodiados);
 
         mockMvc.perform(get("/api/historico-enderecos/estado/BA/pessoas"))

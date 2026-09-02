@@ -1,9 +1,9 @@
 package br.jus.tjba.aclp.service;
 
-import br.jus.tjba.aclp.model.Custodiado;
+import br.jus.tjba.aclp.model.PessoaMonitorada;
 import br.jus.tjba.aclp.model.Processo;
 import br.jus.tjba.aclp.model.enums.StatusComparecimento;
-import br.jus.tjba.aclp.repository.CustodiadoRepository;
+import br.jus.tjba.aclp.repository.PessoaMonitoradaRepository;
 import br.jus.tjba.aclp.repository.ProcessoRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,17 +21,13 @@ import java.util.List;
 @RequiredArgsConstructor
 public class StatusSchedulerService {
 
-    private final CustodiadoRepository custodiadoRepository;
+    private final PessoaMonitoradaRepository custodiadoRepository;
     private final ProcessoRepository processoRepository;
 
-    /**
-     * Sem isto, um container novo (ou base recém-importada) exibia todo mundo
-     * "EM_CONFORMIDADE" até o cron das 01h — que é exatamente o bug relatado.
-     * ponytail: varre a tabela no boot; se a base passar de dezenas de milhares,
-     * trocar por um UPDATE em massa condicional à data.
-     */
+    // Sincroniza no boot: container novo nao pode esperar o cron das 01h.
+    // ponytail: varre a tabela; virar UPDATE em massa se a base crescer muito.
     @EventListener(ApplicationReadyEvent.class)
-    @Transactional // self-invocation não passa pelo proxy: a transação tem que estar aqui
+    @Transactional // self-invocation nao passa pelo proxy
     public void sincronizarStatusNoStartup() {
         log.info("Sincronizando status na inicialização");
         reprocessarTodosStatus();
@@ -72,31 +68,31 @@ public class StatusSchedulerService {
 
             long diasAtraso = java.time.temporal.ChronoUnit.DAYS
                     .between(processo.getProximoComparecimento(), LocalDate.now());
-            log.warn("INADIMPLENTE: Processo {} (ID: {}) - Custodiado: {} - {} dias de atraso",
+            log.warn("INADIMPLENTE: Processo {} (ID: {}) - Pessoa monitorada: {} - {} dias de atraso",
                     processo.getNumeroProcesso(), processo.getId(),
                     processo.getCustodiado() != null ? processo.getCustodiado().getNome() : "N/A",
                     diasAtraso);
         }
 
         // Manter compatibilidade: também atualizar custodiados (temporário)
-        List<Custodiado> custodiadosEmConformidade = custodiadoRepository.findByStatus(StatusComparecimento.EM_CONFORMIDADE);
+        List<PessoaMonitorada> custodiadosEmConformidade = custodiadoRepository.findByStatus(StatusComparecimento.EM_CONFORMIDADE);
         LocalDate hoje = LocalDate.now();
-        long contadorCustodiados = 0;
+        long contadorPessoasMonitoradas = 0;
 
-        for (Custodiado pessoa : custodiadosEmConformidade) {
+        for (PessoaMonitorada pessoa : custodiadosEmConformidade) {
             if (pessoa.getProximoComparecimento() != null && pessoa.getProximoComparecimento().isBefore(hoje)) {
                 pessoa.setStatus(StatusComparecimento.INADIMPLENTE);
                 custodiadoRepository.save(pessoa);
-                contadorCustodiados++;
+                contadorPessoasMonitoradas++;
             }
         }
 
-        if (contadorProcessos > 0 || contadorCustodiados > 0) {
+        if (contadorProcessos > 0 || contadorPessoasMonitoradas > 0) {
             log.info("Verificação concluída: {} processos e {} custodiados marcados como inadimplentes",
-                    contadorProcessos, contadorCustodiados);
+                    contadorProcessos, contadorPessoasMonitoradas);
         }
 
-        return Math.max(contadorProcessos, contadorCustodiados);
+        return Math.max(contadorProcessos, contadorPessoasMonitoradas);
     }
 
     @Transactional
@@ -115,7 +111,7 @@ public class StatusSchedulerService {
         long inadimplentes = 0;
 
         // Reprocessar processos
-        List<Processo> todosProcessos = processoRepository.findAllAtivosComCustodiado();
+        List<Processo> todosProcessos = processoRepository.findAllAtivosComPessoaMonitorada();
         for (Processo processo : todosProcessos) {
             StatusComparecimento novoStatus = (processo.getProximoComparecimento() != null && processo.getProximoComparecimento().isBefore(hoje))
                     ? StatusComparecimento.INADIMPLENTE : StatusComparecimento.EM_CONFORMIDADE;
@@ -129,8 +125,8 @@ public class StatusSchedulerService {
         }
 
         // Compatibilidade: reprocessar custodiados
-        List<Custodiado> todosCustodiados = custodiadoRepository.findAll();
-        for (Custodiado pessoa : todosCustodiados) {
+        List<PessoaMonitorada> todosPessoasMonitoradas = custodiadoRepository.findAll();
+        for (PessoaMonitorada pessoa : todosPessoasMonitoradas) {
             StatusComparecimento statusNovo = (pessoa.getProximoComparecimento() == null || !pessoa.getProximoComparecimento().isBefore(hoje))
                     ? StatusComparecimento.EM_CONFORMIDADE : StatusComparecimento.INADIMPLENTE;
 

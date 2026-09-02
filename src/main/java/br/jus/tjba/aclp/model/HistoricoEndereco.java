@@ -38,11 +38,11 @@ public class HistoricoEndereco {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @NotNull(message = "Custodiado é obrigatório")
+    @NotNull(message = "Pessoa monitorada é obrigatório")
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "custodiado_id", nullable = false,
             foreignKey = @ForeignKey(name = "fk_historico_endereco_custodiado"))
-    private Custodiado custodiado;
+    private PessoaMonitorada custodiado;
 
     // Dados do endereço
     @NotBlank(message = "CEP é obrigatório")

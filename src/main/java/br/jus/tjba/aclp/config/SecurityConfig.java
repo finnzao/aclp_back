@@ -116,8 +116,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/usuarios/convites").hasRole("ADMIN")
 
                         // Tudo mais: autenticado (inclui novos endpoints de performance)
-                        // GET  /api/custodiados?page=&size=   (paginação server-side)
-                        // GET  /api/custodiados/exportar       (exportação com filtros)
+                        // GET  /api/pessoas-monitoradas?page=&size=   (paginação server-side)
+                        // GET  /api/pessoas-monitoradas/exportar       (exportação com filtros)
                         // POST /api/processos/batch            (busca em lote)
                         // GET  /api/comparecimentos/todos      (com filtros server-side)
                         .anyRequest().authenticated()

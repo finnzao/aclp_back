@@ -32,12 +32,8 @@ import java.util.Objects;
 @Table(name = "historico_comparecimentos",
         indexes = {
                 @Index(name = "idx_historico_custodiado",       columnList = "custodiado_id"),
-                @Index(name = "idx_historico_processo",         columnList = "processo_id"),
-                @Index(name = "idx_historico_data",             columnList = "data_comparecimento"),
-                @Index(name = "idx_historico_tipo",             columnList = "tipo_validacao"),
                 @Index(name = "idx_historico_custodiado_data",  columnList = "custodiado_id, data_comparecimento DESC"),
                 @Index(name = "idx_historico_processo_data",    columnList = "processo_id, data_comparecimento DESC"),
-                @Index(name = "idx_historico_mudanca_endereco", columnList = "mudanca_endereco"),
                 @Index(name = "idx_historico_custodiado_mudanca", columnList = "custodiado_id, mudanca_endereco")
         }
 )
@@ -68,7 +64,7 @@ public class HistoricoComparecimento {
     @JoinColumn(name = "custodiado_id",
             foreignKey = @ForeignKey(name = "fk_historico_custodiado"))
     @JsonIgnore
-    private Custodiado custodiado;
+    private PessoaMonitorada custodiado;
 
     // ---- REMOVIDOS os getters @JsonProperty que causavam LazyInitializationException ----
     // getCustodiadoId()   → use HistoricoComparecimentoResponseDTO.custodiadoId

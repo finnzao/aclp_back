@@ -20,7 +20,7 @@ import java.time.LocalDate;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class CustodiadoCreateDTO {
+public class PessoaMonitoradaCreateDTO {
 
     @NotBlank(message = "Nome é obrigatório")
     @Size(min = 2, max = 150, message = "Nome deve ter entre 2 e 150 caracteres")
@@ -93,10 +93,10 @@ public class CustodiadoCreateDTO {
     private String estado;
 
     /**
-     *  Converter para CustodiadoDTO para compatibilidade com service
+     *  Converter para PessoaMonitoradaDTO para compatibilidade com service
      */
-    public CustodiadoDTO toCustodiadoDTO() {
-        return CustodiadoDTO.builder()
+    public PessoaMonitoradaDTO toPessoaMonitoradaDTO() {
+        return PessoaMonitoradaDTO.builder()
                 .nome(this.nome)
                 .cpf(this.cpf)
                 .rg(this.rg)

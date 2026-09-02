@@ -94,13 +94,13 @@ class SegurancaOwaspTest {
         @WithMockUser(roles = "USUARIO")
         @DisplayName("SQL Injection na busca de custodiados não vaza a tabela")
         void sqlInjectionNaBusca() throws Exception {
-            mockMvc.perform(get("/api/custodiados/buscar")
+            mockMvc.perform(get("/api/pessoas-monitoradas/buscar")
                             .param("termo", "'; DROP TABLE custodiados; --"))
                     .andExpect(status().isOk());
 
             // A tabela tem que continuar existindo: se o DROP tivesse passado,
             // qualquer consulta seguinte quebraria com 500.
-            mockMvc.perform(get("/api/custodiados/buscar").param("termo", "teste"))
+            mockMvc.perform(get("/api/pessoas-monitoradas/buscar").param("termo", "teste"))
                     .andExpect(status().isOk());
         }
     }
@@ -119,7 +119,7 @@ class SegurancaOwaspTest {
         void xssArmazenado() throws Exception {
             String payload = "<script>alert('xss')</script>";
 
-            MvcResult resultado = mockMvc.perform(post("/api/custodiados")
+            MvcResult resultado = mockMvc.perform(post("/api/pessoas-monitoradas")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(json(Map.of(
                                     "nome", payload,
@@ -160,7 +160,7 @@ class SegurancaOwaspTest {
         @Test
         @DisplayName("Sem autenticação, recurso protegido responde 401/403")
         void anonimoNaoAcessa() throws Exception {
-            int status = mockMvc.perform(get("/api/custodiados"))
+            int status = mockMvc.perform(get("/api/pessoas-monitoradas"))
                     .andReturn().getResponse().getStatus();
 
             assertTrue(status == 401 || status == 403,
@@ -203,7 +203,7 @@ class SegurancaOwaspTest {
             // Cenário do ataque: a vítima está logada, o cookie de sessão viaja
             // sozinho, e um site hostil dispara o POST. Sem o token no header,
             // a requisição não pode passar.
-            mockMvc.perform(post("/api/custodiados")
+            mockMvc.perform(post("/api/pessoas-monitoradas")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(json(Map.of("nome", "Fulano", "cpf", "52998224725"))))
                     .andExpect(status().isForbidden());
@@ -213,7 +213,7 @@ class SegurancaOwaspTest {
         @WithMockUser(roles = "ADMIN")
         @DisplayName("POST autenticado com token CSRF passa da barreira")
         void postComTokenPassa() throws Exception {
-            int status = mockMvc.perform(post("/api/custodiados")
+            int status = mockMvc.perform(post("/api/pessoas-monitoradas")
                             .with(csrf())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(json(Map.of("nome", "Fulano", "cpf", "52998224725"))))
@@ -242,7 +242,7 @@ class SegurancaOwaspTest {
         @WithMockUser(roles = "ADMIN")
         @DisplayName("GET não exige token CSRF")
         void getNaoExigeToken() throws Exception {
-            int status = mockMvc.perform(get("/api/custodiados"))
+            int status = mockMvc.perform(get("/api/pessoas-monitoradas"))
                     .andReturn().getResponse().getStatus();
 
             assertNotEquals(403, status, "Método seguro não deve exigir token");

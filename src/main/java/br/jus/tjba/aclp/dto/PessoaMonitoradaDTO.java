@@ -17,7 +17,7 @@ import java.time.LocalDate;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class CustodiadoDTO {
+public class PessoaMonitoradaDTO {
 
     private Long id;
 

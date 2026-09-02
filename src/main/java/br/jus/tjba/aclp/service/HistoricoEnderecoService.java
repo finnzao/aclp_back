@@ -2,9 +2,9 @@ package br.jus.tjba.aclp.service;
 
 import br.jus.tjba.aclp.dto.HistoricoEnderecoDTO;
 import br.jus.tjba.aclp.model.HistoricoEndereco;
-import br.jus.tjba.aclp.model.Custodiado;
+import br.jus.tjba.aclp.model.PessoaMonitorada;
 import br.jus.tjba.aclp.repository.HistoricoEnderecoRepository;
-import br.jus.tjba.aclp.repository.CustodiadoRepository;
+import br.jus.tjba.aclp.repository.PessoaMonitoradaRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,14 +22,14 @@ import java.util.stream.Collectors;
 public class HistoricoEnderecoService {
 
     private final HistoricoEnderecoRepository historicoEnderecoRepository;
-    private final CustodiadoRepository custodiadoRepository;
+    private final PessoaMonitoradaRepository custodiadoRepository;
 
     /**
      * Busca histórico completo de endereços de uma pessoa
      */
     @Transactional(readOnly = true)
     public List<HistoricoEnderecoDTO> buscarHistoricoPorCustodiado(Long pessoaId) {
-        log.info("Buscando histórico de endereços - Custodiado ID: {}", pessoaId);
+        log.info("Buscando histórico de endereços - Pessoa monitorada ID: {}", pessoaId);
 
         if (pessoaId == null || pessoaId <= 0) {
             throw new IllegalArgumentException("ID da pessoa deve ser um número positivo");
@@ -47,7 +47,7 @@ public class HistoricoEnderecoService {
      */
     @Transactional(readOnly = true)
     public Optional<HistoricoEnderecoDTO> buscarEnderecoAtivo(Long pessoaId) {
-        log.info("Buscando endereço ativo - Custodiado ID: {}", pessoaId);
+        log.info("Buscando endereço ativa - Pessoa monitorada ID: {}", pessoaId);
 
         if (pessoaId == null || pessoaId <= 0) {
             throw new IllegalArgumentException("ID da pessoa deve ser um número positivo");
@@ -62,7 +62,7 @@ public class HistoricoEnderecoService {
      */
     @Transactional(readOnly = true)
     public List<HistoricoEnderecoDTO> buscarEnderecosHistoricos(Long pessoaId) {
-        log.info("Buscando endereços históricos - Custodiado ID: {}", pessoaId);
+        log.info("Buscando endereços históricos - Pessoa monitorada ID: {}", pessoaId);
 
         if (pessoaId == null || pessoaId <= 0) {
             throw new IllegalArgumentException("ID da pessoa deve ser um número positivo");
@@ -80,7 +80,7 @@ public class HistoricoEnderecoService {
      */
     @Transactional(readOnly = true)
     public List<HistoricoEnderecoDTO> buscarEnderecosPorPeriodo(Long pessoaId, LocalDate inicio, LocalDate fim) {
-        log.info("Buscando endereços por período - Custodiado ID: {}, Período: {} a {}", pessoaId, inicio, fim);
+        log.info("Buscando endereços por período - Pessoa monitorada ID: {}, Período: {} a {}", pessoaId, inicio, fim);
 
         if (pessoaId == null || pessoaId <= 0) {
             throw new IllegalArgumentException("ID da pessoa deve ser um número positivo");
@@ -105,28 +105,28 @@ public class HistoricoEnderecoService {
      * Busca pessoas por cidade
      */
     @Transactional(readOnly = true)
-    public List<Custodiado> buscarCustodiadosPorCidade(String cidade) {
+    public List<PessoaMonitorada> buscarPessoasMonitoradasPorCidade(String cidade) {
         log.info("Buscando pessoas por cidade: {}", cidade);
 
         if (cidade == null || cidade.trim().isEmpty()) {
             throw new IllegalArgumentException("Nome da cidade é obrigatório");
         }
 
-        return historicoEnderecoRepository.findCustodiadosPorCidade(cidade.trim());
+        return historicoEnderecoRepository.findPessoasMonitoradasPorCidade(cidade.trim());
     }
 
     /**
      * Busca pessoas por estado
      */
     @Transactional(readOnly = true)
-    public List<Custodiado> buscarCustodiadosPorEstado(String estado) {
+    public List<PessoaMonitorada> buscarPessoasMonitoradasPorEstado(String estado) {
         log.info("Buscando pessoas por estado: {}", estado);
 
         if (estado == null || estado.trim().isEmpty()) {
             throw new IllegalArgumentException("Sigla do estado é obrigatória");
         }
 
-        return historicoEnderecoRepository.findCustodiadosPorEstado(estado.trim().toUpperCase());
+        return historicoEnderecoRepository.findPessoasMonitoradasPorEstado(estado.trim().toUpperCase());
     }
 
     /**
@@ -156,14 +156,14 @@ public class HistoricoEnderecoService {
      */
     @Transactional(readOnly = true)
     public long contarEnderecosPorCustodiado(Long pessoaId) {
-        log.info("Contando endereços - Custodiado ID: {}", pessoaId);
+        log.info("Contando endereços - Pessoa monitorada ID: {}", pessoaId);
 
         if (pessoaId == null || pessoaId <= 0) {
             throw new IllegalArgumentException("ID da pessoa deve ser um número positivo");
         }
 
-        Custodiado pessoa = custodiadoRepository.findById(pessoaId)
-                .orElseThrow(() -> new EntityNotFoundException("Custodiado não encontrada com ID: " + pessoaId));
+        PessoaMonitorada pessoa = custodiadoRepository.findById(pessoaId)
+                .orElseThrow(() -> new EntityNotFoundException("Pessoa monitorada não encontrada com ID: " + pessoaId));
 
         return historicoEnderecoRepository.countByCustodiado(pessoa);
     }
@@ -228,7 +228,7 @@ public class HistoricoEnderecoService {
      */
     @Transactional(readOnly = true)
     public boolean verificarSobreposicaoEndereco(Long pessoaId, Long enderecoId, LocalDate dataInicio, LocalDate dataFim) {
-        log.info("Verificando sobreposição de endereço - Custodiado ID: {}, Endereço ID: {}", pessoaId, enderecoId);
+        log.info("Verificando sobreposição de endereço - Pessoa monitorada ID: {}, Endereço ID: {}", pessoaId, enderecoId);
 
         if (pessoaId == null || pessoaId <= 0) {
             throw new IllegalArgumentException("ID da pessoa deve ser um número positivo");
@@ -246,7 +246,7 @@ public class HistoricoEnderecoService {
      */
     @Transactional(readOnly = true)
     public Optional<HistoricoEnderecoDTO> buscarUltimoEnderecoAnterior(Long pessoaId, LocalDate data) {
-        log.info("Buscando último endereço anterior - Custodiado ID: {}, Data: {}", pessoaId, data);
+        log.info("Buscando último endereço anterior - Pessoa monitorada ID: {}, Data: {}", pessoaId, data);
 
         if (pessoaId == null || pessoaId <= 0) {
             throw new IllegalArgumentException("ID da pessoa deve ser um número positivo");

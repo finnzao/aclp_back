@@ -1,6 +1,6 @@
 package br.jus.tjba.aclp.service;
 
-import br.jus.tjba.aclp.model.Custodiado;
+import br.jus.tjba.aclp.model.PessoaMonitorada;
 import br.jus.tjba.aclp.model.HistoricoComparecimento;
 import org.junit.jupiter.api.Test;
 
@@ -17,12 +17,12 @@ class TendenciaTest {
 
     private static final LocalDate HOJE = LocalDate.of(2026, 7, 29);
 
-    private HistoricoComparecimento comp(Custodiado c, LocalDate data) {
+    private HistoricoComparecimento comp(PessoaMonitorada c, LocalDate data) {
         return HistoricoComparecimento.builder().custodiado(c).dataComparecimento(data).build();
     }
 
-    private Custodiado custodiado(long id, int periodicidade) {
-        Custodiado c = Custodiado.builder().nome("Teste").periodicidade(periodicidade).build();
+    private PessoaMonitorada custodiado(long id, int periodicidade) {
+        PessoaMonitorada c = PessoaMonitorada.builder().nome("Teste").periodicidade(periodicidade).build();
         c.setId(id);
         return c;
     }
@@ -34,14 +34,14 @@ class TendenciaTest {
 
     @Test
     void somenteCadastroInicial_naoGeraTendencia() {
-        Custodiado c = custodiado(1L, 30);
+        PessoaMonitorada c = custodiado(1L, 30);
         // um único registro não tem prazo anterior para comparar
         assertNull(ComparecimentoService.calcularTendencia(List.of(comp(c, HOJE.minusDays(5))), HOJE));
     }
 
     @Test
     void comparecimentoDentroDaPeriodicidade_contaComoNoPrazo() {
-        Custodiado c = custodiado(1L, 30);
+        PessoaMonitorada c = custodiado(1L, 30);
         var tendencia = ComparecimentoService.calcularTendencia(List.of(
                 comp(c, LocalDate.of(2026, 6, 1)),
                 comp(c, LocalDate.of(2026, 6, 25))), HOJE);
@@ -54,7 +54,7 @@ class TendenciaTest {
 
     @Test
     void comparecimentoAposOPrazo_contaComoAtrasado() {
-        Custodiado c = custodiado(1L, 30);
+        PessoaMonitorada c = custodiado(1L, 30);
         var tendencia = ComparecimentoService.calcularTendencia(List.of(
                 comp(c, LocalDate.of(2026, 6, 1)),
                 comp(c, LocalDate.of(2026, 7, 15))), HOJE); // esperado 01/07
@@ -68,7 +68,7 @@ class TendenciaTest {
 
     @Test
     void retornaSempreSeisMesesEmOrdem() {
-        Custodiado c = custodiado(1L, 30);
+        PessoaMonitorada c = custodiado(1L, 30);
         var tendencia = ComparecimentoService.calcularTendencia(List.of(
                 comp(c, LocalDate.of(2026, 6, 1)),
                 comp(c, LocalDate.of(2026, 6, 25))), HOJE);
@@ -80,8 +80,8 @@ class TendenciaTest {
 
     @Test
     void custodiadosDiferentes_naoMisturamPrazos() {
-        Custodiado a = custodiado(1L, 30);
-        Custodiado b = custodiado(2L, 30);
+        PessoaMonitorada a = custodiado(1L, 30);
+        PessoaMonitorada b = custodiado(2L, 30);
         var tendencia = ComparecimentoService.calcularTendencia(List.of(
                 comp(a, LocalDate.of(2026, 6, 1)),
                 comp(b, LocalDate.of(2026, 6, 2)),

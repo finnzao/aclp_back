@@ -6,7 +6,8 @@ import com.fasterxml.jackson.annotation.JsonValue;
 public enum TipoValidacao {
     PRESENCIAL("presencial", "Presencial", "Comparecimento físico no local"),
     ONLINE("online", "Online/Virtual", "Comparecimento virtual/remoto"),
-    CADASTRO_INICIAL("cadastro_inicial", "Cadastro Inicial", "Primeiro registro no sistema");
+    CADASTRO_INICIAL("cadastro_inicial", "Cadastro Inicial", "Primeiro registro no sistema"),
+    FALTA_JUSTIFICADA("falta_justificada", "Falta Justificada", "Ausência com justificativa aceita; não conta presença");
 
     private final String code;
     private final String label;
@@ -78,6 +79,7 @@ public enum TipoValidacao {
             case PRESENCIAL -> "building";
             case ONLINE -> "monitor";
             case CADASTRO_INICIAL -> "user-plus";
+            case FALTA_JUSTIFICADA -> "calendar-x";
         };
     }
 
@@ -86,6 +88,7 @@ public enum TipoValidacao {
             case PRESENCIAL -> "success";
             case ONLINE -> "info";
             case CADASTRO_INICIAL -> "primary";
+            case FALTA_JUSTIFICADA -> "warning";
         };
     }
 

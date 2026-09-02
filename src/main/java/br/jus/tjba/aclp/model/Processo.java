@@ -34,9 +34,7 @@ import java.util.Objects;
         indexes = {
                 @Index(name = "idx_processo_custodiado",       columnList = "custodiado_id"),
                 @Index(name = "idx_processo_numero",           columnList = "numero_processo"),
-                @Index(name = "idx_processo_status",           columnList = "status"),
                 @Index(name = "idx_processo_situacao",         columnList = "situacao_processo"),
-                @Index(name = "idx_processo_proximo",          columnList = "proximo_comparecimento"),
                 @Index(name = "idx_processo_status_proximo",   columnList = "status, proximo_comparecimento"),
                 @Index(name = "idx_processo_custodiado_situacao", columnList = "custodiado_id, situacao_processo"),
                 @Index(name = "idx_processo_natureza",           columnList = "natureza_vinculo")
@@ -61,7 +59,7 @@ public class Processo {
     @JoinColumn(name = "custodiado_id", nullable = false,
             foreignKey = @ForeignKey(name = "fk_processo_custodiado"))
     @JsonIgnore
-    private Custodiado custodiado;
+    private PessoaMonitorada custodiado;
 
     // ---- REMOVIDOS os getters @JsonProperty que causavam LazyInitializationException ----
     // getCustodiadoId()   → use ProcessoResponseDTO.custodiadoId
@@ -165,7 +163,7 @@ public class Processo {
         if (naturezaVinculo == null) naturezaVinculo = NaturezaVinculo.CAUTELAR;
         if (ultimoComparecimento == null) ultimoComparecimento = dataComparecimentoInicial;
         if (proximoComparecimento == null && situacaoProcesso.isAtivo()) calcularProximoComparecimento();
-        atualizarStatusBaseadoEmData(); // nasce coerente com a data (importação de base legada)
+        atualizarStatusBaseadoEmData(); // nasce coerente com a data
     }
 
     @PreUpdate
@@ -182,6 +180,12 @@ public class Processo {
         if (ultimoComparecimento != null && periodicidade != null && situacaoProcesso.isAtivo()) {
             proximoComparecimento = ultimoComparecimento.plusDays(periodicidade);
         }
+    }
+
+    /** Falta justificada: adia o ciclo a partir da falta SEM contar presença. */
+    public void registrarFaltaJustificada(LocalDate dataFalta) {
+        if (periodicidade != null) proximoComparecimento = dataFalta.plusDays(periodicidade);
+        status = StatusComparecimento.EM_CONFORMIDADE;
     }
 
     public void atualizarStatusBaseadoEmData() {

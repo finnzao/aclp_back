@@ -182,14 +182,11 @@ public class JwtTokenProvider {
     }
 
     private List<String> getRoles(Usuario usuario) {
-        List<String> roles = new ArrayList<>();
-        roles.add("ROLE_" + usuario.getTipo().name());
-        if (usuario.isAdmin()) {
-            roles.add("ROLE_ADMIN");
-        } else {
-            roles.add("ROLE_USER");
-        }
-        return roles;
+        // ROLE_<tipo> ja cobre ROLE_ADMIN quando tipo=ADMIN; distinct evita o claim duplicado
+        return java.util.stream.Stream.of(
+                "ROLE_" + usuario.getTipo().name(),
+                usuario.isAdmin() ? "ROLE_ADMIN" : "ROLE_USER")
+            .distinct().toList();
     }
 
     public List<GrantedAuthority> getAuthorities(String token) {

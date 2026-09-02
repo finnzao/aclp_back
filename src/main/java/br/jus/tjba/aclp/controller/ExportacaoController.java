@@ -1,9 +1,9 @@
 package br.jus.tjba.aclp.controller;
 
-import br.jus.tjba.aclp.model.Custodiado;
+import br.jus.tjba.aclp.model.PessoaMonitorada;
 import br.jus.tjba.aclp.model.HistoricoEndereco;
 import br.jus.tjba.aclp.model.Processo;
-import br.jus.tjba.aclp.repository.CustodiadoRepository;
+import br.jus.tjba.aclp.repository.PessoaMonitoradaRepository;
 import br.jus.tjba.aclp.repository.HistoricoEnderecoRepository;
 import br.jus.tjba.aclp.repository.ProcessoRepository;
 import io.swagger.v3.oas.annotations.Operation;
@@ -34,12 +34,11 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Tag(name = "Exportação", description = "Endpoints para exportação de dados em Excel")
 @Slf4j
-// Exporta a base inteira com CPF/RG/endereço — maior vetor de exfiltração de dados
-// pessoais em massa (LGPD). Nível de classe: vale para todos os endpoints daqui.
+// exporta a base inteira com CPF/RG: so ADMIN (LGPD)
 @PreAuthorize("hasRole('ADMIN')")
 public class ExportacaoController {
 
-    private final CustodiadoRepository custodiadoRepository;
+    private final PessoaMonitoradaRepository custodiadoRepository;
     private final ProcessoRepository processoRepository;
     private final HistoricoEnderecoRepository historicoEnderecoRepository;
 
@@ -51,15 +50,15 @@ public class ExportacaoController {
      * - Colunas 5-7: endereço ativo (logradouro+número, bairro, cidade/UF)
      * - Colunas 8-13: dados do processo (número, vara, comarca, status, próximo comp., situação)
      *
-     * Custodiado com 3 processos = 3 linhas (dados pessoais e endereço repetidos)
-     * Custodiado sem processo = 1 linha (colunas de processo vazias)
+     * Pessoa monitorada com 3 processos = 3 linhas (dados pessoais e endereço repetidos)
+     * Pessoa monitorada sem processo = 1 linha (colunas de processo vazias)
      *
      * A resposta é um arquivo .xlsx — o navegador inicia o download automaticamente.
      */
     @GetMapping("/custodiados-processos")
     @Operation(summary = "Exportar custodiados com processos e endereços em Excel",
             description = "Gera planilha .xlsx com todos os custodiados, endereços ativos e processos vinculados.")
-    public ResponseEntity<byte[]> exportarCustodiadosComProcessos(
+    public ResponseEntity<byte[]> exportarPessoasMonitoradasComProcessos(
             @RequestParam(required = false) String nome,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String comarca) {
@@ -69,7 +68,7 @@ public class ExportacaoController {
 
         try {
             // Buscar todos os custodiados ativos
-            List<Custodiado> custodiados = custodiadoRepository.findAllActive();
+            List<PessoaMonitorada> custodiados = custodiadoRepository.findAllActive();
 
             // Aplicar filtros se informados
             if (nome != null && !nome.isBlank()) {
@@ -94,7 +93,7 @@ public class ExportacaoController {
 
             // Coletar IDs para busca em lote (evita N+1)
             List<Long> ids = custodiados.stream()
-                    .map(Custodiado::getId)
+                    .map(PessoaMonitorada::getId)
                     .collect(Collectors.toList());
 
             // Buscar processos de todos os custodiados em UMA query
@@ -144,12 +143,12 @@ public class ExportacaoController {
     /**
      * Gera o arquivo Excel com formatação profissional.
      */
-    private byte[] gerarExcel(List<Custodiado> custodiados,
+    private byte[] gerarExcel(List<PessoaMonitorada> custodiados,
                                Map<Long, List<Processo>> processosPorCustodiado,
                                Map<Long, HistoricoEndereco> enderecosPorCustodiado) throws Exception {
 
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {
-            Sheet sheet = workbook.createSheet("Custodiados e Processos");
+            Sheet sheet = workbook.createSheet("Pessoas monitoradas e Processos");
 
             // ========== ESTILOS ==========
 
@@ -218,7 +217,7 @@ public class ExportacaoController {
 
             Row titleRow = sheet.createRow(0);
             Cell titleCell = titleRow.createCell(0);
-            titleCell.setCellValue("TJBA — Relatório de Custodiados e Processos");
+            titleCell.setCellValue("TJBA — Relatório de Pessoas monitoradas e Processos");
             titleCell.setCellStyle(titleStyle);
             sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, totalColunas - 1));
 
@@ -249,15 +248,15 @@ public class ExportacaoController {
             int rowNum = 4;
             int totalLinhas = 0;
 
-            for (Custodiado custodiado : custodiados) {
+            for (PessoaMonitorada custodiado : custodiados) {
                 List<Processo> processos = processosPorCustodiado
                         .getOrDefault(custodiado.getId(), Collections.emptyList());
                 HistoricoEndereco endereco = enderecosPorCustodiado.get(custodiado.getId());
 
                 if (processos.isEmpty()) {
-                    // Custodiado sem processo: 1 linha
+                    // Pessoa monitorada sem processo: 1 linha
                     Row row = sheet.createRow(rowNum++);
-                    preencherDadosCustodiado(row, custodiado, endereco,
+                    preencherDadosPessoaMonitorada(row, custodiado, endereco,
                             dataStyle, centerStyle);
                     // Colunas de processo vazias
                     for (int col = 7; col < totalColunas; col++) {
@@ -267,10 +266,10 @@ public class ExportacaoController {
                     }
                     totalLinhas++;
                 } else {
-                    // Custodiado com processo(s): 1 linha por processo
+                    // Pessoa monitorada com processo(s): 1 linha por processo
                     for (Processo processo : processos) {
                         Row row = sheet.createRow(rowNum++);
-                        preencherDadosCustodiado(row, custodiado, endereco,
+                        preencherDadosPessoaMonitorada(row, custodiado, endereco,
                                 dataStyle, centerStyle);
                         preencherDadosProcesso(row, processo, dataStyle, centerStyle,
                                 inadimplenteStyle, conformidadeStyle);
@@ -328,12 +327,7 @@ public class ExportacaoController {
     /**
      * Preenche colunas 0-6: dados pessoais + endereço do custodiado.
      */
-    /**
-     * Neutraliza CSV/Formula Injection. Um campo salvo como =HYPERLINK("http://malicioso",…)
-     * ou @WEBSERVICE(…) é interpretado como FÓRMULA quando o servidor abre a planilha —
-     * exfiltrando dados ou disparando requisição na máquina de quem abriu. Prefixar com
-     * apóstrofo força o Excel/LibreOffice a tratar como texto literal.
-     */
+    // CSV/formula injection: prefixo com apostrofo forca texto literal no Excel
     static String protegerFormula(String valor) {
         if (valor == null || valor.isEmpty()) return valor;
         char inicio = valor.charAt(0);
@@ -341,7 +335,7 @@ public class ExportacaoController {
                 || inicio == '\t' || inicio == '\r') ? "'" + valor : valor;
     }
 
-    private void preencherDadosCustodiado(Row row, Custodiado custodiado,
+    private void preencherDadosPessoaMonitorada(Row row, PessoaMonitorada custodiado,
                                            HistoricoEndereco endereco,
                                            CellStyle dataStyle, CellStyle centerStyle) {
         // Col 0: Nome

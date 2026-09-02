@@ -1,7 +1,7 @@
 package br.jus.tjba.aclp.dto;
 
-import br.jus.tjba.aclp.model.Custodiado;
-import br.jus.tjba.aclp.model.enums.SituacaoCustodiado;
+import br.jus.tjba.aclp.model.PessoaMonitorada;
+import br.jus.tjba.aclp.model.enums.SituacaoPessoaMonitorada;
 import br.jus.tjba.aclp.model.enums.StatusComparecimento;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -14,7 +14,7 @@ import java.time.LocalDate;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class CustodiadoListDTO {
+public class PessoaMonitoradaListDTO {
 
     private String id;
     private Long numericId;
@@ -26,7 +26,7 @@ public class CustodiadoListDTO {
     private String vara;
     private String comarca;
     private StatusComparecimento status;
-    private SituacaoCustodiado situacao;
+    private SituacaoPessoaMonitorada situacao;
     private LocalDate ultimoComparecimento;
     private LocalDate proximoComparecimento;
     private Long diasAtraso;
@@ -34,8 +34,9 @@ public class CustodiadoListDTO {
     private boolean inadimplente;
     private boolean comparecimentoHoje;
     private boolean urgente;
+    private String natureza;
 
-    public static CustodiadoListDTO fromEntity(Custodiado custodiado) {
+    public static PessoaMonitoradaListDTO fromEntity(PessoaMonitorada custodiado) {
         String documentoExibicao;
         if (custodiado.getCpf() != null && !custodiado.getCpf().trim().isEmpty()) {
             documentoExibicao = custodiado.getCpf();
@@ -49,7 +50,7 @@ public class CustodiadoListDTO {
         Integer periodicidade = custodiado.getPeriodicidade();
         boolean urgente = periodicidade != null && diasAtraso >= periodicidade;
 
-        return CustodiadoListDTO.builder()
+        return PessoaMonitoradaListDTO.builder()
                 .id(custodiado.getPublicId() != null ? custodiado.getPublicId().toString() : null)
                 .numericId(custodiado.getId())
                 .nome(custodiado.getNome())
@@ -68,13 +69,23 @@ public class CustodiadoListDTO {
                 .inadimplente(custodiado.isInadimplente())
                 .comparecimentoHoje(custodiado.isComparecimentoHoje())
                 .urgente(urgente)
+                .natureza(naturezaSegura(custodiado))
                 .build();
+    }
+
+    // fora de transacao (endpoints legados de busca) a colecao LAZY nao carrega; natureza sai nula
+    private static String naturezaSegura(PessoaMonitorada custodiado) {
+        try {
+            return custodiado.getNaturezaMonitoramento();
+        } catch (org.hibernate.LazyInitializationException e) {
+            return null;
+        }
     }
 
     public boolean isEmConformidade() { return status == StatusComparecimento.EM_CONFORMIDADE; }
     public boolean isInadimplente() { return status == StatusComparecimento.INADIMPLENTE; }
-    public boolean isAtivo() { return situacao == SituacaoCustodiado.ATIVO; }
-    public boolean isArquivado() { return situacao == SituacaoCustodiado.ARQUIVADO; }
+    public boolean isAtivo() { return situacao == SituacaoPessoaMonitorada.ATIVO; }
+    public boolean isArquivado() { return situacao == SituacaoPessoaMonitorada.ARQUIVADO; }
     public boolean isUrgente() { return urgente; }
 
     public String getStatusDescricao() { return status != null ? status.getLabel() : "Não definido"; }

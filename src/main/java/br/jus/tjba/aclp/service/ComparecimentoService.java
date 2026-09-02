@@ -2,13 +2,14 @@ package br.jus.tjba.aclp.service;
 
 import br.jus.tjba.aclp.dto.ComparecimentoDTO;
 import br.jus.tjba.aclp.dto.HistoricoComparecimentoResponseDTO;
-import br.jus.tjba.aclp.model.Custodiado;
+import br.jus.tjba.aclp.model.PessoaMonitorada;
 import br.jus.tjba.aclp.model.HistoricoComparecimento;
 import br.jus.tjba.aclp.model.HistoricoEndereco;
 import br.jus.tjba.aclp.model.Processo;
 import br.jus.tjba.aclp.model.enums.SituacaoProcesso;
 import br.jus.tjba.aclp.model.enums.TipoValidacao;
-import br.jus.tjba.aclp.repository.CustodiadoRepository;
+import br.jus.tjba.aclp.repository.PessoaMonitoradaRepository;
+import br.jus.tjba.aclp.repository.ExecucaoPenalRepository;
 import br.jus.tjba.aclp.repository.HistoricoComparecimentoRepository;
 import br.jus.tjba.aclp.repository.HistoricoEnderecoRepository;
 import br.jus.tjba.aclp.repository.ProcessoRepository;
@@ -38,10 +39,11 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ComparecimentoService {
 
-    private final CustodiadoRepository custodiadoRepository;
+    private final PessoaMonitoradaRepository custodiadoRepository;
     private final HistoricoComparecimentoRepository historicoComparecimentoRepository;
     private final HistoricoEnderecoRepository historicoEnderecoRepository;
     private final ProcessoRepository processoRepository;
+    private final ExecucaoPenalRepository execucaoPenalRepository;
 
     // =====================================================================
     // CORREÇÃO DE PERFORMANCE: Listagem paginada com filtros server-side
@@ -64,7 +66,7 @@ public class ComparecimentoService {
             if (tipoValidacao != null)
                 predicates.add(cb.equal(root.get("tipoValidacao"), tipoValidacao));
             if (custodiadoNome != null && !custodiadoNome.isBlank()) {
-                Join<HistoricoComparecimento, Custodiado> cj = root.join("custodiado", JoinType.LEFT);
+                Join<HistoricoComparecimento, PessoaMonitorada> cj = root.join("custodiado", JoinType.LEFT);
                 predicates.add(cb.like(cb.lower(cj.get("nome")), "%" + custodiadoNome.toLowerCase().trim() + "%"));
             }
             if (numeroProcesso != null && !numeroProcesso.isBlank()) {
@@ -97,15 +99,15 @@ public class ComparecimentoService {
         validarComparecimento(dto);
 
         Processo processo = null;
-        Custodiado custodiado;
+        PessoaMonitorada custodiado;
 
         if (dto.getProcessoId() != null) {
-            processo = processoRepository.findByIdComCustodiado(dto.getProcessoId())
+            processo = processoRepository.findByIdComPessoaMonitorada(dto.getProcessoId())
                     .orElseThrow(() -> new EntityNotFoundException("Processo não encontrado: " + dto.getProcessoId()));
             custodiado = processo.getCustodiado();
         } else if (dto.getCustodiadoId() != null) {
             custodiado = custodiadoRepository.findById(dto.getCustodiadoId())
-                    .orElseThrow(() -> new EntityNotFoundException("Custodiado não encontrado: " + dto.getCustodiadoId()));
+                    .orElseThrow(() -> new EntityNotFoundException("Pessoa monitorada não encontrada: " + dto.getCustodiadoId()));
             List<Processo> pa = processoRepository.findProcessosAtivosByCustodiado(custodiado.getId());
             if (!pa.isEmpty()) processo = pa.get(0);
         } else {
@@ -127,7 +129,15 @@ public class ComparecimentoService {
             salvo = historicoComparecimentoRepository.save(salvo);
         }
 
-        if (dto.getTipoValidacao() != TipoValidacao.CADASTRO_INICIAL) {
+        if (dto.getTipoValidacao() == TipoValidacao.FALTA_JUSTIFICADA) {
+            // adia o ciclo sem contar presença: ultimoComparecimento fica intacto
+            if (processo != null) {
+                processo.registrarFaltaJustificada(dto.getDataComparecimento());
+                processoRepository.save(processo);
+            }
+            custodiado.registrarFaltaJustificada(dto.getDataComparecimento());
+            custodiadoRepository.save(custodiado);
+        } else if (dto.getTipoValidacao() != TipoValidacao.CADASTRO_INICIAL) {
             if (processo != null) {
                 processo.setUltimoComparecimento(dto.getDataComparecimento());
                 processo.calcularProximoComparecimento();
@@ -150,7 +160,7 @@ public class ComparecimentoService {
     @Transactional(readOnly = true)
     public List<HistoricoComparecimentoResponseDTO> buscarHistoricoPorCustodiado(Long custodiadoId) {
         if (custodiadoId == null || custodiadoId <= 0) throw new IllegalArgumentException("ID inválido");
-        if (!custodiadoRepository.existsById(custodiadoId)) throw new EntityNotFoundException("Custodiado não encontrado: " + custodiadoId);
+        if (!custodiadoRepository.existsById(custodiadoId)) throw new EntityNotFoundException("Pessoa monitorada não encontrada: " + custodiadoId);
         return historicoComparecimentoRepository.findByCustodiado_IdOrderByDataComparecimentoDesc(custodiadoId)
                 .stream().map(this::toResponseDTO).collect(Collectors.toList());
     }
@@ -249,7 +259,7 @@ public class ComparecimentoService {
         long pres = historicoComparecimentoRepository.countByTipoValidacao(TipoValidacao.PRESENCIAL.name());
         long onl = historicoComparecimentoRepository.countByTipoValidacao(TipoValidacao.ONLINE.name());
         long cad = historicoComparecimentoRepository.countByTipoValidacao(TipoValidacao.CADASTRO_INICIAL.name());
-        long dist = historicoComparecimentoRepository.countCustodiadosDistintos();
+        long dist = historicoComparecimentoRepository.countPessoasMonitoradasDistintos();
         LocalDate inicioMes = LocalDate.now().withDayOfMonth(1);
         return EstatisticasGerais.builder()
                 .totalComparecimentos(total).comparecimentosPresenciais(pres).comparecimentosOnline(onl)
@@ -268,9 +278,9 @@ public class ComparecimentoService {
         LocalDate hoje = LocalDate.now();
         // ponytail: agrega em memória sobre os ativos (dezenas/centenas de registros).
         // Se a base crescer para dezenas de milhares, trocar por counts SQL agrupados.
-        List<Custodiado> ativos = custodiadoRepository.findAllActive();
+        List<PessoaMonitorada> ativos = custodiadoRepository.findAllActive();
         long tc = ativos.size();
-        long inad = ativos.stream().filter(Custodiado::isInadimplente).count();
+        long inad = ativos.stream().filter(PessoaMonitorada::isInadimplente).count();
         LocalDate inicioMes = hoje.withDayOfMonth(1);
         return ResumoSistema.builder()
                 .totalCustodiados(tc).custodiadosEmConformidade(tc-inad).custodiadosInadimplentes(inad)
@@ -279,10 +289,21 @@ public class ComparecimentoService {
                 .comparecimentosEsteMes(historicoComparecimentoRepository.countByDataComparecimentoBetween(inicioMes, hoje))
                 .totalMudancasEndereco(historicoComparecimentoRepository.countComMudancaEndereco())
                 .enderecosAtivos(historicoEnderecoRepository.findAllEnderecosAtivos().size())
-                .custodiadosSemHistorico(custodiadoRepository.findCustodiadosSemHistorico().size())
-                .custodiadosSemEnderecoAtivo(historicoEnderecoRepository.countCustodiadosSemEnderecoAtivo())
+                .custodiadosSemHistorico(custodiadoRepository.findPessoasMonitoradasSemHistorico().size())
+                .custodiadosSemEnderecoAtivo(historicoEnderecoRepository.countPessoasMonitoradasSemEnderecoAtivo())
                 .percentualConformidade(tc > 0 ? (double)(tc-inad)/tc*100 : 0)
                 .percentualInadimplencia(tc > 0 ? (double)inad/tc*100 : 0)
+                .foragidos(custodiadoRepository.countBySituacao(
+                        br.jus.tjba.aclp.model.enums.SituacaoPessoaMonitorada.FORAGIDO))
+                .processosCautelar(processoRepository.countByNaturezaVinculoAndSituacaoProcesso(
+                        br.jus.tjba.aclp.model.enums.NaturezaVinculo.CAUTELAR, SituacaoProcesso.ATIVO))
+                .processosExecucao(processoRepository.countByNaturezaVinculoAndSituacaoProcesso(
+                        br.jus.tjba.aclp.model.enums.NaturezaVinculo.EXECUCAO_REGIME_ABERTO, SituacaoProcesso.ATIVO))
+                .execucoesAguardandoJustificacao(execucaoPenalRepository.countBySituacaoExecucao(
+                        br.jus.tjba.aclp.model.enums.SituacaoExecucao.AGUARDANDO_JUSTIFICACAO))
+                .execucoesProximasExtincao(execucaoPenalRepository
+                        .countBySituacaoExecucaoAndDataTerminoPrevistaLessThanEqual(
+                                br.jus.tjba.aclp.model.enums.SituacaoExecucao.EM_CUMPRIMENTO, hoje.plusDays(60)))
                 .proximosComparecimentos(montarProximosComparecimentos(ativos, hoje))
                 .analiseAtrasos(montarAnaliseAtrasos(ativos))
                 .relatorioUltimosMeses(montarRelatorioUltimosMeses(hoje))
@@ -305,11 +326,11 @@ public class ComparecimentoService {
         Map<YearMonth, long[]> meses = new LinkedHashMap<>(); // [total, noPrazo]
         for (int i = 5; i >= 0; i--) meses.put(ultimoMes.minusMonths(i), new long[2]);
 
-        Map<Long, List<HistoricoComparecimento>> porCustodiado = historico.stream()
+        Map<Long, List<HistoricoComparecimento>> porPessoaMonitorada = historico.stream()
                 .filter(h -> h.getCustodiado() != null && h.getDataComparecimento() != null)
                 .collect(Collectors.groupingBy(h -> h.getCustodiado().getId()));
 
-        for (List<HistoricoComparecimento> registros : porCustodiado.values()) {
+        for (List<HistoricoComparecimento> registros : porPessoaMonitorada.values()) {
             registros.sort(Comparator.comparing(HistoricoComparecimento::getDataComparecimento));
             for (int i = 1; i < registros.size(); i++) {
                 LocalDate data = registros.get(i).getDataComparecimento();
@@ -337,10 +358,10 @@ public class ComparecimentoService {
         }).collect(Collectors.toList());
     }
 
-    private ProximosComparecimentosDTO montarProximosComparecimentos(List<Custodiado> ativos, LocalDate hoje) {
+    private ProximosComparecimentosDTO montarProximosComparecimentos(List<PessoaMonitorada> ativos, LocalDate hoje) {
         LocalDate limite = hoje.plusDays(7);
         long previstos = 0, atrasados = 0, comparecemHoje = 0, comparecemAmanha = 0;
-        for (Custodiado c : ativos) {
+        for (PessoaMonitorada c : ativos) {
             LocalDate prox = c.getProximoComparecimento();
             if (prox == null) continue;
             if (prox.isBefore(hoje)) atrasados++;
@@ -353,10 +374,10 @@ public class ComparecimentoService {
                 .comparecimentosHoje(comparecemHoje).comparecimentosAmanha(comparecemAmanha).build();
     }
 
-    private AnaliseAtrasosDTO montarAnaliseAtrasos(List<Custodiado> ativos) {
+    private AnaliseAtrasosDTO montarAnaliseAtrasos(List<PessoaMonitorada> ativos) {
         long b30 = 0, b60 = 0, b90 = 0, bMais = 0, somaDias = 0, totalAtrasados = 0;
-        Custodiado maior = null;
-        for (Custodiado c : ativos) {
+        PessoaMonitorada maior = null;
+        for (PessoaMonitorada c : ativos) {
             long dias = c.getDiasAtraso();
             if (dias <= 0) continue;
             totalAtrasados++;
@@ -394,10 +415,10 @@ public class ComparecimentoService {
 
     @Transactional
     public Map<String, Object> migrarCadastrosIniciais(String validadoPor) {
-        List<Custodiado> todos = custodiadoRepository.findAll();
+        List<PessoaMonitorada> todos = custodiadoRepository.findAll();
         if (todos.isEmpty()) return Map.of("status", "warning", "message", "Nenhum custodiado", "totalCustodiados", 0, "custodiadosMigrados", 0);
         int migrados = 0; List<String> erros = new ArrayList<>();
-        for (Custodiado c : todos) {
+        for (PessoaMonitorada c : todos) {
             try {
                 if (!historicoComparecimentoRepository.existsCadastroInicialPorCustodiado(c.getId())) {
                     HistoricoComparecimento ci = HistoricoComparecimento.builder()
@@ -423,7 +444,7 @@ public class ComparecimentoService {
 
         try {
             if (h.getProcesso() != null && h.getProcesso().getCustodiado() != null) {
-                Custodiado c = h.getProcesso().getCustodiado();
+                PessoaMonitorada c = h.getProcesso().getCustodiado();
                 custodiadoId = c.getId(); custodiadoNome = c.getNome(); custodiadoCpf = c.getCpf();
             }
         } catch (Exception e) { /* fallback abaixo */ }
@@ -435,7 +456,7 @@ public class ComparecimentoService {
                     custodiadoNome = h.getCustodiado().getNome();
                     custodiadoCpf = h.getCustodiado().getCpf();
                 }
-            } catch (Exception e) { log.warn("Custodiado inacessível para comparecimento {}", h.getId()); }
+            } catch (Exception e) { log.warn("Pessoa monitorada inacessível para comparecimento {}", h.getId()); }
         }
 
         // CORREÇÃO: Extrair numeroProcesso
@@ -478,6 +499,9 @@ public class ComparecimentoService {
         if (dto.getDataComparecimento() == null) throw new IllegalArgumentException("Data obrigatória");
         if (dto.getDataComparecimento().isAfter(LocalDate.now())) throw new IllegalArgumentException("Data não pode ser futura");
         if (dto.getTipoValidacao() == null) throw new IllegalArgumentException("Tipo de validação obrigatório");
+        if (dto.getTipoValidacao() == TipoValidacao.FALTA_JUSTIFICADA
+                && (dto.getObservacoes() == null || dto.getObservacoes().trim().isEmpty()))
+            throw new IllegalArgumentException("Falta justificada exige a justificativa em observações");
         if (dto.getValidadoPor() == null || dto.getValidadoPor().trim().isEmpty()) throw new IllegalArgumentException("Validado por obrigatório");
         if (dto.houveMudancaEndereco()) {
             if (dto.getNovoEndereco() == null) throw new IllegalArgumentException("Dados do novo endereço obrigatórios");
@@ -485,7 +509,7 @@ public class ComparecimentoService {
         }
     }
 
-    private void processarMudancaEndereco(ComparecimentoDTO dto, Custodiado custodiado, HistoricoComparecimento historico) {
+    private void processarMudancaEndereco(ComparecimentoDTO dto, PessoaMonitorada custodiado, HistoricoComparecimento historico) {
         historicoEnderecoRepository.desativarTodosEnderecosPorCustodiado(custodiado.getId());
         HistoricoEndereco novo = HistoricoEndereco.builder()
                 .custodiado(custodiado).cep(dto.getNovoEndereco().getCep())
@@ -525,6 +549,11 @@ public class ComparecimentoService {
         private long totalMudancasEndereco; private long enderecosAtivos; private long custodiadosSemHistorico;
         private long custodiadosSemEnderecoAtivo; private double percentualConformidade; private double percentualInadimplencia;
         private LocalDate dataConsulta;
+        private long foragidos;
+        private long processosCautelar;
+        private long processosExecucao;
+        private long execucoesAguardandoJustificacao;
+        private long execucoesProximasExtincao;
         private ProximosComparecimentosDTO proximosComparecimentos;
         private AnaliseAtrasosDTO analiseAtrasos;
         private RelatorioUltimosMesesDTO relatorioUltimosMeses;

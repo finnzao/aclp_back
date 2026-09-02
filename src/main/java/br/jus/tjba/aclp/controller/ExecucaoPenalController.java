@@ -1,0 +1,153 @@
+package br.jus.tjba.aclp.controller;
+
+import br.jus.tjba.aclp.dto.ApiResponse;
+import br.jus.tjba.aclp.dto.ExecucaoPenalDTO.ExecucaoPenalResponse;
+import br.jus.tjba.aclp.dto.ExecucaoPenalDTO.RegistroPenaRequest;
+import br.jus.tjba.aclp.dto.ExecucaoPenalDTO.RemicaoRequest;
+import br.jus.tjba.aclp.dto.IncidenteExecucaoDTO.IncidenteResponse;
+import br.jus.tjba.aclp.dto.IncidenteExecucaoDTO.RegistroIncidenteRequest;
+import br.jus.tjba.aclp.dto.IncidenteExecucaoDTO.ResultadoRequest;
+import br.jus.tjba.aclp.service.ExecucaoPenalService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.persistence.EntityNotFoundException;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/execucoes")
+@RequiredArgsConstructor
+@Tag(name = "Execução Penal", description = "Registro e consulta de execuções de pena em regime aberto")
+@Slf4j
+public class ExecucaoPenalController {
+
+    private final ExecucaoPenalService execucaoPenalService;
+
+    @PostMapping
+    @Operation(summary = "Registrar pena",
+            description = "Cria a execução penal de um processo EXECUCAO_REGIME_ABERTO. "
+                    + "origem SENTENCA: envia dataTermino. origem DOSIMETRIA_CALCULADA: envia anos/meses/dias.")
+    public ResponseEntity<ApiResponse<ExecucaoPenalResponse>> registrar(
+            @Valid @RequestBody RegistroPenaRequest request) {
+        try {
+            ExecucaoPenalResponse response = execucaoPenalService.registrarPena(request);
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(ApiResponse.success("Execução penal registrada", response));
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        } catch (Exception e) {
+            log.error("Erro ao registrar execução penal", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Erro interno ao registrar execução"));
+        }
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<ApiResponse<ExecucaoPenalResponse>> buscarPorId(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(ApiResponse.success("Execução encontrada",
+                    execucaoPenalService.buscarPorId(id)));
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(e.getMessage()));
+        }
+    }
+
+    @GetMapping("/processo/{processoId}")
+    public ResponseEntity<ApiResponse<ExecucaoPenalResponse>> buscarPorProcesso(@PathVariable Long processoId) {
+        try {
+            return ResponseEntity.ok(ApiResponse.success("Execução encontrada",
+                    execucaoPenalService.buscarPorProcesso(processoId)));
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(e.getMessage()));
+        }
+    }
+
+    @GetMapping
+    public ResponseEntity<ApiResponse<List<ExecucaoPenalResponse>>> listar() {
+        return ResponseEntity.ok(ApiResponse.success("Execuções listadas",
+                execucaoPenalService.listarTodas()));
+    }
+
+    @GetMapping("/proximas-extincao")
+    public ResponseEntity<ApiResponse<List<ExecucaoPenalResponse>>> proximasExtincao(
+            @RequestParam(defaultValue = "60") int dias) {
+        return ResponseEntity.ok(ApiResponse.success("Painel D-" + dias,
+                execucaoPenalService.proximasExtincao(dias)));
+    }
+
+    @PostMapping("/{id}/incidentes")
+    @Operation(summary = "Registrar incidente",
+            description = "Registra ocorrência (descumprimento, novo crime etc.). "
+                    + "Tipos que exigem justificação suspendem a execução até a decisão.")
+    public ResponseEntity<ApiResponse<IncidenteResponse>> registrarIncidente(
+            @PathVariable Long id,
+            @Valid @RequestBody RegistroIncidenteRequest request,
+            Authentication auth) {
+        try {
+            return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(
+                    "Incidente registrado",
+                    execucaoPenalService.registrarIncidente(id, request, auth.getName())));
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(e.getMessage()));
+        }
+    }
+
+    @GetMapping("/{id}/incidentes")
+    public ResponseEntity<ApiResponse<List<IncidenteResponse>>> listarIncidentes(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(ApiResponse.success("Incidentes listados",
+                    execucaoPenalService.listarIncidentes(id)));
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(e.getMessage()));
+        }
+    }
+
+    @PatchMapping("/{id}/remicao")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Lançar remição",
+            description = "Soma dias remidos e recalcula o término. Aceita dias direto "
+                    + "ou diasTrabalhados/horasEstudo (conversão LEP 126). Registro de "
+                    + "decisão judicial — o sistema converte, não decide.")
+    public ResponseEntity<ApiResponse<ExecucaoPenalResponse>> lancarRemicao(
+            @PathVariable Long id,
+            @Valid @RequestBody RemicaoRequest request,
+            Authentication auth) {
+        try {
+            return ResponseEntity.ok(ApiResponse.success("Remição lançada",
+                    execucaoPenalService.lancarRemicao(id, request, auth.getName())));
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
+    }
+
+    @PatchMapping("/incidentes/{incidenteId}/resultado")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Registrar decisão do incidente",
+            description = "Registra o desfecho decidido pelo juízo. Única porta para "
+                    + "REGREDIDA/EXTINTA — o sistema registra, não decide (LEP art. 118, §2º).")
+    public ResponseEntity<ApiResponse<IncidenteResponse>> registrarResultado(
+            @PathVariable Long incidenteId,
+            @Valid @RequestBody ResultadoRequest request,
+            Authentication auth) {
+        try {
+            return ResponseEntity.ok(ApiResponse.success("Decisão registrada",
+                    execucaoPenalService.registrarResultado(incidenteId, request, auth.getName())));
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
+    }
+}

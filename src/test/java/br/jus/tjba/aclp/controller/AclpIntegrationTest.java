@@ -1,7 +1,7 @@
 package br.jus.tjba.aclp.controller;
 
 import br.jus.tjba.aclp.dto.ComparecimentoDTO;
-import br.jus.tjba.aclp.dto.CustodiadoDTO;
+import br.jus.tjba.aclp.dto.PessoaMonitoradaDTO;
 import br.jus.tjba.aclp.dto.UsuarioDTO;
 import br.jus.tjba.aclp.model.enums.TipoUsuario;
 import br.jus.tjba.aclp.model.enums.TipoValidacao;
@@ -120,8 +120,8 @@ class AclpIntegrationTest {
     @Test
     @Order(4)
     @DisplayName("Deve criar um custodiado com endereço completo")
-    void testCreateCustodiado() throws Exception {
-        CustodiadoDTO custodiado = CustodiadoDTO.builder()
+    void testCreatePessoaMonitorada() throws Exception {
+        PessoaMonitoradaDTO custodiado = PessoaMonitoradaDTO.builder()
                 .nome("João Pedro Silva")
                 .cpf("529.982.247-25")
                 .rg("1234567")
@@ -134,7 +134,7 @@ class AclpIntegrationTest {
                 // Relativa ao hoje: data fixa deixaria o proximo comparecimento no
                 // passado e o custodiado nasceria INADIMPLENTE.
                 .dataComparecimentoInicial(LocalDate.now().minusDays(5))
-                .observacoes("Custodiado em liberdade provisória")
+                .observacoes("Pessoa monitorada em liberdade provisória")
                 // Endereço obrigatório
                 .cep("40070-110")
                 .logradouro("Avenida Sete de Setembro")
@@ -145,7 +145,7 @@ class AclpIntegrationTest {
                 .estado("BA")
                 .build();
 
-        MvcResult result = mockMvc.perform(post("/api/custodiados")
+        MvcResult result = mockMvc.perform(post("/api/pessoas-monitoradas")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(custodiado)))
@@ -158,30 +158,30 @@ class AclpIntegrationTest {
                 .andReturn();
 
         String response = result.getResponse().getContentAsString();
-        // CustodiadoResponseDTO.id passou a ser o publicId (UUID em String).
+        // PessoaMonitoradaResponseDTO.id passou a ser o publicId (UUID em String).
         custodiadoPublicId = objectMapper.readTree(response).path("data").path("id").asText();
     }
 
     @Test
     @Order(5)
     @DisplayName("Deve buscar custodiado criado")
-    void testGetCustodiado() throws Exception {
-        mockMvc.perform(get("/api/custodiados/" + custodiadoPublicId))
+    void testGetPessoaMonitorada() throws Exception {
+        mockMvc.perform(get("/api/pessoas-monitoradas/" + custodiadoPublicId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success", is(true)))
                 .andExpect(jsonPath("$.data.id", is(custodiadoPublicId)))
                 .andExpect(jsonPath("$.data.nome", is("JOÃO PEDRO SILVA")));
 
-        // O id numerico nao vem em CustodiadoResponseDTO, mas os endpoints de
+        // O id numerico nao vem em PessoaMonitoradaResponseDTO, mas os endpoints de
         // comparecimento e endereco ainda o exigem. A listagem expoe numericId.
-        MvcResult lista = mockMvc.perform(get("/api/custodiados"))
+        MvcResult lista = mockMvc.perform(get("/api/pessoas-monitoradas"))
                 .andExpect(status().isOk())
                 .andReturn();
         custodiadoId = objectMapper.readTree(lista.getResponse().getContentAsString())
                 .path("data").get(0).path("numericId").asLong();
     }
 
-    // Removido testGetCustodiadoByProcesso: GET /api/custodiados/processo/{n} nao
+    // Removido testGetPessoaMonitoradaByProcesso: GET /api/pessoas-monitoradas/processo/{n} nao
     // existe mais — a busca por numero de processo esta em ProcessoController
     // (GET /api/processos/numero/{numero}).
 
@@ -332,8 +332,8 @@ class AclpIntegrationTest {
     @Test
     @Order(16)
     @DisplayName("Deve buscar custodiados por termo")
-    void testBuscarCustodiados() throws Exception {
-        mockMvc.perform(get("/api/custodiados/buscar")
+    void testBuscarPessoasMonitoradas() throws Exception {
+        mockMvc.perform(get("/api/pessoas-monitoradas/buscar")
                         .param("termo", "João"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success", is(true)))
@@ -343,8 +343,8 @@ class AclpIntegrationTest {
     @Test
     @Order(17)
     @DisplayName("Deve buscar custodiados inadimplentes")
-    void testGetCustodiadosInadimplentes() throws Exception {
-        mockMvc.perform(get("/api/custodiados/inadimplentes"))
+    void testGetPessoasMonitoradasInadimplentes() throws Exception {
+        mockMvc.perform(get("/api/pessoas-monitoradas/inadimplentes"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success", is(true)))
                 .andExpect(jsonPath("$.data", isA(List.class)));
@@ -355,8 +355,8 @@ class AclpIntegrationTest {
     @Test
     @Order(18)
     @DisplayName("Não deve criar custodiado com CPF duplicado")
-    void testCreateCustodiadoDuplicateCPF() throws Exception {
-        CustodiadoDTO custodiado = CustodiadoDTO.builder()
+    void testCreatePessoaMonitoradaDuplicateCPF() throws Exception {
+        PessoaMonitoradaDTO custodiado = PessoaMonitoradaDTO.builder()
                 .nome("Outro Nome")
                 .cpf("529.982.247-25") // CPF já cadastrado
                 .contato("(71) 99999-9999")
@@ -373,7 +373,7 @@ class AclpIntegrationTest {
                 .estado("BA")
                 .build();
 
-        mockMvc.perform(post("/api/custodiados")
+        mockMvc.perform(post("/api/pessoas-monitoradas")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(custodiado)))

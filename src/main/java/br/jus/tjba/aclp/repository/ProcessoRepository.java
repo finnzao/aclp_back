@@ -25,11 +25,11 @@ public interface ProcessoRepository extends JpaRepository<Processo, Long> {
 
     // Inadimplentes com JOIN FETCH (evita N+1)
     @Query("SELECT p FROM Processo p JOIN FETCH p.custodiado c WHERE p.status = 'INADIMPLENTE' AND p.situacaoProcesso = 'ATIVO'")
-    List<Processo> findInadimplentesComCustodiado();
+    List<Processo> findInadimplentesComPessoaMonitorada();
 
     // Comparecimentos para hoje com JOIN FETCH
     @Query("SELECT p FROM Processo p JOIN FETCH p.custodiado c WHERE p.proximoComparecimento = CURRENT_DATE AND p.situacaoProcesso = 'ATIVO'")
-    List<Processo> findComparecimentosHojeComCustodiado();
+    List<Processo> findComparecimentosHojeComPessoaMonitorada();
 
     // Listagem paginada com filtros — query principal do sistema
     @Query(value = "SELECT p FROM Processo p JOIN FETCH p.custodiado c " +
@@ -49,6 +49,9 @@ public interface ProcessoRepository extends JpaRepository<Processo, Long> {
     // Contadores para dashboard
     long countBySituacaoProcesso(SituacaoProcesso situacao);
 
+    long countByNaturezaVinculoAndSituacaoProcesso(
+            br.jus.tjba.aclp.model.enums.NaturezaVinculo natureza, SituacaoProcesso situacao);
+
     @Query("SELECT COUNT(p) FROM Processo p WHERE p.status = :status AND p.situacaoProcesso = 'ATIVO'")
     long countByStatusAtivo(@Param("status") StatusComparecimento status);
 
@@ -64,11 +67,11 @@ public interface ProcessoRepository extends JpaRepository<Processo, Long> {
 
     // Buscar por ID com custodiado carregado
     @Query("SELECT p FROM Processo p JOIN FETCH p.custodiado c WHERE p.id = :id")
-    Optional<Processo> findByIdComCustodiado(@Param("id") Long id);
+    Optional<Processo> findByIdComPessoaMonitorada(@Param("id") Long id);
 
     // Todos processos ativos
     @Query("SELECT p FROM Processo p JOIN FETCH p.custodiado c WHERE p.situacaoProcesso = 'ATIVO' ORDER BY p.proximoComparecimento")
-    List<Processo> findAllAtivosComCustodiado();
+    List<Processo> findAllAtivosComPessoaMonitorada();
 
     // Verificar se custodiado tem processos ativos não encerrados
     @Query("SELECT COUNT(p) > 0 FROM Processo p WHERE p.custodiado.id = :custodiadoId AND p.situacaoProcesso NOT IN ('ENCERRADO', 'SUSPENSO')")

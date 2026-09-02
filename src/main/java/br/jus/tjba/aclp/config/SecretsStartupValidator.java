@@ -14,29 +14,17 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * Recusa iniciar a aplicação em produção com segredo fraco, de desenvolvimento ou
- * conhecido publicamente.
- *
- * POR QUE EXISTE — os valores abaixo estavam escritos em texto puro dentro de
- * `application.properties`, versionados junto com o código:
- *
- *   - o segredo de assinatura do JWT (quem o tem emite token de qualquer usuário);
- *   - a senha de aplicativo do Gmail;
- *   - a senha do banco;
- *   - a senha do primeiro administrador.
- *
- * Pior: `application-prod.properties` trazia um valor padrão embutido para o segredo
- * do JWT, então a falta da variável de ambiente não quebrava nada — a aplicação subia
- * normalmente usando a chave do repositório. Remover o padrão resolve o caso de
- * variável ausente; esta classe cobre o caso restante, que é alguém **definir** a
- * variável com o valor vazado.
- *
- * A verificação só vale para os perfis de produção. Em desenvolvimento os valores de
- * placeholder são legítimos e o boot segue com um aviso.
+ * Recusa iniciar em producao com segredo fraco, de dev ou que ja esteve versionado
+ * no codigo-fonte. Em dev os placeholders passam com aviso.
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
+// Desligavel por config (uso local com profile prod). Default: ligado.
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+        name = "aclp.security.secrets-validator.enabled",
+        havingValue = "true",
+        matchIfMissing = true)
 public class SecretsStartupValidator {
 
     /** Perfis tratados como produção para efeito desta validação. */

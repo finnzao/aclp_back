@@ -42,18 +42,8 @@ public class EmailService {
         log.info("EmailService inicializado - Sender: {}", mailSender != null ? "Spring Mail" : "Manual");
     }
 
-    /**
-     * Assíncrono: os timeouts de SMTP somam até 25s (connection 5s + read 10s + write 10s)
-     * e prendiam a thread da requisição HTTP. O caso pior era o e-mail de "conta bloqueada",
-     * disparado durante um flood de login — travava justamente as threads de autenticação.
-     *
-     * Consequência aceita: uma falha de envio não volta mais como exceção para quem chamou.
-     * Todos os chamadores são fire-and-forget (void) e a falha fica registrada no log —
-     * a operação de negócio não deve falhar porque o SMTP está lento.
-     *
-     * Só funciona porque os chamadores estão em OUTROS beans: chamada interna (this.x())
-     * não passa pelo proxy do Spring e continuaria síncrona.
-     */
+    // Async: SMTP pode segurar a thread HTTP por ate 25s. Falha de envio vai
+    // para o log, nao para o chamador. Nao chamar via this.x() (proxy).
     @Async
     public void enviarEmail(String destinatario, String assunto, String conteudo) {
         if (!emailEnabled) {

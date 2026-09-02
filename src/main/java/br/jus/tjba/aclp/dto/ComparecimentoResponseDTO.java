@@ -123,7 +123,7 @@ public class ComparecimentoResponseDTO {
         private long comparecimentosHoje;
         private long comparecimentosAmanha;
         private List<ComparecimentoDiario> detalhesPorDia;
-        private List<DetalheCustodiado> custodiadosAtrasados;
+        private List<DetalhePessoaMonitorada> custodiadosAtrasados;
     }
 
     /**
@@ -135,7 +135,7 @@ public class ComparecimentoResponseDTO {
         private LocalDate data;
         private String diaSemana;
         private int totalPrevisto;
-        private List<DetalheCustodiado> custodiados;
+        private List<DetalhePessoaMonitorada> custodiados;
     }
 
     /**
@@ -143,7 +143,7 @@ public class ComparecimentoResponseDTO {
      */
     @Data
     @Builder
-    public static class DetalheCustodiado {
+    public static class DetalhePessoaMonitorada {
         private Long id;
         private String nome;
         private String processo;
@@ -178,11 +178,11 @@ public class ComparecimentoResponseDTO {
         private long totalAtrasadosMais90Dias; // Atrasados há mais de 90 dias
         private double mediaDiasAtraso;
         private Map<String, Long> distribuicaoAtrasos; // Distribuição por faixas
-        private List<DetalheCustodiadoAtrasado> custodiadosAtrasados30Dias;
-        private List<DetalheCustodiadoAtrasado> custodiadosAtrasados60Dias;
-        private List<DetalheCustodiadoAtrasado> custodiadosAtrasados90Dias;
-        private List<DetalheCustodiadoAtrasado> custodiadosAtrasadosMais90Dias;
-        private DetalheCustodiadoAtrasado custodiadoMaiorAtraso;
+        private List<DetalhePessoaMonitoradaAtrasado> custodiadosAtrasados30Dias;
+        private List<DetalhePessoaMonitoradaAtrasado> custodiadosAtrasados60Dias;
+        private List<DetalhePessoaMonitoradaAtrasado> custodiadosAtrasados90Dias;
+        private List<DetalhePessoaMonitoradaAtrasado> custodiadosAtrasadosMais90Dias;
+        private DetalhePessoaMonitoradaAtrasado custodiadoMaiorAtraso;
         private LocalDate dataAnalise;
     }
 
@@ -191,7 +191,7 @@ public class ComparecimentoResponseDTO {
      */
     @Data
     @Builder
-    public static class DetalheCustodiadoAtrasado {
+    public static class DetalhePessoaMonitoradaAtrasado {
         private Long id;
         private String nome;
         private String processo;

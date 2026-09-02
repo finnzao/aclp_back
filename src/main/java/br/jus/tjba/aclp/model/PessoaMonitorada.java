@@ -1,6 +1,6 @@
 package br.jus.tjba.aclp.model;
 
-import br.jus.tjba.aclp.model.enums.SituacaoCustodiado;
+import br.jus.tjba.aclp.model.enums.SituacaoPessoaMonitorada;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
@@ -14,7 +14,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 @Entity
-@Table(name = "custodiados",
+@Table(name = "pessoas_monitoradas",
         indexes = {
                 @Index(name = "idx_custodiado_cpf", columnList = "cpf"),
                 @Index(name = "idx_custodiado_rg", columnList = "rg"),
@@ -32,7 +32,7 @@ import java.util.UUID;
 @AllArgsConstructor
 @Builder
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
-public class Custodiado {
+public class PessoaMonitorada {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -68,11 +68,15 @@ public class Custodiado {
     @Enumerated(EnumType.STRING)
     @Column(name = "situacao", nullable = false, length = 20)
     @Builder.Default
-    private SituacaoCustodiado situacao = SituacaoCustodiado.ATIVO;
+    private SituacaoPessoaMonitorada situacao = SituacaoPessoaMonitorada.ATIVO;
 
     @Size(max = 500)
     @Column(name = "observacoes", length = 500)
     private String observacoes;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "motivo_arquivamento", length = 30)
+    private br.jus.tjba.aclp.model.enums.MotivoArquivamento motivoArquivamento;
 
     @Column(name = "criado_em", nullable = false)
     @Builder.Default
@@ -140,7 +144,7 @@ public class Custodiado {
     public void prePersist() {
         if (criadoEm == null) criadoEm = LocalDateTime.now();
         if (version == null) version = 0L;
-        if (situacao == null) situacao = SituacaoCustodiado.ATIVO;
+        if (situacao == null) situacao = SituacaoPessoaMonitorada.ATIVO;
         if (publicId == null) publicId = UUID.randomUUID();
         if (status == null) status = br.jus.tjba.aclp.model.enums.StatusComparecimento.EM_CONFORMIDADE;
         if (contato == null || contato.trim().isEmpty()) contato = "Pendente";
@@ -148,7 +152,7 @@ public class Custodiado {
             ultimoComparecimento = dataComparecimentoInicial;
         if (proximoComparecimento == null && situacao.isAtivo() && periodicidade != null)
             calcularProximoComparecimento();
-        atualizarStatusBaseadoEmData(); // nasce coerente com a data (importação de base legada)
+        atualizarStatusBaseadoEmData(); // nasce coerente com a data
     }
 
     @PreUpdate
@@ -199,10 +203,18 @@ public class Custodiado {
         }
     }
 
-    /**
-     * Status real calculado a partir da data, não do campo persistido (que fica
-     * defasado até o StatusSchedulerService rodar). Use isto para exibição/contagem.
-     */
+    /** EXECUCAO/CAUTELAR/MISTO pelos processos ativos; requer sessao aberta (processos LAZY). */
+    public String getNaturezaMonitoramento() {
+        boolean execucao = false, cautelar = false;
+        for (Processo p : processos) {
+            if (p.getSituacaoProcesso() != br.jus.tjba.aclp.model.enums.SituacaoProcesso.ATIVO) continue;
+            if (p.isExecucao()) execucao = true; else cautelar = true;
+        }
+        if (execucao && cautelar) return "MISTO";
+        return execucao ? "EXECUCAO" : "CAUTELAR";
+    }
+
+    /** Status pela DATA; a coluna persistida e cache do scheduler. */
     public br.jus.tjba.aclp.model.enums.StatusComparecimento getStatusEfetivo() {
         if (!isAtivo()) return status;
         return isInadimplente()
@@ -248,15 +260,35 @@ public class Custodiado {
     }
 
     public void arquivar() {
-        situacao = SituacaoCustodiado.ARQUIVADO;
+        arquivar(null);
+    }
+
+    public void arquivar(br.jus.tjba.aclp.model.enums.MotivoArquivamento motivo) {
+        situacao = SituacaoPessoaMonitorada.ARQUIVADO;
+        motivoArquivamento = motivo;
         proximoComparecimento = null;
         atualizadoEm = LocalDateTime.now();
     }
 
+    /** Ato humano, nunca automático. Sai dos contadores de atraso (queries filtram ATIVO). */
+    public void declararForagido() {
+        situacao = SituacaoPessoaMonitorada.FORAGIDO;
+        atualizadoEm = LocalDateTime.now();
+    }
+
+    /** Volta de ARQUIVADO ou FORAGIDO. */
     public void reativar() {
-        situacao = SituacaoCustodiado.ATIVO;
+        situacao = SituacaoPessoaMonitorada.ATIVO;
+        motivoArquivamento = null;
         calcularProximoComparecimento();
         atualizarStatusBaseadoEmData();
+        atualizadoEm = LocalDateTime.now();
+    }
+
+    /** Falta justificada: adia o ciclo a partir da falta SEM contar presença. */
+    public void registrarFaltaJustificada(java.time.LocalDate dataFalta) {
+        if (periodicidade != null) proximoComparecimento = dataFalta.plusDays(periodicidade);
+        status = br.jus.tjba.aclp.model.enums.StatusComparecimento.EM_CONFORMIDADE;
         atualizadoEm = LocalDateTime.now();
     }
 
@@ -317,7 +349,7 @@ public class Custodiado {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        Custodiado c = (Custodiado) o;
+        PessoaMonitorada c = (PessoaMonitorada) o;
         if (publicId != null && c.publicId != null) return publicId.equals(c.publicId);
         return Objects.equals(id, c.id);
     }

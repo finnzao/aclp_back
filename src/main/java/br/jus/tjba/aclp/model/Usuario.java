@@ -46,7 +46,7 @@ public class Usuario {
 
     @NotBlank(message = "Senha é obrigatória")
     @Column(name = "senha", nullable = false)
-    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY) // aceita na entrada, nunca serializa na saída
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String senha;
 
     @NotNull(message = "Tipo é obrigatório")
@@ -101,7 +101,7 @@ public class Usuario {
     private Boolean mfaEnabled = false;
 
     @Column(name = "mfa_secret", length = 100)
-    @JsonIgnore // segredo TOTP: nunca sai da aplicação
+    @JsonIgnore
     private String mfaSecret;
 
     @Column(name = "email_verificado", nullable = false)
@@ -129,7 +129,7 @@ public class Usuario {
     private LocalDateTime ultimoResetSenha;
 
     @Column(name = "password_reset_token", length = 255)
-    @JsonIgnore // quem lê a listagem de usuários poderia resetar a senha alheia
+    @JsonIgnore
     private String passwordResetToken;
 
     @Column(name = "password_reset_expiry")

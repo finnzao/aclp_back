@@ -41,15 +41,11 @@ public class AuthController {
     public static final String ACCESS_COOKIE = "auth-token";
     public static final String REFRESH_COOKIE = "refresh-token";
 
-    /** false em dev: cookie Secure não é gravado sobre http://localhost. */
+    // false em dev: Secure nao grava sobre http://localhost
     @Value("${aclp.auth.cookie-secure:true}")
     private boolean cookieSecure;
 
-    /**
-     * Cookie httpOnly: o JavaScript da página não consegue ler. Mesmo com XSS o atacante
-     * pode usar a sessão na aba, mas não exfiltra o token para reutilizar em outro lugar.
-     * SameSite=Lax barra o envio em POST cross-site, que é a proteção CSRF desta arquitetura.
-     */
+    // httpOnly: JS nao le o token; SameSite=Lax cobre CSRF em POST cross-site
     private ResponseCookie authCookie(String nome, String valor, long maxAgeSegundos, String path) {
         return ResponseCookie.from(nome, valor != null ? valor : "")
                 .httpOnly(true)
@@ -109,8 +105,7 @@ public class AuthController {
                     .body(response);
 
         } catch (Exception e) {
-            // Mensagem constante: mensagens distintas por causa da falha (usuário inexistente
-            // vs senha errada vs conta bloqueada) viram oráculo de enumeração de contas.
+            // mensagem constante: nao virar oraculo de enumeracao de contas
             log.error("Falha no login - Email: {}", request.getEmail(), e);
 
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
@@ -133,7 +128,6 @@ public class AuthController {
             HttpServletRequest request) {
 
         try {
-            // O header deixou de ser obrigatório: com cookie httpOnly o front não o envia.
             String token = authHeader != null ? extractTokenFromHeader(authHeader)
                                               : cookieValue(request, ACCESS_COOKIE);
             if (token != null) authService.logout(token, request);
@@ -142,8 +136,7 @@ public class AuthController {
             log.error("Erro no logout", e);
         }
 
-        // Logout sempre responde sucesso E sempre apaga os cookies, mesmo se a
-        // invalidação no servidor falhar — senão a sessão ficaria presa no browser.
+        // sempre apaga os cookies, mesmo se a invalidacao no servidor falhar
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, authCookie(ACCESS_COOKIE, null, 0, "/").toString())
                 .header(HttpHeaders.SET_COOKIE, authCookie(REFRESH_COOKIE, null, 0, "/api/auth").toString())
@@ -167,8 +160,7 @@ public class AuthController {
         log.debug("Renovação de token solicitada");
 
         try {
-            // Corpo opcional: com cookie httpOnly o refresh token não passa mais pelo JS.
-            // O @Valid saiu daqui porque @NotBlank rejeitaria o corpo ausente com 400.
+            // corpo opcional: o refresh normalmente vem no cookie httpOnly
             String refreshToken = (request != null && request.getRefreshToken() != null
                     && !request.getRefreshToken().isBlank())
                     ? request.getRefreshToken()

@@ -2,19 +2,19 @@ package br.jus.tjba.aclp.service;
 
 import br.jus.tjba.aclp.dto.CadastroInicialDTO;
 import br.jus.tjba.aclp.dto.CadastroInicialResponseDTO;
-import br.jus.tjba.aclp.dto.CustodiadoDTO;
-import br.jus.tjba.aclp.dto.CustodiadoListDTO;
-import br.jus.tjba.aclp.model.Custodiado;
+import br.jus.tjba.aclp.dto.PessoaMonitoradaDTO;
+import br.jus.tjba.aclp.dto.PessoaMonitoradaListDTO;
+import br.jus.tjba.aclp.model.PessoaMonitorada;
 import br.jus.tjba.aclp.model.HistoricoComparecimento;
 import br.jus.tjba.aclp.model.HistoricoEndereco;
 import br.jus.tjba.aclp.model.Processo;
 import br.jus.tjba.aclp.model.enums.EstadoBrasil;
 import br.jus.tjba.aclp.model.enums.NaturezaVinculo;
-import br.jus.tjba.aclp.model.enums.SituacaoCustodiado;
+import br.jus.tjba.aclp.model.enums.SituacaoPessoaMonitorada;
 import br.jus.tjba.aclp.model.enums.SituacaoProcesso;
 import br.jus.tjba.aclp.model.enums.StatusComparecimento;
 import br.jus.tjba.aclp.model.enums.TipoValidacao;
-import br.jus.tjba.aclp.repository.CustodiadoRepository;
+import br.jus.tjba.aclp.repository.PessoaMonitoradaRepository;
 import br.jus.tjba.aclp.repository.HistoricoComparecimentoRepository;
 import br.jus.tjba.aclp.repository.HistoricoEnderecoRepository;
 import br.jus.tjba.aclp.repository.ProcessoRepository;
@@ -43,12 +43,13 @@ import java.util.UUID;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class CustodiadoService {
+public class PessoaMonitoradaService {
 
-    private final CustodiadoRepository custodiadoRepository;
+    private final PessoaMonitoradaRepository custodiadoRepository;
     private final HistoricoComparecimentoRepository historicoComparecimentoRepository;
     private final HistoricoEnderecoRepository historicoEnderecoRepository;
     private final ProcessoRepository processoRepository;
+    private final ExecucaoPenalService execucaoPenalService;
 
     // =====================================================================
     // CORREÇÃO DE PERFORMANCE: Novos métodos para busca paginada
@@ -70,9 +71,9 @@ public class CustodiadoService {
      * @param direcao   Direção da ordenação (asc ou desc)
      */
     @Transactional(readOnly = true)
-    public Page<CustodiadoListDTO> listarPaginado(
+    public Page<PessoaMonitoradaListDTO> listarPaginado(
             int page, int size, String nome, String cpf,
-            String status, String ordenarPor, String direcao) {
+            String status, String natureza, String ordenarPor, String direcao) {
 
         // Validar campo de ordenação para evitar injeção SQL
         String campoOrdenacao = validarCampoOrdenacao(ordenarPor);
@@ -84,11 +85,17 @@ public class CustodiadoService {
         Pageable pageable = PageRequest.of(page, size, sort);
 
         // Construir Specification dinâmica com os filtros
-        Specification<Custodiado> spec = buildCustodiadoSpecification(nome, cpf, status);
+        Specification<PessoaMonitorada> spec = buildPessoaMonitoradaSpecification(nome, cpf, status, natureza);
 
-        Page<Custodiado> pagina = custodiadoRepository.findAll(spec, pageable);
+        Page<PessoaMonitorada> pagina = custodiadoRepository.findAll(spec, pageable);
 
-        return pagina.map(CustodiadoListDTO::fromEntity);
+        return pagina.map(PessoaMonitoradaListDTO::fromEntity);
+    }
+
+    /** Mapeia dentro da transacao: o DTO le processos (LAZY) para derivar a natureza. */
+    @Transactional(readOnly = true)
+    public List<PessoaMonitoradaListDTO> listarTodosAtivosDTO() {
+        return findAllActive().stream().map(PessoaMonitoradaListDTO::fromEntity).toList();
     }
 
     /**
@@ -98,8 +105,8 @@ public class CustodiadoService {
      * de planilhas. Chamado apenas no momento do clique em "Exportar".
      */
     @Transactional(readOnly = true)
-    public List<CustodiadoListDTO> listarParaExportacao(
-            String nome, String cpf, String status,
+    public List<PessoaMonitoradaListDTO> listarParaExportacao(
+            String nome, String cpf, String status, String natureza,
             String ordenarPor, String direcao) {
 
         String campoOrdenacao = validarCampoOrdenacao(ordenarPor);
@@ -108,11 +115,11 @@ public class CustodiadoService {
                 ? Sort.by(campoOrdenacao).descending()
                 : Sort.by(campoOrdenacao).ascending();
 
-        Specification<Custodiado> spec = buildCustodiadoSpecification(nome, cpf, status);
+        Specification<PessoaMonitorada> spec = buildPessoaMonitoradaSpecification(nome, cpf, status, natureza);
 
-        List<Custodiado> custodiados = custodiadoRepository.findAll(spec, sort);
+        List<PessoaMonitorada> custodiados = custodiadoRepository.findAll(spec, sort);
         return custodiados.stream()
-                .map(CustodiadoListDTO::fromEntity)
+                .map(PessoaMonitoradaListDTO::fromEntity)
                 .toList();
     }
 
@@ -120,14 +127,14 @@ public class CustodiadoService {
      * Constrói Specification dinâmica para filtros de custodiado.
      * Todos os filtros são aplicados na query SQL, não em Java.
      */
-    private Specification<Custodiado> buildCustodiadoSpecification(
-            String nome, String cpf, String status) {
+    private Specification<PessoaMonitorada> buildPessoaMonitoradaSpecification(
+            String nome, String cpf, String status, String natureza) {
 
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
             // Filtro base: apenas custodiados ativos
-            predicates.add(cb.equal(root.get("situacao"), SituacaoCustodiado.ATIVO));
+            predicates.add(cb.equal(root.get("situacao"), SituacaoPessoaMonitorada.ATIVO));
 
             // Busca parcial case-insensitive por nome
             if (nome != null && !nome.isBlank()) {
@@ -153,6 +160,21 @@ public class CustodiadoService {
                     predicates.add(cb.equal(root.get("status"), statusEnum));
                 } catch (IllegalArgumentException e) {
                     log.warn("Status de filtro inválido ignorado: {}", status);
+                }
+            }
+
+            // EXECUCAO = tem processo ativo de execucao; CAUTELAR = nao tem (misto conta como execucao)
+            if (natureza != null && !natureza.isBlank()) {
+                jakarta.persistence.criteria.Subquery<Long> sub = query.subquery(Long.class);
+                var proc = sub.from(Processo.class);
+                sub.select(proc.get("id")).where(
+                        cb.equal(proc.get("custodiado"), root),
+                        cb.equal(proc.get("situacaoProcesso"), SituacaoProcesso.ATIVO),
+                        cb.equal(proc.get("naturezaVinculo"), NaturezaVinculo.EXECUCAO_REGIME_ABERTO));
+                if ("EXECUCAO".equalsIgnoreCase(natureza)) {
+                    predicates.add(cb.exists(sub));
+                } else if ("CAUTELAR".equalsIgnoreCase(natureza)) {
+                    predicates.add(cb.not(cb.exists(sub)));
                 }
             }
 
@@ -204,7 +226,7 @@ public class CustodiadoService {
 
         validarDuplicidadesDocumentosCadastroInicial(cpfFormatado, dto.getRg());
 
-        Custodiado custodiado = Custodiado.builder()
+        PessoaMonitorada custodiado = PessoaMonitorada.builder()
                 .nome(dto.getNome().trim())
                 .cpf(cpfFormatado)
                 .rg(dto.getRg())
@@ -216,14 +238,14 @@ public class CustodiadoService {
                 .periodicidade(dto.getPeriodicidade())
                 .dataComparecimentoInicial(dataCompInicial)
                 .status(StatusComparecimento.EM_CONFORMIDADE)
-                .situacao(SituacaoCustodiado.ATIVO)
+                .situacao(SituacaoPessoaMonitorada.ATIVO)
                 .ultimoComparecimento(dataCompInicial)
                 .observacoes(dto.getObservacoes() != null ? dto.getObservacoes().trim() : null)
                 .build();
 
         custodiado.calcularProximoComparecimento();
-        Custodiado custodiadoSalvo = custodiadoRepository.save(custodiado);
-        log.info("Custodiado criado — publicId: {}, ID: {}", custodiadoSalvo.getPublicId(), custodiadoSalvo.getId());
+        PessoaMonitorada custodiadoSalvo = custodiadoRepository.save(custodiado);
+        log.info("Pessoa monitorada criada — publicId: {}, ID: {}", custodiadoSalvo.getPublicId(), custodiadoSalvo.getId());
 
         Processo processo = Processo.builder()
                 .custodiado(custodiadoSalvo)
@@ -244,6 +266,15 @@ public class CustodiadoService {
         processo.calcularProximoComparecimento();
         Processo processoSalvo = processoRepository.save(processo);
         log.info("Processo criado — ID: {}, Número: {}", processoSalvo.getId(), processoSalvo.getNumeroProcesso());
+
+        // execucao sem pena nao existe: tudo na mesma transacao do cadastro
+        if (processoSalvo.isExecucao()) {
+            if (dto.getPena() == null)
+                throw new IllegalArgumentException(
+                        "Cadastro de execução de pena exige o bloco 'pena' com os dados da sentença.");
+            dto.getPena().setProcessoId(processoSalvo.getId());
+            execucaoPenalService.registrarPena(dto.getPena());
+        }
 
         String cepFormatado = formatarCep(dto.getCep().trim());
         HistoricoEndereco endereco = HistoricoEndereco.builder()
@@ -385,7 +416,7 @@ public class CustodiadoService {
     // =====================================================================
 
     @Transactional(readOnly = true)
-    public Optional<Custodiado> findByPublicId(String publicIdStr) {
+    public Optional<PessoaMonitorada> findByPublicId(String publicIdStr) {
         if (publicIdStr == null || publicIdStr.trim().isEmpty())
             throw new IllegalArgumentException("publicId não pode ser vazio");
         try {
@@ -397,32 +428,69 @@ public class CustodiadoService {
     }
 
     @Transactional
-    public Custodiado updateByPublicId(String publicIdStr, CustodiadoDTO dto) {
+    public PessoaMonitorada updateByPublicId(String publicIdStr, PessoaMonitoradaDTO dto) {
         UUID publicId = parseUuid(publicIdStr);
-        Custodiado custodiado = custodiadoRepository.findByPublicId(publicId)
-                .orElseThrow(() -> new EntityNotFoundException("Custodiado não encontrado: " + publicIdStr));
-        return atualizarCustodiado(custodiado, dto);
+        PessoaMonitorada custodiado = custodiadoRepository.findByPublicId(publicId)
+                .orElseThrow(() -> new EntityNotFoundException("Pessoa monitorada não encontrada: " + publicIdStr));
+        return atualizarPessoaMonitorada(custodiado, dto);
     }
 
     @Transactional
-    public void deleteByPublicId(String publicIdStr) {
+    public void deleteByPublicId(String publicIdStr, br.jus.tjba.aclp.model.enums.MotivoArquivamento motivo) {
         UUID publicId = parseUuid(publicIdStr);
-        Custodiado custodiado = custodiadoRepository.findByPublicId(publicId)
-                .orElseThrow(() -> new EntityNotFoundException("Custodiado não encontrado: " + publicIdStr));
+        PessoaMonitorada custodiado = custodiadoRepository.findByPublicId(publicId)
+                .orElseThrow(() -> new EntityNotFoundException("Pessoa monitorada não encontrada: " + publicIdStr));
         if (custodiado.isArquivado())
-            throw new IllegalArgumentException("Custodiado já está arquivado");
-        custodiado.arquivar();
+            throw new IllegalArgumentException("Pessoa monitorada já está arquivada");
+        custodiado.arquivar(motivo);
         custodiadoRepository.save(custodiado);
     }
 
-    @Transactional(readOnly = true)
-    public List<Custodiado> findAll() { return custodiadoRepository.findAllWithEnderecosAtivos(); }
+    @Transactional
+    public PessoaMonitorada declararForagido(String publicIdStr, String motivo, String declaradoPor) {
+        if (motivo == null || motivo.trim().isEmpty())
+            throw new IllegalArgumentException("Motivo é obrigatório para declarar foragido");
+        PessoaMonitorada custodiado = custodiadoRepository.findByPublicId(parseUuid(publicIdStr))
+                .orElseThrow(() -> new EntityNotFoundException("Pessoa monitorada não encontrada: " + publicIdStr));
+        if (custodiado.getSituacao() == SituacaoPessoaMonitorada.FORAGIDO)
+            throw new IllegalArgumentException("Pessoa monitorada já está declarada foragida");
+
+        custodiado.declararForagido();
+        custodiadoRepository.save(custodiado);
+        log.warn("FORAGIDO declarado — custodiado {} por {}: {}", custodiado.getNome(), declaradoPor, motivo);
+
+        // evasao em execucao de pena entra no rito de justificacao (LEP 118 p2)
+        for (Processo p : processoRepository.findProcessosAtivosByCustodiado(custodiado.getId())) {
+            if (p.isExecucao()) {
+                execucaoPenalService.registrarIncidenteEvasao(p.getId(), motivo, declaradoPor);
+            }
+        }
+        return custodiado;
+    }
+
+    @Transactional
+    public PessoaMonitorada reativarPorPublicId(String publicIdStr) {
+        PessoaMonitorada custodiado = custodiadoRepository.findByPublicId(parseUuid(publicIdStr))
+                .orElseThrow(() -> new EntityNotFoundException("Pessoa monitorada não encontrada: " + publicIdStr));
+        if (custodiado.getSituacao() == SituacaoPessoaMonitorada.ATIVO)
+            throw new IllegalArgumentException("Pessoa monitorada já está ativa");
+        custodiado.reativar();
+        return custodiadoRepository.save(custodiado);
+    }
 
     @Transactional(readOnly = true)
-    public List<Custodiado> findAllIncludingArchived() { return custodiadoRepository.findAllIncludingArchivedWithEnderecos(); }
+    public boolean existeArquivadoComCpf(String cpf) {
+        return custodiadoRepository.findByCpfAndSituacao(cpf, SituacaoPessoaMonitorada.ARQUIVADO).isPresent();
+    }
 
     @Transactional(readOnly = true)
-    public Optional<Custodiado> findById(Long id) {
+    public List<PessoaMonitorada> findAll() { return custodiadoRepository.findAllWithEnderecosAtivos(); }
+
+    @Transactional(readOnly = true)
+    public List<PessoaMonitorada> findAllIncludingArchived() { return custodiadoRepository.findAllIncludingArchivedWithEnderecos(); }
+
+    @Transactional(readOnly = true)
+    public Optional<PessoaMonitorada> findById(Long id) {
         if (id == null || id <= 0) throw new IllegalArgumentException("ID deve ser um número positivo");
         return custodiadoRepository.findById(id);
     }
@@ -430,39 +498,39 @@ public class CustodiadoService {
     @Transactional
     public void delete(Long id) {
         if (id == null || id <= 0) throw new IllegalArgumentException("ID deve ser um número positivo");
-        Custodiado custodiado = custodiadoRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Custodiado não encontrado com ID: " + id));
-        if (custodiado.isArquivado()) throw new IllegalArgumentException("Custodiado já está arquivado");
+        PessoaMonitorada custodiado = custodiadoRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Pessoa monitorada não encontrada com ID: " + id));
+        if (custodiado.isArquivado()) throw new IllegalArgumentException("Pessoa monitorada já está arquivada");
         custodiado.arquivar();
         custodiadoRepository.save(custodiado);
     }
 
     @Transactional
-    public Custodiado reativar(Long id) {
+    public PessoaMonitorada reativar(Long id) {
         if (id == null || id <= 0) throw new IllegalArgumentException("ID deve ser um número positivo");
-        Custodiado custodiado = custodiadoRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Custodiado não encontrado com ID: " + id));
-        if (!custodiado.isArquivado()) throw new IllegalArgumentException("Custodiado já está ativo");
+        PessoaMonitorada custodiado = custodiadoRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Pessoa monitorada não encontrada com ID: " + id));
+        if (!custodiado.isArquivado()) throw new IllegalArgumentException("Pessoa monitorada já está ativa");
         custodiado.reativar();
         return custodiadoRepository.save(custodiado);
     }
 
     @Transactional(readOnly = true)
-    public List<Custodiado> findByProcesso(String processo) {
+    public List<PessoaMonitorada> findByProcesso(String processo) {
         if (processo == null || processo.trim().isEmpty())
             throw new IllegalArgumentException("Número do processo é obrigatório");
         return custodiadoRepository.findByProcesso(formatarProcesso(processo.trim()));
     }
 
     @Transactional(readOnly = true)
-    public List<Custodiado> findByProcessoIncludingArchived(String processo) {
+    public List<PessoaMonitorada> findByProcessoIncludingArchived(String processo) {
         if (processo == null || processo.trim().isEmpty())
             throw new IllegalArgumentException("Número do processo é obrigatório");
         return custodiadoRepository.findByProcessoIncludingArchived(formatarProcesso(processo.trim()));
     }
 
     @Transactional
-    public Custodiado save(CustodiadoDTO dto) {
+    public PessoaMonitorada save(PessoaMonitoradaDTO dto) {
         log.info("Cadastrando custodiado (endpoint legado) — Processo: {}, Nome: {}", dto.getProcesso(), dto.getNome());
 
         dto.setId(null);
@@ -483,7 +551,7 @@ public class CustodiadoService {
 
         String contatoFinal = dto.getContatoEfetivo();
 
-        Custodiado custodiado = Custodiado.builder()
+        PessoaMonitorada custodiado = PessoaMonitorada.builder()
                 .nome(dto.getNome().trim())
                 .cpf(dto.getCpf())
                 .rg(dto.getRg())
@@ -495,40 +563,40 @@ public class CustodiadoService {
                 .periodicidade(dto.getPeriodicidade())
                 .dataComparecimentoInicial(dto.getDataComparecimentoInicial())
                 .status(StatusComparecimento.EM_CONFORMIDADE)
-                .situacao(SituacaoCustodiado.ATIVO)
+                .situacao(SituacaoPessoaMonitorada.ATIVO)
                 .ultimoComparecimento(dto.getDataComparecimentoInicial())
                 .observacoes(dto.getObservacoes() != null ? dto.getObservacoes().trim() : null)
                 .build();
 
         custodiado.calcularProximoComparecimento();
-        Custodiado salvo = custodiadoRepository.save(custodiado);
+        PessoaMonitorada salvo = custodiadoRepository.save(custodiado);
         criarHistoricoEnderecoInicial(salvo, dto);
         criarPrimeiroComparecimento(salvo);
         return salvo;
     }
 
     @Transactional
-    public Custodiado update(Long id, CustodiadoDTO dto) {
+    public PessoaMonitorada update(Long id, PessoaMonitoradaDTO dto) {
         if (id == null || id <= 0) throw new IllegalArgumentException("ID deve ser um número positivo");
-        Custodiado custodiado = custodiadoRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Custodiado não encontrado com ID: " + id));
-        return atualizarCustodiado(custodiado, dto);
+        PessoaMonitorada custodiado = custodiadoRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Pessoa monitorada não encontrada com ID: " + id));
+        return atualizarPessoaMonitorada(custodiado, dto);
     }
 
     @Transactional(readOnly = true)
-    public List<Custodiado> findByStatus(StatusComparecimento status) {
+    public List<PessoaMonitorada> findByStatus(StatusComparecimento status) {
         if (status == null) throw new IllegalArgumentException("Status é obrigatório");
         return custodiadoRepository.findByStatusWithEnderecos(status);
     }
 
     @Transactional(readOnly = true)
-    public List<Custodiado> findComparecimentosHoje() { return custodiadoRepository.findComparecimentosHoje(); }
+    public List<PessoaMonitorada> findComparecimentosHoje() { return custodiadoRepository.findComparecimentosHoje(); }
 
     @Transactional(readOnly = true)
-    public List<Custodiado> findInadimplentes() { return custodiadoRepository.findInadimplentesWithEnderecos(); }
+    public List<PessoaMonitorada> findInadimplentes() { return custodiadoRepository.findInadimplentesWithEnderecos(); }
 
     @Transactional(readOnly = true)
-    public List<Custodiado> buscarPorNomeOuProcesso(String termo) {
+    public List<PessoaMonitorada> buscarPorNomeOuProcesso(String termo) {
         if (termo == null || termo.trim().isEmpty()) throw new IllegalArgumentException("Termo de busca é obrigatório");
         if (termo.trim().length() < 2) throw new IllegalArgumentException("Termo deve ter pelo menos 2 caracteres");
         String t = termo.trim();
@@ -538,19 +606,19 @@ public class CustodiadoService {
     }
 
     @Transactional(readOnly = true)
-    public List<Custodiado> findBySituacao(SituacaoCustodiado situacao) { return custodiadoRepository.findBySituacao(situacao); }
+    public List<PessoaMonitorada> findBySituacao(SituacaoPessoaMonitorada situacao) { return custodiadoRepository.findBySituacao(situacao); }
 
     @Transactional(readOnly = true)
-    public List<Custodiado> findAllArchived() { return custodiadoRepository.findAllArchived(); }
+    public List<PessoaMonitorada> findAllArchived() { return custodiadoRepository.findAllArchived(); }
 
     @Transactional(readOnly = true)
-    public long countBySituacao(SituacaoCustodiado situacao) { return custodiadoRepository.countBySituacao(situacao); }
+    public long countBySituacao(SituacaoPessoaMonitorada situacao) { return custodiadoRepository.countBySituacao(situacao); }
 
     @Transactional(readOnly = true)
-    public List<Custodiado> findReactivatable() { return custodiadoRepository.findReactivatable(); }
+    public List<PessoaMonitorada> findReactivatable() { return custodiadoRepository.findReactivatable(); }
 
     @Transactional(readOnly = true)
-    public List<Custodiado> findAllActive() { return custodiadoRepository.findAllActive(); }
+    public List<PessoaMonitorada> findAllActive() { return custodiadoRepository.findAllActive(); }
 
     public String getEnderecoCompleto(Long id) {
         return historicoEnderecoRepository.findEnderecoAtivoPorCustodiado(id).map(HistoricoEndereco::getEnderecoCompleto).orElse("Endereço não informado");
@@ -568,7 +636,7 @@ public class CustodiadoService {
     // Métodos privados (inalterados)
     // =====================================================================
 
-    private Custodiado atualizarCustodiado(Custodiado custodiado, CustodiadoDTO dto) {
+    private PessoaMonitorada atualizarPessoaMonitorada(PessoaMonitorada custodiado, PessoaMonitoradaDTO dto) {
         if (custodiado.isArquivado())
             throw new IllegalArgumentException("Não é possível atualizar custodiado arquivado. Reative-o primeiro.");
         dto.limparEFormatarDados();
@@ -594,7 +662,7 @@ public class CustodiadoService {
         return custodiadoRepository.save(custodiado);
     }
 
-    private void criarHistoricoEnderecoInicial(Custodiado custodiado, CustodiadoDTO dto) {
+    private void criarHistoricoEnderecoInicial(PessoaMonitorada custodiado, PessoaMonitoradaDTO dto) {
         historicoEnderecoRepository.desativarTodosEnderecosPorCustodiado(custodiado.getId());
         HistoricoEndereco e = HistoricoEndereco.builder()
                 .custodiado(custodiado).cep(formatarCep(dto.getCep().trim())).logradouro(dto.getLogradouro().trim())
@@ -607,7 +675,7 @@ public class CustodiadoService {
         historicoEnderecoRepository.desativarOutrosEnderecosAtivos(custodiado.getId(), salvo.getId());
     }
 
-    private void criarPrimeiroComparecimento(Custodiado custodiado) {
+    private void criarPrimeiroComparecimento(PessoaMonitorada custodiado) {
         if (historicoComparecimentoRepository.existsCadastroInicialPorCustodiado(custodiado.getId())) return;
         HistoricoComparecimento c = HistoricoComparecimento.builder()
                 .custodiado(custodiado).dataComparecimento(custodiado.getDataComparecimentoInicial())
@@ -616,7 +684,7 @@ public class CustodiadoService {
         historicoComparecimentoRepository.save(c);
     }
 
-    private void validarDadosObrigatorios(CustodiadoDTO dto) {
+    private void validarDadosObrigatorios(PessoaMonitoradaDTO dto) {
         if (dto.getNome() == null || dto.getNome().trim().isEmpty()) throw new IllegalArgumentException("Nome é obrigatório");
         if (dto.getProcesso() == null || dto.getProcesso().trim().isEmpty()) throw new IllegalArgumentException("Número do processo é obrigatório");
         if (dto.getVara() == null || dto.getVara().trim().isEmpty()) throw new IllegalArgumentException("Vara é obrigatória");
@@ -628,7 +696,7 @@ public class CustodiadoService {
         if (!temCpf && !temRg) throw new IllegalArgumentException("Pelo menos um documento (CPF ou RG) deve ser informado");
     }
 
-    private void validarEnderecoCompleto(CustodiadoDTO dto) {
+    private void validarEnderecoCompleto(PessoaMonitoradaDTO dto) {
         if (dto.getCep() == null || dto.getCep().trim().isEmpty()) throw new IllegalArgumentException("CEP é obrigatório");
         if (dto.getLogradouro() == null || dto.getLogradouro().trim().isEmpty()) throw new IllegalArgumentException("Logradouro é obrigatório");
         if (dto.getBairro() == null || dto.getBairro().trim().isEmpty()) throw new IllegalArgumentException("Bairro é obrigatório");
@@ -636,7 +704,7 @@ public class CustodiadoService {
         if (dto.getEstado() == null || dto.getEstado().trim().isEmpty()) throw new IllegalArgumentException("Estado é obrigatório");
     }
 
-    private void validarFormatos(CustodiadoDTO dto) {
+    private void validarFormatos(PessoaMonitoradaDTO dto) {
         if (dto.getCpf() != null && !dto.getCpf().trim().isEmpty() && !validarCpfAlgoritmo(dto.getCpf().trim()))
             throw new IllegalArgumentException("CPF inválido");
         if (dto.getProcesso() != null && !validarFormatoProcesso(dto.getProcesso().trim()))
@@ -654,21 +722,21 @@ public class CustodiadoService {
         }
     }
 
-    private void validarDuplicidadesDocumentos(CustodiadoDTO dto) {
+    private void validarDuplicidadesDocumentos(PessoaMonitoradaDTO dto) {
         if (dto.getCpf() != null && !dto.getCpf().trim().isEmpty() && custodiadoRepository.existsByCpfAndSituacaoAtivo(dto.getCpf()))
             throw new IllegalArgumentException("CPF já está cadastrado para um custodiado ativo");
         if (dto.getRg() != null && !dto.getRg().trim().isEmpty() && custodiadoRepository.existsByRgAndSituacaoAtivo(dto.getRg().trim()))
             throw new IllegalArgumentException("RG já está cadastrado para um custodiado ativo");
     }
 
-    private void validarDuplicidadesDocumentosParaUpdate(CustodiadoDTO dto, Long idAtual) {
+    private void validarDuplicidadesDocumentosParaUpdate(PessoaMonitoradaDTO dto, Long idAtual) {
         if (dto.getCpf() != null && !dto.getCpf().trim().isEmpty() && custodiadoRepository.existsByCpfAndSituacaoAtivoAndIdNot(dto.getCpf(), idAtual))
             throw new IllegalArgumentException("CPF já está cadastrado para outro custodiado ativo");
         if (dto.getRg() != null && !dto.getRg().trim().isEmpty() && custodiadoRepository.existsByRgAndSituacaoAtivoAndIdNot(dto.getRg().trim(), idAtual))
             throw new IllegalArgumentException("RG já está cadastrado para outro custodiado ativo");
     }
 
-    private void validarDatasLogicas(CustodiadoDTO dto) {
+    private void validarDatasLogicas(PessoaMonitoradaDTO dto) {
         LocalDate hoje = LocalDate.now();
         if (dto.getDataDecisao() != null && dto.getDataDecisao().isAfter(hoje))
             throw new IllegalArgumentException("Data da decisão não pode ser futura");

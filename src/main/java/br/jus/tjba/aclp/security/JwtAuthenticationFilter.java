@@ -78,9 +78,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return bearerToken.substring(7);
         }
 
-        // Fallback para o cookie httpOnly. O header continua tendo precedência para
-        // não quebrar integrações e o Swagger; o cookie atende o frontend, que não
-        // guarda mais o token em JavaScript.
+        // fallback: cookie httpOnly (header tem precedencia p/ Swagger e integracoes)
         if (request.getCookies() != null) {
             for (Cookie cookie : request.getCookies()) {
                 if ("auth-token".equals(cookie.getName())

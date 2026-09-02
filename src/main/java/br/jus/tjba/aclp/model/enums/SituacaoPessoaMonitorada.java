@@ -8,19 +8,22 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * Define se o custodiado está ativo (em observação) ou arquivado
  */
 @Schema(description = "Situação do custodiado no sistema")
-public enum SituacaoCustodiado {
+public enum SituacaoPessoaMonitorada {
 
-    @Schema(description = "Custodiado ativo, deve comparecer regularmente")
-    ATIVO("ATIVO", "Ativo", "Custodiado em acompanhamento ativo"),
+    @Schema(description = "Pessoa monitorada ativa, deve comparecer regularmente")
+    ATIVO("ATIVO", "Ativo", "Pessoa monitorada em acompanhamento ativa"),
 
-    @Schema(description = "Custodiado arquivado, não precisa mais comparecer")
-    ARQUIVADO("ARQUIVADO", "Arquivado", "Custodiado arquivado - fora de observação");
+    @Schema(description = "Pessoa monitorada arquivada, não precisa mais comparecer")
+    ARQUIVADO("ARQUIVADO", "Arquivado", "Pessoa monitorada arquivada - fora de observação"),
+
+    @Schema(description = "Pessoa monitorada foragida - declarada por decisão, nunca automático")
+    FORAGIDO("FORAGIDO", "Foragido", "Paradeiro desconhecido; fora dos contadores de atraso");
 
     private final String code;
     private final String label;
     private final String description;
 
-    SituacaoCustodiado(String code, String label, String description) {
+    SituacaoPessoaMonitorada(String code, String label, String description) {
         this.code = code;
         this.label = label;
         this.description = description;
@@ -53,19 +56,23 @@ public enum SituacaoCustodiado {
         return this == ARQUIVADO;
     }
 
-    public static SituacaoCustodiado fromString(String value) {
+    public static SituacaoPessoaMonitorada fromString(String value) {
         if (value == null) return null;
 
-        for (SituacaoCustodiado situacao : SituacaoCustodiado.values()) {
+        for (SituacaoPessoaMonitorada situacao : SituacaoPessoaMonitorada.values()) {
             if (situacao.code.equalsIgnoreCase(value) || situacao.name().equalsIgnoreCase(value)) {
                 return situacao;
             }
         }
-        throw new IllegalArgumentException("Situação de custodiado inválida: " + value + ". Use ATIVO ou ARQUIVADO");
+        throw new IllegalArgumentException("Situação de custodiado inválida: " + value + ". Use ATIVO, ARQUIVADO ou FORAGIDO");
     }
 
     public String getCssClass() {
-        return this == ATIVO ? "success" : "secondary";
+        return switch (this) {
+            case ATIVO -> "success";
+            case FORAGIDO -> "danger";
+            case ARQUIVADO -> "secondary";
+        };
     }
 
     @Override

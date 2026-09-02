@@ -144,11 +144,11 @@ public interface HistoricoComparecimentoRepository
             @Param("fim") LocalDate fim);
 
     @Query("SELECT COUNT(DISTINCT h.custodiado.id) FROM HistoricoComparecimento h")
-    long countCustodiadosDistintos();
+    long countPessoasMonitoradasDistintos();
 
     @Query("SELECT COUNT(DISTINCT h.custodiado.id) FROM HistoricoComparecimento h " +
             "WHERE h.dataComparecimento BETWEEN :inicio AND :fim")
-    long countCustodiadosDistintosBetween(
+    long countPessoasMonitoradasDistintosBetween(
             @Param("inicio") LocalDate inicio,
             @Param("fim") LocalDate fim);
 }

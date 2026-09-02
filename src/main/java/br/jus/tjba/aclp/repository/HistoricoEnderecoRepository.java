@@ -1,6 +1,6 @@
 package br.jus.tjba.aclp.repository;
 
-import br.jus.tjba.aclp.model.Custodiado;
+import br.jus.tjba.aclp.model.PessoaMonitorada;
 import br.jus.tjba.aclp.model.HistoricoEndereco;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -18,7 +18,7 @@ public interface HistoricoEnderecoRepository extends JpaRepository<HistoricoEnde
     /**
      * Busca histórico de endereços de um custodiado ordenado por data de início (mais recente primeiro)
      */
-    List<HistoricoEndereco> findByCustodiadoOrderByDataInicioDesc(Custodiado custodiado);
+    List<HistoricoEndereco> findByCustodiadoOrderByDataInicioDesc(PessoaMonitorada custodiado);
 
     /**
      * Busca histórico de endereços de um custodiado por ID ordenado por data de início
@@ -100,7 +100,7 @@ public interface HistoricoEnderecoRepository extends JpaRepository<HistoricoEnde
     /**
      * Conta quantos endereços um custodiado já teve
      */
-    long countByCustodiado(Custodiado custodiado);
+    long countByCustodiado(PessoaMonitorada custodiado);
 
     /**
      * Busca endereços que estavam ativos em uma data específica
@@ -127,13 +127,13 @@ public interface HistoricoEnderecoRepository extends JpaRepository<HistoricoEnde
      * Busca custodiados que moram/moraram em uma cidade específica
      */
     @Query("SELECT DISTINCT h.custodiado FROM HistoricoEndereco h WHERE h.cidade = :cidade")
-    List<Custodiado> findCustodiadosPorCidade(@Param("cidade") String cidade);
+    List<PessoaMonitorada> findPessoasMonitoradasPorCidade(@Param("cidade") String cidade);
 
     /**
      * Busca custodiados que moram/moraram em um estado específico
      */
     @Query("SELECT DISTINCT h.custodiado FROM HistoricoEndereco h WHERE h.estado = :estado")
-    List<Custodiado> findCustodiadosPorEstado(@Param("estado") String estado);
+    List<PessoaMonitorada> findPessoasMonitoradasPorEstado(@Param("estado") String estado);
 
     /**
      * Busca endereços com motivação específica
@@ -184,7 +184,7 @@ public interface HistoricoEnderecoRepository extends JpaRepository<HistoricoEnde
     /**
      * Conta custodiados sem endereço ativo
      */
-    @Query("SELECT COUNT(DISTINCT c) FROM Custodiado c WHERE c.id NOT IN " +
+    @Query("SELECT COUNT(DISTINCT c) FROM PessoaMonitorada c WHERE c.id NOT IN " +
             "(SELECT h.custodiado.id FROM HistoricoEndereco h WHERE h.ativo = true)")
-    long countCustodiadosSemEnderecoAtivo();
+    long countPessoasMonitoradasSemEnderecoAtivo();
 }

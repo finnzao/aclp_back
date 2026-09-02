@@ -1,9 +1,9 @@
 package br.jus.tjba.aclp.controller;
 
 import br.jus.tjba.aclp.dto.*;
-import br.jus.tjba.aclp.model.Custodiado;
+import br.jus.tjba.aclp.model.PessoaMonitorada;
 import br.jus.tjba.aclp.model.enums.StatusComparecimento;
-import br.jus.tjba.aclp.service.CustodiadoService;
+import br.jus.tjba.aclp.service.PessoaMonitoradaService;
 import br.jus.tjba.aclp.service.HistoricoEnderecoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -28,13 +28,13 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/custodiados")
+@RequestMapping("/api/pessoas-monitoradas")
 @RequiredArgsConstructor
-@Tag(name = "Custodiados", description = "API para gerenciamento de custodiados em liberdade provisória")
+@Tag(name = "Pessoas monitoradas", description = "API para gerenciamento de custodiados em liberdade provisória")
 @Slf4j
-public class CustodiadoController {
+public class PessoaMonitoradaController {
 
-    private final CustodiadoService custodiadoService;
+    private final PessoaMonitoradaService custodiadoService;
     private final HistoricoEnderecoService historicoEnderecoService;
 
     @lombok.Data
@@ -65,7 +65,7 @@ public class CustodiadoController {
 
     @lombok.Data
     @lombok.Builder
-    public static class CustodiadoResponseDTO {
+    public static class PessoaMonitoradaResponseDTO {
         private String id;
         private String nome;
         private String cpf;
@@ -80,6 +80,8 @@ public class CustodiadoController {
         private String periodicidadeDescricao;
         private LocalDate dataComparecimentoInicial;
         private StatusComparecimento status;
+        private br.jus.tjba.aclp.model.enums.SituacaoPessoaMonitorada situacao;
+        private br.jus.tjba.aclp.model.enums.MotivoArquivamento motivoArquivamento;
         private LocalDate ultimoComparecimento;
         private LocalDate proximoComparecimento;
         private Long diasAtraso;
@@ -91,7 +93,7 @@ public class CustodiadoController {
         private boolean inadimplente;
         private boolean comparecimentoHoje;
 
-        public static CustodiadoResponseDTO fromEntity(Custodiado custodiado,
+        public static PessoaMonitoradaResponseDTO fromEntity(PessoaMonitorada custodiado,
                                                         HistoricoEnderecoService enderecoService) {
             EnderecoDetalhadoDTO enderecoDetalhado = null;
             try {
@@ -119,7 +121,7 @@ public class CustodiadoController {
                 log.warn("Erro ao buscar endereço do custodiado publicId {}: {}", custodiado.getPublicId(), e.getMessage());
             }
 
-            return CustodiadoResponseDTO.builder()
+            return PessoaMonitoradaResponseDTO.builder()
                     .id(custodiado.getPublicId() != null ? custodiado.getPublicId().toString() : null)
                     .nome(custodiado.getNome()).cpf(custodiado.getCpf()).rg(custodiado.getRg())
                     .contato(custodiado.getContato()).contatoPendente(custodiado.isContatoPendente())
@@ -127,7 +129,10 @@ public class CustodiadoController {
                     .dataDecisao(custodiado.getDataDecisao()).periodicidade(custodiado.getPeriodicidade())
                     .periodicidadeDescricao(custodiado.getPeriodicidadeDescricao())
                     .dataComparecimentoInicial(custodiado.getDataComparecimentoInicial())
-                    .status(custodiado.getStatusEfetivo()).ultimoComparecimento(custodiado.getUltimoComparecimento())
+                    .status(custodiado.getStatusEfetivo())
+                    .situacao(custodiado.getSituacao())
+                    .motivoArquivamento(custodiado.getMotivoArquivamento())
+                    .ultimoComparecimento(custodiado.getUltimoComparecimento())
                     .proximoComparecimento(custodiado.getProximoComparecimento())
                     .diasAtraso(custodiado.getDiasAtraso()).observacoes(custodiado.getObservacoes())
                     .endereco(enderecoDetalhado).criadoEm(custodiado.getCriadoEm())
@@ -151,15 +156,15 @@ public class CustodiadoController {
             @RequestParam(required = false) String nome,
             @RequestParam(required = false) String cpf,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String natureza,
             @RequestParam(required = false, defaultValue = "nome") String ordenarPor,
             @RequestParam(required = false, defaultValue = "asc") String direcao) {
 
         try {
             // Sem parâmetros → comportamento original (retrocompatibilidade)
-            if (page == null && size == null && nome == null && cpf == null && status == null) {
-                List<CustodiadoListDTO> response = custodiadoService.findAllActive().stream()
-                        .map(CustodiadoListDTO::fromEntity).collect(Collectors.toList());
-                return ResponseEntity.ok(ApiResponse.success("Custodiados listados com sucesso", response));
+            if (page == null && size == null && nome == null && cpf == null && status == null && natureza == null) {
+                List<PessoaMonitoradaListDTO> response = custodiadoService.listarTodosAtivosDTO();
+                return ResponseEntity.ok(ApiResponse.success("Pessoas monitoradas listadas com sucesso", response));
             }
 
             // CORREÇÃO DE PERFORMANCE: Paginação server-side
@@ -170,12 +175,12 @@ public class CustodiadoController {
                 log.warn("[PERFORMANCE] Requisição com size={} reduzida para 100.", size);
             }
 
-            Page<CustodiadoListDTO> resultado = custodiadoService
-                    .listarPaginado(pageNum, pageSize, nome, cpf, status, ordenarPor, direcao);
+            Page<PessoaMonitoradaListDTO> resultado = custodiadoService
+                    .listarPaginado(pageNum, pageSize, nome, cpf, status, natureza, ordenarPor, direcao);
 
             Map<String, Object> resposta = new HashMap<>();
             resposta.put("success", true);
-            resposta.put("message", "Custodiados listados com sucesso");
+            resposta.put("message", "Pessoas monitoradas listadas com sucesso");
             resposta.put("data", resultado.getContent());
             resposta.put("paginaAtual", resultado.getNumber());
             resposta.put("totalPaginas", resultado.getTotalPages());
@@ -195,16 +200,17 @@ public class CustodiadoController {
     // CORREÇÃO DE PERFORMANCE: Endpoint dedicado para exportação
     @GetMapping("/exportar")
     @Operation(summary = "Exportar custodiados para planilha")
-    public ResponseEntity<?> exportarCustodiados(
+    public ResponseEntity<?> exportarPessoasMonitoradas(
             @RequestParam(required = false) String nome,
             @RequestParam(required = false) String cpf,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String natureza,
             @RequestParam(required = false, defaultValue = "nome") String ordenarPor,
             @RequestParam(required = false, defaultValue = "asc") String direcao) {
 
         try {
-            List<CustodiadoListDTO> dados = custodiadoService
-                    .listarParaExportacao(nome, cpf, status, ordenarPor, direcao);
+            List<PessoaMonitoradaListDTO> dados = custodiadoService
+                    .listarParaExportacao(nome, cpf, status, natureza, ordenarPor, direcao);
 
             Map<String, Object> resposta = new HashMap<>();
             resposta.put("success", true);
@@ -246,21 +252,21 @@ public class CustodiadoController {
     }
 
     @GetMapping("/status/{status}")
-    public ResponseEntity<ApiResponse<List<CustodiadoListDTO>>> findByStatus(@PathVariable StatusComparecimento status) {
+    public ResponseEntity<ApiResponse<List<PessoaMonitoradaListDTO>>> findByStatus(@PathVariable StatusComparecimento status) {
         try {
-            List<CustodiadoListDTO> response = custodiadoService.findByStatus(status).stream()
-                    .map(CustodiadoListDTO::fromEntity).collect(Collectors.toList());
-            return ResponseEntity.ok(ApiResponse.success("Custodiados encontrados", response));
+            List<PessoaMonitoradaListDTO> response = custodiadoService.findByStatus(status).stream()
+                    .map(PessoaMonitoradaListDTO::fromEntity).collect(Collectors.toList());
+            return ResponseEntity.ok(ApiResponse.success("Pessoas monitoradas encontradas", response));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.error("Erro ao buscar"));
         }
     }
 
     @GetMapping("/comparecimentos/hoje")
-    public ResponseEntity<ApiResponse<List<CustodiadoListDTO>>> findComparecimentosHoje() {
+    public ResponseEntity<ApiResponse<List<PessoaMonitoradaListDTO>>> findComparecimentosHoje() {
         try {
-            List<CustodiadoListDTO> response = custodiadoService.findComparecimentosHoje().stream()
-                    .map(CustodiadoListDTO::fromEntity).collect(Collectors.toList());
+            List<PessoaMonitoradaListDTO> response = custodiadoService.findComparecimentosHoje().stream()
+                    .map(PessoaMonitoradaListDTO::fromEntity).collect(Collectors.toList());
             return ResponseEntity.ok(ApiResponse.success("Comparecimentos de hoje", response));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.error("Erro ao buscar"));
@@ -268,10 +274,10 @@ public class CustodiadoController {
     }
 
     @GetMapping("/inadimplentes")
-    public ResponseEntity<ApiResponse<List<CustodiadoListDTO>>> findInadimplentes() {
+    public ResponseEntity<ApiResponse<List<PessoaMonitoradaListDTO>>> findInadimplentes() {
         try {
-            List<CustodiadoListDTO> response = custodiadoService.findInadimplentes().stream()
-                    .map(CustodiadoListDTO::fromEntity).collect(Collectors.toList());
+            List<PessoaMonitoradaListDTO> response = custodiadoService.findInadimplentes().stream()
+                    .map(PessoaMonitoradaListDTO::fromEntity).collect(Collectors.toList());
             return ResponseEntity.ok(ApiResponse.success("Inadimplentes listados", response));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.error("Erro ao buscar"));
@@ -279,12 +285,12 @@ public class CustodiadoController {
     }
 
     @GetMapping("/buscar")
-    public ResponseEntity<ApiResponse<List<CustodiadoListDTO>>> buscar(@RequestParam String termo) {
+    public ResponseEntity<ApiResponse<List<PessoaMonitoradaListDTO>>> buscar(@RequestParam String termo) {
         try {
             if (termo == null || termo.trim().isEmpty())
                 return ResponseEntity.badRequest().body(ApiResponse.error("Termo de busca não pode ser vazio"));
-            List<CustodiadoListDTO> response = custodiadoService.buscarPorNomeOuProcesso(termo).stream()
-                    .map(CustodiadoListDTO::fromEntity).collect(Collectors.toList());
+            List<PessoaMonitoradaListDTO> response = custodiadoService.buscarPorNomeOuProcesso(termo).stream()
+                    .map(PessoaMonitoradaListDTO::fromEntity).collect(Collectors.toList());
             return ResponseEntity.ok(ApiResponse.success("Busca realizada", response));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
@@ -294,25 +300,25 @@ public class CustodiadoController {
     }
 
     @GetMapping("/{publicId}")
-    public ResponseEntity<ApiResponse<CustodiadoResponseDTO>> findById(@PathVariable String publicId) {
+    public ResponseEntity<ApiResponse<PessoaMonitoradaResponseDTO>> findById(@PathVariable String publicId) {
         try {
             return custodiadoService.findByPublicId(publicId)
-                    .map(c -> ResponseEntity.ok(ApiResponse.success("Custodiado encontrado",
-                            CustodiadoResponseDTO.fromEntity(c, historicoEnderecoService))))
+                    .map(c -> ResponseEntity.ok(ApiResponse.success("Pessoa monitorada encontrada",
+                            PessoaMonitoradaResponseDTO.fromEntity(c, historicoEnderecoService))))
                     .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
-                            .body(ApiResponse.error("Custodiado não encontrado: " + publicId)));
+                            .body(ApiResponse.error("Pessoa monitorada não encontrada: " + publicId)));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.error("Erro ao buscar"));
         }
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<CustodiadoResponseDTO>> save(@Valid @RequestBody CustodiadoDTO dto) {
+    public ResponseEntity<ApiResponse<PessoaMonitoradaResponseDTO>> save(@Valid @RequestBody PessoaMonitoradaDTO dto) {
         try {
             if (dto.getId() != null) dto.setId(null);
-            Custodiado custodiado = custodiadoService.save(dto);
+            PessoaMonitorada custodiado = custodiadoService.save(dto);
             return ResponseEntity.status(HttpStatus.CREATED).body(
-                    ApiResponse.success("Custodiado cadastrado", CustodiadoResponseDTO.fromEntity(custodiado, historicoEnderecoService)));
+                    ApiResponse.success("Pessoa monitorada cadastrada", PessoaMonitoradaResponseDTO.fromEntity(custodiado, historicoEnderecoService)));
         } catch (DataIntegrityViolationException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(extrairMensagemIntegridade(e)));
         } catch (IllegalArgumentException e) {
@@ -324,13 +330,13 @@ public class CustodiadoController {
     }
 
     @PutMapping("/{publicId}")
-    public ResponseEntity<ApiResponse<CustodiadoResponseDTO>> update(@PathVariable String publicId, @Valid @RequestBody CustodiadoDTO dto) {
+    public ResponseEntity<ApiResponse<PessoaMonitoradaResponseDTO>> update(@PathVariable String publicId, @Valid @RequestBody PessoaMonitoradaDTO dto) {
         try {
-            Custodiado custodiado = custodiadoService.updateByPublicId(publicId, dto);
-            return ResponseEntity.ok(ApiResponse.success("Custodiado atualizado",
-                    CustodiadoResponseDTO.fromEntity(custodiado, historicoEnderecoService)));
+            PessoaMonitorada custodiado = custodiadoService.updateByPublicId(publicId, dto);
+            return ResponseEntity.ok(ApiResponse.success("Pessoa monitorada atualizada",
+                    PessoaMonitoradaResponseDTO.fromEntity(custodiado, historicoEnderecoService)));
         } catch (EntityNotFoundException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("Custodiado não encontrado: " + publicId));
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("Pessoa monitorada não encontrada: " + publicId));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         } catch (Exception e) {
@@ -341,15 +347,54 @@ public class CustodiadoController {
 
     @DeleteMapping("/{publicId}")
     @PreAuthorize("hasRole('ADMIN')") // destrutivo: só administrador
-    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable String publicId) {
+    public ResponseEntity<ApiResponse<Void>> delete(
+            @PathVariable String publicId,
+            @RequestParam(required = false) br.jus.tjba.aclp.model.enums.MotivoArquivamento motivo) {
         try {
-            custodiadoService.deleteByPublicId(publicId);
-            return ResponseEntity.ok(ApiResponse.success("Custodiado excluído com sucesso"));
+            custodiadoService.deleteByPublicId(publicId, motivo);
+            return ResponseEntity.ok(ApiResponse.success("Pessoa monitorada arquivada com sucesso"));
         } catch (EntityNotFoundException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("Custodiado não encontrado: " + publicId));
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("Pessoa monitorada não encontrada: " + publicId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.error("Erro ao excluir"));
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.error("Erro ao arquivar"));
         }
+    }
+
+    @PostMapping("/{publicId}/foragido")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<Void>> declararForagido(
+            @PathVariable String publicId,
+            @RequestBody Map<String, String> body,
+            org.springframework.security.core.Authentication auth) {
+        try {
+            custodiadoService.declararForagido(publicId, body.get("motivo"), auth.getName());
+            return ResponseEntity.ok(ApiResponse.success("Pessoa monitorada declarada foragida"));
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{publicId}/reativar")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<Void>> reativar(@PathVariable String publicId) {
+        try {
+            custodiadoService.reativarPorPublicId(publicId);
+            return ResponseEntity.ok(ApiResponse.success("Pessoa monitorada reativada"));
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
+    }
+
+    @GetMapping("/cpf-arquivado")
+    public ResponseEntity<ApiResponse<Boolean>> cpfArquivado(@RequestParam String cpf) {
+        return ResponseEntity.ok(ApiResponse.success("Verificado",
+                custodiadoService.existeArquivadoComCpf(cpf)));
     }
 
     private String extrairMensagemIntegridade(DataIntegrityViolationException e) {

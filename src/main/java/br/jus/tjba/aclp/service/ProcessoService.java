@@ -4,12 +4,12 @@ import br.jus.tjba.aclp.dto.ContadoresDashboardDTO;
 import br.jus.tjba.aclp.dto.ProcessoDTO;
 import br.jus.tjba.aclp.dto.ProcessoResumoDTO;
 import br.jus.tjba.aclp.dto.ProcessoResponseDTO;
-import br.jus.tjba.aclp.model.Custodiado;
+import br.jus.tjba.aclp.model.PessoaMonitorada;
 import br.jus.tjba.aclp.model.Processo;
 import br.jus.tjba.aclp.model.enums.NaturezaVinculo;
 import br.jus.tjba.aclp.model.enums.SituacaoProcesso;
 import br.jus.tjba.aclp.model.enums.StatusComparecimento;
-import br.jus.tjba.aclp.repository.CustodiadoRepository;
+import br.jus.tjba.aclp.repository.PessoaMonitoradaRepository;
 import br.jus.tjba.aclp.repository.ProcessoRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -35,7 +35,7 @@ import java.util.stream.Collectors;
 public class ProcessoService {
 
     private final ProcessoRepository processoRepository;
-    private final CustodiadoRepository custodiadoRepository;
+    private final PessoaMonitoradaRepository custodiadoRepository;
 
     /**
      * CORREÇÃO DE PERFORMANCE: Busca processos de múltiplos custodiados em uma query.
@@ -71,7 +71,7 @@ public class ProcessoService {
 
     @Transactional(readOnly = true)
     public ProcessoResponseDTO buscarPorId(Long id) {
-        return ProcessoResponseDTO.fromEntity(processoRepository.findByIdComCustodiado(id)
+        return ProcessoResponseDTO.fromEntity(processoRepository.findByIdComPessoaMonitorada(id)
                 .orElseThrow(() -> new EntityNotFoundException("Processo não encontrado: " + id)));
     }
 
@@ -84,19 +84,19 @@ public class ProcessoService {
     @Transactional(readOnly = true)
     public Optional<ProcessoResponseDTO> buscarPorNumeroProcesso(String numero) {
         return processoRepository.findByNumeroProcesso(numero)
-                .map(p -> processoRepository.findByIdComCustodiado(p.getId())
+                .map(p -> processoRepository.findByIdComPessoaMonitorada(p.getId())
                         .map(ProcessoResponseDTO::fromEntity).orElse(ProcessoResponseDTO.fromEntity(p)));
     }
 
     @Transactional(readOnly = true)
     public List<ProcessoResponseDTO> buscarInadimplentes() {
-        return processoRepository.findInadimplentesComCustodiado().stream()
+        return processoRepository.findInadimplentesComPessoaMonitorada().stream()
                 .map(ProcessoResponseDTO::fromEntity).collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
     public List<ProcessoResponseDTO> buscarComparecimentosHoje() {
-        return processoRepository.findComparecimentosHojeComCustodiado().stream()
+        return processoRepository.findComparecimentosHojeComPessoaMonitorada().stream()
                 .map(ProcessoResponseDTO::fromEntity).collect(Collectors.toList());
     }
 
@@ -106,15 +106,15 @@ public class ProcessoService {
                 .totalProcessosAtivos(processoRepository.countBySituacaoProcesso(SituacaoProcesso.ATIVO))
                 .emConformidade(processoRepository.countByStatusAtivo(StatusComparecimento.EM_CONFORMIDADE))
                 .inadimplentes(processoRepository.countByStatusAtivo(StatusComparecimento.INADIMPLENTE))
-                .comparecimentosHoje(processoRepository.findComparecimentosHojeComCustodiado().size())
+                .comparecimentosHoje(processoRepository.findComparecimentosHojeComPessoaMonitorada().size())
                 .dataConsulta(LocalDate.now())
                 .build();
     }
 
     @Transactional
     public ProcessoResponseDTO criarProcesso(ProcessoDTO dto) {
-        Custodiado custodiado = custodiadoRepository.findById(dto.getCustodiadoId())
-                .orElseThrow(() -> new EntityNotFoundException("Custodiado não encontrado: " + dto.getCustodiadoId()));
+        PessoaMonitorada custodiado = custodiadoRepository.findById(dto.getCustodiadoId())
+                .orElseThrow(() -> new EntityNotFoundException("Pessoa monitorada não encontrada: " + dto.getCustodiadoId()));
 
         Processo processo = Processo.builder()
                 .custodiado(custodiado).numeroProcesso(dto.getNumeroProcesso())
