@@ -48,7 +48,6 @@ class HistoricoEnderecoControllerTest extends WebMvcSliceSupport {
                 .id(1L)
                 .nome("João da Silva")
                 .cpf("123.456.789-00")
-                .processo("0000001-00.2024.8.05.0001")
                 .build();
 
         // Preparar DTO de endereço

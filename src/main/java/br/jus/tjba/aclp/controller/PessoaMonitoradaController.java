@@ -254,8 +254,7 @@ public class PessoaMonitoradaController {
     @GetMapping("/status/{status}")
     public ResponseEntity<ApiResponse<List<PessoaMonitoradaListDTO>>> findByStatus(@PathVariable StatusComparecimento status) {
         try {
-            List<PessoaMonitoradaListDTO> response = custodiadoService.findByStatus(status).stream()
-                    .map(PessoaMonitoradaListDTO::fromEntity).collect(Collectors.toList());
+            List<PessoaMonitoradaListDTO> response = custodiadoService.findByStatus(status);
             return ResponseEntity.ok(ApiResponse.success("Pessoas monitoradas encontradas", response));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.error("Erro ao buscar"));
@@ -265,8 +264,7 @@ public class PessoaMonitoradaController {
     @GetMapping("/comparecimentos/hoje")
     public ResponseEntity<ApiResponse<List<PessoaMonitoradaListDTO>>> findComparecimentosHoje() {
         try {
-            List<PessoaMonitoradaListDTO> response = custodiadoService.findComparecimentosHoje().stream()
-                    .map(PessoaMonitoradaListDTO::fromEntity).collect(Collectors.toList());
+            List<PessoaMonitoradaListDTO> response = custodiadoService.findComparecimentosHoje();
             return ResponseEntity.ok(ApiResponse.success("Comparecimentos de hoje", response));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.error("Erro ao buscar"));
@@ -276,8 +274,7 @@ public class PessoaMonitoradaController {
     @GetMapping("/inadimplentes")
     public ResponseEntity<ApiResponse<List<PessoaMonitoradaListDTO>>> findInadimplentes() {
         try {
-            List<PessoaMonitoradaListDTO> response = custodiadoService.findInadimplentes().stream()
-                    .map(PessoaMonitoradaListDTO::fromEntity).collect(Collectors.toList());
+            List<PessoaMonitoradaListDTO> response = custodiadoService.findInadimplentes();
             return ResponseEntity.ok(ApiResponse.success("Inadimplentes listados", response));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.error("Erro ao buscar"));
@@ -289,8 +286,7 @@ public class PessoaMonitoradaController {
         try {
             if (termo == null || termo.trim().isEmpty())
                 return ResponseEntity.badRequest().body(ApiResponse.error("Termo de busca não pode ser vazio"));
-            List<PessoaMonitoradaListDTO> response = custodiadoService.buscarPorNomeOuProcesso(termo).stream()
-                    .map(PessoaMonitoradaListDTO::fromEntity).collect(Collectors.toList());
+            List<PessoaMonitoradaListDTO> response = custodiadoService.buscarPorNomeOuProcesso(termo);
             return ResponseEntity.ok(ApiResponse.success("Busca realizada", response));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));

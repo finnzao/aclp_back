@@ -31,7 +31,6 @@ import java.util.Objects;
 @Entity
 @Table(name = "historico_comparecimentos",
         indexes = {
-                @Index(name = "idx_historico_custodiado",       columnList = "custodiado_id"),
                 @Index(name = "idx_historico_custodiado_data",  columnList = "custodiado_id, data_comparecimento DESC"),
                 @Index(name = "idx_historico_processo_data",    columnList = "processo_id, data_comparecimento DESC"),
                 @Index(name = "idx_historico_custodiado_mudanca", columnList = "custodiado_id, mudanca_endereco")

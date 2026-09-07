@@ -96,7 +96,8 @@ public class ComparecimentoController {
             @RequestParam(required = false) String dataFim,
             @RequestParam(required = false) String tipoValidacao,
             @RequestParam(required = false) String custodiadoNome,
-            @RequestParam(required = false) String numeroProcesso) {
+            @RequestParam(required = false) String numeroProcesso,
+            @RequestParam(required = false) String natureza) {
 
         try {
             // CORREÇÃO: Limitar tamanho máximo da página
@@ -114,9 +115,20 @@ public class ComparecimentoController {
                 catch (IllegalArgumentException e) { log.warn("Tipo de validação inválido: {}", tipoValidacao); }
             }
 
+            br.jus.tjba.aclp.model.enums.NaturezaVinculo naturezaEnum = null;
+            if (natureza != null && !natureza.isBlank()) {
+                try { naturezaEnum = br.jus.tjba.aclp.model.enums.NaturezaVinculo.valueOf(natureza.toUpperCase()); }
+                catch (IllegalArgumentException e) {
+                    // aceita tambem o apelido curto usado no frontend
+                    if ("EXECUCAO".equalsIgnoreCase(natureza))
+                        naturezaEnum = br.jus.tjba.aclp.model.enums.NaturezaVinculo.EXECUCAO_REGIME_ABERTO;
+                    else log.warn("Natureza de vínculo inválida ignorada: {}", natureza);
+                }
+            }
+
             Page<HistoricoComparecimentoResponseDTO> comparecimentosPage =
                     comparecimentoService.listarPaginadoComFiltros(
-                            page, size, inicio, fim, tipo, custodiadoNome, numeroProcesso);
+                            page, size, inicio, fim, tipo, custodiadoNome, numeroProcesso, naturezaEnum);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);

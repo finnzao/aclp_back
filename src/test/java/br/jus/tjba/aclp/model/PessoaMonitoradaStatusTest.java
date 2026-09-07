@@ -15,9 +15,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class PessoaMonitoradaStatusTest {
 
     private PessoaMonitorada ativo(LocalDate proximo, StatusComparecimento persistido) {
-        return PessoaMonitorada.builder()
+        PessoaMonitorada c = PessoaMonitorada.builder()
                 .nome("Teste").situacao(SituacaoPessoaMonitorada.ATIVO)
-                .status(persistido).proximoComparecimento(proximo).build();
+                .build();
+        c.getProcessos().add(Processo.builder()
+                .situacaoProcesso(br.jus.tjba.aclp.model.enums.SituacaoProcesso.ATIVO)
+                .proximoComparecimento(proximo).build());
+        return c;
     }
 
     @Test

@@ -74,18 +74,8 @@ public class StatusSchedulerService {
                     diasAtraso);
         }
 
-        // Manter compatibilidade: também atualizar custodiados (temporário)
-        List<PessoaMonitorada> custodiadosEmConformidade = custodiadoRepository.findByStatus(StatusComparecimento.EM_CONFORMIDADE);
-        LocalDate hoje = LocalDate.now();
+        // o status da pessoa deriva dos processos; nada a sincronizar aqui
         long contadorPessoasMonitoradas = 0;
-
-        for (PessoaMonitorada pessoa : custodiadosEmConformidade) {
-            if (pessoa.getProximoComparecimento() != null && pessoa.getProximoComparecimento().isBefore(hoje)) {
-                pessoa.setStatus(StatusComparecimento.INADIMPLENTE);
-                custodiadoRepository.save(pessoa);
-                contadorPessoasMonitoradas++;
-            }
-        }
 
         if (contadorProcessos > 0 || contadorPessoasMonitoradas > 0) {
             log.info("Verificação concluída: {} processos e {} custodiados marcados como inadimplentes",
@@ -124,18 +114,6 @@ public class StatusSchedulerService {
             if (novoStatus == StatusComparecimento.INADIMPLENTE) inadimplentes++;
         }
 
-        // Compatibilidade: reprocessar custodiados
-        List<PessoaMonitorada> todosPessoasMonitoradas = custodiadoRepository.findAll();
-        for (PessoaMonitorada pessoa : todosPessoasMonitoradas) {
-            StatusComparecimento statusNovo = (pessoa.getProximoComparecimento() == null || !pessoa.getProximoComparecimento().isBefore(hoje))
-                    ? StatusComparecimento.EM_CONFORMIDADE : StatusComparecimento.INADIMPLENTE;
-
-            if (!pessoa.getStatus().equals(statusNovo)) {
-                pessoa.setStatus(statusNovo);
-                custodiadoRepository.save(pessoa);
-            }
-        }
-
         log.info("Reprocessamento concluído: {} processos inadimplentes", inadimplentes);
         return inadimplentes;
     }
@@ -146,13 +124,6 @@ public class StatusSchedulerService {
                 br.jus.tjba.aclp.model.enums.SituacaoProcesso.ATIVO);
         long emConformidade = processoRepository.countByStatusAtivo(StatusComparecimento.EM_CONFORMIDADE);
         long inadimplentes = processoRepository.countByStatusAtivo(StatusComparecimento.INADIMPLENTE);
-
-        // Fallback para custodiados se não houver processos migrados ainda
-        if (totalProcessos == 0) {
-            totalProcessos = custodiadoRepository.count();
-            emConformidade = custodiadoRepository.countByStatus(StatusComparecimento.EM_CONFORMIDADE);
-            inadimplentes = custodiadoRepository.countByStatus(StatusComparecimento.INADIMPLENTE);
-        }
 
         return StatusInfo.builder()
                 .totalCustodiados(totalProcessos)

@@ -68,17 +68,21 @@ class PessoaMonitoradaControllerTest extends WebMvcSliceSupport {
                 .cpf("123.456.789-00")
                 .rg("1234567")
                 .contato("(71) 99999-9999")
-                .processo("0000001-00.2024.8.05.0001")
-                .vara("1ª Vara Criminal")
-                .comarca("Salvador")
-                .dataDecisao(LocalDate.of(2024, 1, 15))
-                .periodicidade(30)
+                .observacoes("Pessoa monitorada em conformidade")
+                .build();
+
+        // dados processuais derivam do vinculo
+        custodiado.getProcessos().add(br.jus.tjba.aclp.model.Processo.builder()
+                .id(10L)
+                .numeroProcesso("0000001-00.2024.8.05.0001")
+                .vara("1ª Vara Criminal").comarca("Salvador")
+                .dataDecisao(LocalDate.of(2024, 1, 15)).periodicidade(30)
                 .dataComparecimentoInicial(LocalDate.of(2024, 2, 1))
+                .situacaoProcesso(br.jus.tjba.aclp.model.enums.SituacaoProcesso.ATIVO)
                 .status(StatusComparecimento.EM_CONFORMIDADE)
                 .ultimoComparecimento(LocalDate.now().minusDays(10))
                 .proximoComparecimento(LocalDate.now().plusDays(20))
-                .observacoes("Pessoa monitorada em conformidade")
-                .build();
+                .build());
 
         // Preparar DTO
         custodiadoDTO = PessoaMonitoradaDTO.builder()
@@ -153,7 +157,7 @@ class PessoaMonitoradaControllerTest extends WebMvcSliceSupport {
         mockMvc.perform(get("/api/pessoas-monitoradas/999"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.success", is(false)))
-                .andExpect(jsonPath("$.message", containsString("não encontrado")));
+                .andExpect(jsonPath("$.message", containsString("não encontrada")));
     }
 
     // ========== TESTES DE CRIAÇÃO ==========
@@ -237,8 +241,8 @@ class PessoaMonitoradaControllerTest extends WebMvcSliceSupport {
     @Test
     @DisplayName("Deve buscar custodiados por status")
     void testFindByStatus() throws Exception {
-        List<PessoaMonitorada> custodiados = Arrays.asList(custodiado);
-        when(custodiadoService.findByStatus(StatusComparecimento.EM_CONFORMIDADE)).thenReturn(custodiados);
+        when(custodiadoService.findByStatus(StatusComparecimento.EM_CONFORMIDADE))
+                .thenReturn(List.of(br.jus.tjba.aclp.dto.PessoaMonitoradaListDTO.fromEntity(custodiado)));
         when(custodiadoService.getEnderecoResumido(1L)).thenReturn("Centro, Salvador - BA");
         when(custodiadoService.getEnderecoCompleto(1L)).thenReturn("Av. Sete de Setembro, 1234, Centro, Salvador - BA");
         when(custodiadoService.getCidadeEstado(1L)).thenReturn("Salvador - BA");
@@ -253,8 +257,8 @@ class PessoaMonitoradaControllerTest extends WebMvcSliceSupport {
     @Test
     @DisplayName("Deve buscar custodiados com comparecimento hoje")
     void testFindComparecimentosHoje() throws Exception {
-        List<PessoaMonitorada> custodiados = Arrays.asList(custodiado);
-        when(custodiadoService.findComparecimentosHoje()).thenReturn(custodiados);
+        when(custodiadoService.findComparecimentosHoje())
+                .thenReturn(List.of(br.jus.tjba.aclp.dto.PessoaMonitoradaListDTO.fromEntity(custodiado)));
         when(custodiadoService.getEnderecoResumido(1L)).thenReturn("Centro, Salvador - BA");
         when(custodiadoService.getEnderecoCompleto(1L)).thenReturn("Av. Sete de Setembro, 1234, Centro, Salvador - BA");
         when(custodiadoService.getCidadeEstado(1L)).thenReturn("Salvador - BA");
@@ -268,9 +272,9 @@ class PessoaMonitoradaControllerTest extends WebMvcSliceSupport {
     @Test
     @DisplayName("Deve buscar custodiados inadimplentes")
     void testFindInadimplentes() throws Exception {
-        custodiado.setStatus(StatusComparecimento.INADIMPLENTE);
-        List<PessoaMonitorada> custodiados = Arrays.asList(custodiado);
-        when(custodiadoService.findInadimplentes()).thenReturn(custodiados);
+        custodiado.getProcessos().get(0).setProximoComparecimento(LocalDate.now().minusDays(5));
+        when(custodiadoService.findInadimplentes())
+                .thenReturn(List.of(br.jus.tjba.aclp.dto.PessoaMonitoradaListDTO.fromEntity(custodiado)));
         when(custodiadoService.getEnderecoResumido(1L)).thenReturn("Centro, Salvador - BA");
         when(custodiadoService.getEnderecoCompleto(1L)).thenReturn("Av. Sete de Setembro, 1234, Centro, Salvador - BA");
         when(custodiadoService.getCidadeEstado(1L)).thenReturn("Salvador - BA");
@@ -287,8 +291,8 @@ class PessoaMonitoradaControllerTest extends WebMvcSliceSupport {
     @Test
     @DisplayName("Deve buscar custodiados por termo")
     void testBuscar() throws Exception {
-        List<PessoaMonitorada> custodiados = Arrays.asList(custodiado);
-        when(custodiadoService.buscarPorNomeOuProcesso("João")).thenReturn(custodiados);
+        when(custodiadoService.buscarPorNomeOuProcesso("João"))
+                .thenReturn(List.of(br.jus.tjba.aclp.dto.PessoaMonitoradaListDTO.fromEntity(custodiado)));
         when(custodiadoService.getEnderecoResumido(1L)).thenReturn("Centro, Salvador - BA");
         when(custodiadoService.getEnderecoCompleto(1L)).thenReturn("Av. Sete de Setembro, 1234, Centro, Salvador - BA");
         when(custodiadoService.getCidadeEstado(1L)).thenReturn("Salvador - BA");

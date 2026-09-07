@@ -22,8 +22,11 @@ class TendenciaTest {
     }
 
     private PessoaMonitorada custodiado(long id, int periodicidade) {
-        PessoaMonitorada c = PessoaMonitorada.builder().nome("Teste").periodicidade(periodicidade).build();
+        PessoaMonitorada c = PessoaMonitorada.builder().nome("Teste").build();
         c.setId(id);
+        c.getProcessos().add(br.jus.tjba.aclp.model.Processo.builder()
+                .situacaoProcesso(br.jus.tjba.aclp.model.enums.SituacaoProcesso.ATIVO)
+                .periodicidade(periodicidade).build());
         return c;
     }
 

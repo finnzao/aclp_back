@@ -47,7 +47,7 @@ public class HistoricoEnderecoService {
      */
     @Transactional(readOnly = true)
     public Optional<HistoricoEnderecoDTO> buscarEnderecoAtivo(Long pessoaId) {
-        log.info("Buscando endereço ativa - Pessoa monitorada ID: {}", pessoaId);
+        log.info("Buscando endereço ativo - Pessoa monitorada ID: {}", pessoaId);
 
         if (pessoaId == null || pessoaId <= 0) {
             throw new IllegalArgumentException("ID da pessoa deve ser um número positivo");

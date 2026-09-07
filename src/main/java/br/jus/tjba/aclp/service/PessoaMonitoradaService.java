@@ -50,6 +50,7 @@ public class PessoaMonitoradaService {
     private final HistoricoEnderecoRepository historicoEnderecoRepository;
     private final ProcessoRepository processoRepository;
     private final ExecucaoPenalService execucaoPenalService;
+    private final jakarta.persistence.EntityManager entityManager;
 
     // =====================================================================
     // CORREÇÃO DE PERFORMANCE: Novos métodos para busca paginada
@@ -70,140 +71,161 @@ public class PessoaMonitoradaService {
      * @param ordenarPor Campo para ordenação (nome, proximoComparecimento, status, etc.)
      * @param direcao   Direção da ordenação (asc ou desc)
      */
+    // =====================================================================
+    // LISTAGEM: uma SQL por pagina (LEFT JOIN do processo mais urgente).
+    // Substitui o par Specification+entidade e o N+1 da natureza.
+    // ponytail: subquery com ROW_NUMBER e portavel (H2 dos testes + PG);
+    // trocar por LEFT JOIN LATERAL se processos passar de dezenas de milhares.
+    // =====================================================================
+
+    private static final String LISTA_SELECT = """
+            SELECT c.id, c.public_id, c.nome, c.cpf, c.rg, c.situacao,
+                   pp.numero_processo, pp.vara, pp.comarca, pp.periodicidade,
+                   pp.ultimo_comparecimento, pp.proximo_comparecimento,
+                   CASE WHEN EXISTS (SELECT 1 FROM processos e WHERE e.custodiado_id = c.id
+                                     AND e.situacao_processo = 'ATIVO'
+                                     AND e.natureza_vinculo = 'EXECUCAO_REGIME_ABERTO')
+                        THEN CASE WHEN EXISTS (SELECT 1 FROM processos e2 WHERE e2.custodiado_id = c.id
+                                               AND e2.situacao_processo = 'ATIVO'
+                                               AND e2.natureza_vinculo = 'CAUTELAR')
+                                  THEN 'MISTO' ELSE 'EXECUCAO' END
+                        ELSE 'CAUTELAR' END AS natureza
+            """;
+
+    private static final String LISTA_FROM = """
+             FROM pessoas_monitoradas c
+             LEFT JOIN (
+                 SELECT pr.*, ROW_NUMBER() OVER (
+                     PARTITION BY pr.custodiado_id
+                     ORDER BY pr.proximo_comparecimento ASC NULLS LAST) rn
+                 FROM processos pr
+                 WHERE pr.situacao_processo = 'ATIVO'
+             ) pp ON pp.custodiado_id = c.id AND pp.rn = 1
+            """;
+
+    private String montarWhereLista(String nome, String cpf, String status, String natureza,
+                                    java.util.Map<String, Object> params) {
+        StringBuilder w = new StringBuilder(" WHERE c.situacao = 'ATIVO'");
+        if (nome != null && !nome.isBlank()) {
+            w.append(" AND LOWER(c.nome) LIKE :nome");
+            params.put("nome", "%" + nome.toLowerCase().trim() + "%");
+        }
+        if (cpf != null && !cpf.isBlank()) {
+            w.append(" AND (c.cpf LIKE :cpfLimpo OR c.cpf LIKE :cpf)");
+            params.put("cpfLimpo", "%" + cpf.replaceAll("\\D", "") + "%");
+            params.put("cpf", "%" + cpf.trim() + "%");
+        }
+        if ("INADIMPLENTE".equalsIgnoreCase(status)) {
+            w.append(" AND pp.proximo_comparecimento < CURRENT_DATE");
+        } else if ("EM_CONFORMIDADE".equalsIgnoreCase(status)) {
+            w.append(" AND (pp.proximo_comparecimento IS NULL OR pp.proximo_comparecimento >= CURRENT_DATE)");
+        }
+        String existsExec = "EXISTS (SELECT 1 FROM processos e WHERE e.custodiado_id = c.id "
+                + "AND e.situacao_processo = 'ATIVO' AND e.natureza_vinculo = 'EXECUCAO_REGIME_ABERTO')";
+        if ("EXECUCAO".equalsIgnoreCase(natureza)) w.append(" AND ").append(existsExec);
+        else if ("CAUTELAR".equalsIgnoreCase(natureza)) w.append(" AND NOT ").append(existsExec);
+        return w.toString();
+    }
+
+    private String ordenacaoLista(String campo, String direcao) {
+        String col = switch (campo == null ? "nome" : campo.toLowerCase().trim()) {
+            case "cpf" -> "c.cpf";
+            case "status", "proximocomparecimento", "proximo_comparecimento" -> "pp.proximo_comparecimento";
+            case "ultimocomparecimento", "ultimo_comparecimento" -> "pp.ultimo_comparecimento";
+            case "comarca" -> "pp.comarca";
+            case "vara" -> "pp.vara";
+            case "periodicidade" -> "pp.periodicidade";
+            case "criadoem", "criado_em" -> "c.criado_em";
+            default -> "c.nome";
+        };
+        String dir = "desc".equalsIgnoreCase(direcao) ? "DESC" : "ASC";
+        return " ORDER BY " + col + " " + dir + " NULLS LAST, c.nome ASC";
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<PessoaMonitoradaListDTO> consultarLista(String nome, String cpf, String status,
+                                                         String natureza, String ordenarPor,
+                                                         String direcao, Integer page, Integer size) {
+        var params = new java.util.HashMap<String, Object>();
+        String sql = LISTA_SELECT + LISTA_FROM + montarWhereLista(nome, cpf, status, natureza, params)
+                + ordenacaoLista(ordenarPor, direcao);
+        var q = entityManager.createNativeQuery(sql);
+        params.forEach(q::setParameter);
+        if (page != null && size != null) {
+            q.setFirstResult(page * size);
+            q.setMaxResults(size);
+        }
+        List<Object[]> linhas = q.getResultList();
+        return linhas.stream().map(this::mapearLinhaLista).toList();
+    }
+
+    private long contarLista(String nome, String cpf, String status, String natureza) {
+        var params = new java.util.HashMap<String, Object>();
+        String sql = "SELECT COUNT(*)" + LISTA_FROM + montarWhereLista(nome, cpf, status, natureza, params);
+        var q = entityManager.createNativeQuery(sql);
+        params.forEach(q::setParameter);
+        return ((Number) q.getSingleResult()).longValue();
+    }
+
+    private static LocalDate dataDe(Object v) {
+        if (v == null) return null;
+        if (v instanceof LocalDate d) return d;
+        if (v instanceof java.sql.Date d) return d.toLocalDate();
+        if (v instanceof java.sql.Timestamp t) return t.toLocalDateTime().toLocalDate();
+        return LocalDate.parse(v.toString());
+    }
+
+    private PessoaMonitoradaListDTO mapearLinhaLista(Object[] r) {
+        LocalDate hoje = LocalDate.now();
+        LocalDate proximo = dataDe(r[11]);
+        Integer periodicidade = r[9] != null ? ((Number) r[9]).intValue() : null;
+        long diasAtraso = proximo != null && proximo.isBefore(hoje)
+                ? java.time.temporal.ChronoUnit.DAYS.between(proximo, hoje) : 0;
+        String cpf = (String) r[3];
+        String rg = (String) r[4];
+        String documento = cpf != null && !cpf.isBlank() ? cpf
+                : rg != null && !rg.isBlank() ? rg : "Sem documento";
+        return PessoaMonitoradaListDTO.builder()
+                .id(r[1] != null ? r[1].toString() : null)
+                .numericId(((Number) r[0]).longValue())
+                .nome((String) r[2])
+                .cpf(cpf).rg(rg)
+                .documentoExibicao(documento)
+                .processo((String) r[6]).vara((String) r[7]).comarca((String) r[8])
+                .status(diasAtraso > 0 ? StatusComparecimento.INADIMPLENTE : StatusComparecimento.EM_CONFORMIDADE)
+                .situacao(SituacaoPessoaMonitorada.valueOf((String) r[5]))
+                .ultimoComparecimento(dataDe(r[10]))
+                .proximoComparecimento(proximo)
+                .diasAtraso(diasAtraso)
+                .periodicidade(periodicidade)
+                .inadimplente(diasAtraso > 0)
+                .comparecimentoHoje(hoje.equals(proximo))
+                .urgente(periodicidade != null && diasAtraso >= periodicidade)
+                .natureza((String) r[12])
+                .build();
+    }
+
     @Transactional(readOnly = true)
     public Page<PessoaMonitoradaListDTO> listarPaginado(
             int page, int size, String nome, String cpf,
             String status, String natureza, String ordenarPor, String direcao) {
-
-        // Validar campo de ordenação para evitar injeção SQL
-        String campoOrdenacao = validarCampoOrdenacao(ordenarPor);
-
-        Sort sort = direcao.equalsIgnoreCase("desc")
-                ? Sort.by(campoOrdenacao).descending()
-                : Sort.by(campoOrdenacao).ascending();
-
-        Pageable pageable = PageRequest.of(page, size, sort);
-
-        // Construir Specification dinâmica com os filtros
-        Specification<PessoaMonitorada> spec = buildPessoaMonitoradaSpecification(nome, cpf, status, natureza);
-
-        Page<PessoaMonitorada> pagina = custodiadoRepository.findAll(spec, pageable);
-
-        return pagina.map(PessoaMonitoradaListDTO::fromEntity);
+        List<PessoaMonitoradaListDTO> conteudo =
+                consultarLista(nome, cpf, status, natureza, ordenarPor, direcao, page, size);
+        long total = contarLista(nome, cpf, status, natureza);
+        return new org.springframework.data.domain.PageImpl<>(conteudo, PageRequest.of(page, size), total);
     }
 
-    /** Mapeia dentro da transacao: o DTO le processos (LAZY) para derivar a natureza. */
-    @Transactional(readOnly = true)
-    public List<PessoaMonitoradaListDTO> listarTodosAtivosDTO() {
-        return findAllActive().stream().map(PessoaMonitoradaListDTO::fromEntity).toList();
-    }
-
-    /**
-     * CORREÇÃO DE PERFORMANCE: Listagem para exportação com filtros.
-     *
-     * Retorna todos os registros filtrados (sem paginação) para download
-     * de planilhas. Chamado apenas no momento do clique em "Exportar".
-     */
     @Transactional(readOnly = true)
     public List<PessoaMonitoradaListDTO> listarParaExportacao(
             String nome, String cpf, String status, String natureza,
             String ordenarPor, String direcao) {
-
-        String campoOrdenacao = validarCampoOrdenacao(ordenarPor);
-
-        Sort sort = direcao.equalsIgnoreCase("desc")
-                ? Sort.by(campoOrdenacao).descending()
-                : Sort.by(campoOrdenacao).ascending();
-
-        Specification<PessoaMonitorada> spec = buildPessoaMonitoradaSpecification(nome, cpf, status, natureza);
-
-        List<PessoaMonitorada> custodiados = custodiadoRepository.findAll(spec, sort);
-        return custodiados.stream()
-                .map(PessoaMonitoradaListDTO::fromEntity)
-                .toList();
+        return consultarLista(nome, cpf, status, natureza, ordenarPor, direcao, null, null);
     }
 
-    /**
-     * Constrói Specification dinâmica para filtros de custodiado.
-     * Todos os filtros são aplicados na query SQL, não em Java.
-     */
-    private Specification<PessoaMonitorada> buildPessoaMonitoradaSpecification(
-            String nome, String cpf, String status, String natureza) {
-
-        return (root, query, cb) -> {
-            List<Predicate> predicates = new ArrayList<>();
-
-            // Filtro base: apenas custodiados ativos
-            predicates.add(cb.equal(root.get("situacao"), SituacaoPessoaMonitorada.ATIVO));
-
-            // Busca parcial case-insensitive por nome
-            if (nome != null && !nome.isBlank()) {
-                predicates.add(cb.like(
-                        cb.lower(root.get("nome")),
-                        "%" + nome.toLowerCase().trim() + "%"
-                ));
-            }
-
-            // Busca por CPF (remove formatação antes de comparar)
-            if (cpf != null && !cpf.isBlank()) {
-                String cpfLimpo = cpf.replaceAll("\\D", "");
-                predicates.add(cb.or(
-                        cb.like(root.get("cpf"), "%" + cpfLimpo + "%"),
-                        cb.like(root.get("cpf"), "%" + cpf.trim() + "%")
-                ));
-            }
-
-            // Filtro por status de comparecimento
-            if (status != null && !status.isBlank()) {
-                try {
-                    StatusComparecimento statusEnum = StatusComparecimento.fromString(status);
-                    predicates.add(cb.equal(root.get("status"), statusEnum));
-                } catch (IllegalArgumentException e) {
-                    log.warn("Status de filtro inválido ignorado: {}", status);
-                }
-            }
-
-            // EXECUCAO = tem processo ativo de execucao; CAUTELAR = nao tem (misto conta como execucao)
-            if (natureza != null && !natureza.isBlank()) {
-                jakarta.persistence.criteria.Subquery<Long> sub = query.subquery(Long.class);
-                var proc = sub.from(Processo.class);
-                sub.select(proc.get("id")).where(
-                        cb.equal(proc.get("custodiado"), root),
-                        cb.equal(proc.get("situacaoProcesso"), SituacaoProcesso.ATIVO),
-                        cb.equal(proc.get("naturezaVinculo"), NaturezaVinculo.EXECUCAO_REGIME_ABERTO));
-                if ("EXECUCAO".equalsIgnoreCase(natureza)) {
-                    predicates.add(cb.exists(sub));
-                } else if ("CAUTELAR".equalsIgnoreCase(natureza)) {
-                    predicates.add(cb.not(cb.exists(sub)));
-                }
-            }
-
-            return cb.and(predicates.toArray(new Predicate[0]));
-        };
-    }
-
-    /**
-     * Valida o campo de ordenação para evitar injeção SQL.
-     * Retorna um campo seguro ou "nome" como fallback.
-     */
-    private String validarCampoOrdenacao(String campo) {
-        if (campo == null) return "nome";
-
-        return switch (campo.toLowerCase().trim()) {
-            case "nome" -> "nome";
-            case "cpf" -> "cpf";
-            case "status" -> "status";
-            case "proximocomparecimento", "proximo_comparecimento" -> "proximoComparecimento";
-            case "ultimocomparecimento", "ultimo_comparecimento" -> "ultimoComparecimento";
-            case "comarca" -> "comarca";
-            case "vara" -> "vara";
-            case "periodicidade" -> "periodicidade";
-            case "criadoem", "criado_em" -> "criadoEm";
-            default -> {
-                log.warn("Campo de ordenação desconhecido '{}', usando 'nome' como fallback", campo);
-                yield "nome";
-            }
-        };
+    /** Mapeia dentro da transacao: o DTO le processos (LAZY) para derivar os dados. */
+    @Transactional(readOnly = true)
+    public List<PessoaMonitoradaListDTO> listarTodosAtivosDTO() {
+        return findAllActive().stream().map(PessoaMonitoradaListDTO::fromEntity).toList();
     }
 
     // =====================================================================
@@ -231,19 +253,10 @@ public class PessoaMonitoradaService {
                 .cpf(cpfFormatado)
                 .rg(dto.getRg())
                 .contato(contatoFinal)
-                .processo(processoFormatado)
-                .vara(dto.getVara().trim())
-                .comarca(dto.getComarca().trim())
-                .dataDecisao(dto.getDataDecisao())
-                .periodicidade(dto.getPeriodicidade())
-                .dataComparecimentoInicial(dataCompInicial)
-                .status(StatusComparecimento.EM_CONFORMIDADE)
                 .situacao(SituacaoPessoaMonitorada.ATIVO)
-                .ultimoComparecimento(dataCompInicial)
                 .observacoes(dto.getObservacoes() != null ? dto.getObservacoes().trim() : null)
                 .build();
 
-        custodiado.calcularProximoComparecimento();
         PessoaMonitorada custodiadoSalvo = custodiadoRepository.save(custodiado);
         log.info("Pessoa monitorada criada — publicId: {}, ID: {}", custodiadoSalvo.getPublicId(), custodiadoSalvo.getId());
 
@@ -421,7 +434,8 @@ public class PessoaMonitoradaService {
             throw new IllegalArgumentException("publicId não pode ser vazio");
         try {
             UUID publicId = UUID.fromString(publicIdStr);
-            return custodiadoRepository.findByPublicId(publicId);
+            // processos junto: os campos derivados da ficha funcionam fora da sessao
+            return custodiadoRepository.findByPublicIdComProcessos(publicId);
         } catch (IllegalArgumentException e) {
             return Optional.empty();
         }
@@ -492,7 +506,7 @@ public class PessoaMonitoradaService {
     @Transactional(readOnly = true)
     public Optional<PessoaMonitorada> findById(Long id) {
         if (id == null || id <= 0) throw new IllegalArgumentException("ID deve ser um número positivo");
-        return custodiadoRepository.findById(id);
+        return custodiadoRepository.findByIdComProcessos(id);
     }
 
     @Transactional
@@ -556,22 +570,31 @@ public class PessoaMonitoradaService {
                 .cpf(dto.getCpf())
                 .rg(dto.getRg())
                 .contato(contatoFinal)
-                .processo(dto.getProcesso())
+                .situacao(SituacaoPessoaMonitorada.ATIVO)
+                .observacoes(dto.getObservacoes() != null ? dto.getObservacoes().trim() : null)
+                .build();
+
+        PessoaMonitorada salvo = custodiadoRepository.save(custodiado);
+
+        // o vinculo mora em PROCESSOS; o endpoint legado cria um CAUTELAR
+        Processo processoLegado = Processo.builder()
+                .custodiado(salvo)
+                .numeroProcesso(dto.getProcesso())
                 .vara(dto.getVara().trim())
                 .comarca(dto.getComarca().trim())
                 .dataDecisao(dto.getDataDecisao())
                 .periodicidade(dto.getPeriodicidade())
                 .dataComparecimentoInicial(dto.getDataComparecimentoInicial())
-                .status(StatusComparecimento.EM_CONFORMIDADE)
-                .situacao(SituacaoPessoaMonitorada.ATIVO)
                 .ultimoComparecimento(dto.getDataComparecimentoInicial())
-                .observacoes(dto.getObservacoes() != null ? dto.getObservacoes().trim() : null)
+                .status(StatusComparecimento.EM_CONFORMIDADE)
+                .situacaoProcesso(SituacaoProcesso.ATIVO)
+                .naturezaVinculo(NaturezaVinculo.CAUTELAR)
                 .build();
-
-        custodiado.calcularProximoComparecimento();
-        PessoaMonitorada salvo = custodiadoRepository.save(custodiado);
+        processoLegado.calcularProximoComparecimento();
+        processoRepository.save(processoLegado);
+        salvo.getProcessos().add(processoLegado);
         criarHistoricoEnderecoInicial(salvo, dto);
-        criarPrimeiroComparecimento(salvo);
+        criarPrimeiroComparecimento(salvo, processoLegado);
         return salvo;
     }
 
@@ -584,25 +607,35 @@ public class PessoaMonitoradaService {
     }
 
     @Transactional(readOnly = true)
-    public List<PessoaMonitorada> findByStatus(StatusComparecimento status) {
+    public List<PessoaMonitoradaListDTO> findByStatus(StatusComparecimento status) {
         if (status == null) throw new IllegalArgumentException("Status é obrigatório");
-        return custodiadoRepository.findByStatusWithEnderecos(status);
+        var lista = status == StatusComparecimento.INADIMPLENTE
+                ? custodiadoRepository.findInadimplentesWithEnderecos()
+                : custodiadoRepository.findEmConformidadeAtivos();
+        return lista.stream().map(PessoaMonitoradaListDTO::fromEntity).toList();
     }
 
     @Transactional(readOnly = true)
-    public List<PessoaMonitorada> findComparecimentosHoje() { return custodiadoRepository.findComparecimentosHoje(); }
+    public List<PessoaMonitoradaListDTO> findComparecimentosHoje() {
+        return custodiadoRepository.findComparecimentosHoje().stream()
+                .map(PessoaMonitoradaListDTO::fromEntity).toList();
+    }
 
     @Transactional(readOnly = true)
-    public List<PessoaMonitorada> findInadimplentes() { return custodiadoRepository.findInadimplentesWithEnderecos(); }
+    public List<PessoaMonitoradaListDTO> findInadimplentes() {
+        return custodiadoRepository.findInadimplentesWithEnderecos().stream()
+                .map(PessoaMonitoradaListDTO::fromEntity).toList();
+    }
 
     @Transactional(readOnly = true)
-    public List<PessoaMonitorada> buscarPorNomeOuProcesso(String termo) {
+    public List<PessoaMonitoradaListDTO> buscarPorNomeOuProcesso(String termo) {
         if (termo == null || termo.trim().isEmpty()) throw new IllegalArgumentException("Termo de busca é obrigatório");
         if (termo.trim().length() < 2) throw new IllegalArgumentException("Termo deve ter pelo menos 2 caracteres");
         String t = termo.trim();
         String tp = t;
         if (t.replaceAll("[^\\d]", "").length() >= 10) { try { tp = formatarProcesso(t); } catch (Exception ignored) {} }
-        return custodiadoRepository.buscarPorNomeOuProcessoWithEnderecos(t, tp);
+        return custodiadoRepository.buscarPorNomeOuProcessoWithEnderecos(t, tp).stream()
+                .map(PessoaMonitoradaListDTO::fromEntity).toList();
     }
 
     @Transactional(readOnly = true)
@@ -641,24 +674,16 @@ public class PessoaMonitoradaService {
             throw new IllegalArgumentException("Não é possível atualizar custodiado arquivado. Reative-o primeiro.");
         dto.limparEFormatarDados();
         if (dto.getCpf() != null && !dto.getCpf().trim().isEmpty()) dto.setCpf(formatarCpf(dto.getCpf().trim()));
-        if (dto.getProcesso() != null && !dto.getProcesso().trim().isEmpty()) dto.setProcesso(formatarProcesso(dto.getProcesso().trim()));
-        validarDadosObrigatorios(dto);
+        validarDadosPessoais(dto);
         validarFormatos(dto);
         validarDuplicidadesDocumentosParaUpdate(dto, custodiado.getId());
-        validarDatasLogicas(dto);
 
+        // dados processuais editam-se no proprio processo (EditarProcessoModal)
         custodiado.setNome(dto.getNome().trim());
         custodiado.setCpf(dto.getCpf());
         custodiado.setRg(dto.getRg());
         custodiado.setContato(dto.getContatoEfetivo());
-        custodiado.setProcesso(dto.getProcesso());
-        custodiado.setVara(dto.getVara().trim());
-        custodiado.setComarca(dto.getComarca().trim());
-        custodiado.setDataDecisao(dto.getDataDecisao());
-        custodiado.setPeriodicidade(dto.getPeriodicidade());
-        custodiado.setDataComparecimentoInicial(dto.getDataComparecimentoInicial());
         custodiado.setObservacoes(dto.getObservacoes() != null ? dto.getObservacoes().trim() : null);
-        custodiado.calcularProximoComparecimento();
         return custodiadoRepository.save(custodiado);
     }
 
@@ -675,13 +700,21 @@ public class PessoaMonitoradaService {
         historicoEnderecoRepository.desativarOutrosEnderecosAtivos(custodiado.getId(), salvo.getId());
     }
 
-    private void criarPrimeiroComparecimento(PessoaMonitorada custodiado) {
+    private void criarPrimeiroComparecimento(PessoaMonitorada custodiado, Processo processo) {
         if (historicoComparecimentoRepository.existsCadastroInicialPorCustodiado(custodiado.getId())) return;
         HistoricoComparecimento c = HistoricoComparecimento.builder()
-                .custodiado(custodiado).dataComparecimento(custodiado.getDataComparecimentoInicial())
+                .custodiado(custodiado).processo(processo)
+                .dataComparecimento(processo.getDataComparecimentoInicial())
                 .horaComparecimento(LocalTime.now()).tipoValidacao(TipoValidacao.CADASTRO_INICIAL)
                 .validadoPor("Sistema SCC").observacoes("Cadastro inicial no sistema").mudancaEndereco(Boolean.FALSE).build();
         historicoComparecimentoRepository.save(c);
+    }
+
+    private void validarDadosPessoais(PessoaMonitoradaDTO dto) {
+        if (dto.getNome() == null || dto.getNome().trim().isEmpty()) throw new IllegalArgumentException("Nome é obrigatório");
+        boolean temCpf = dto.getCpf() != null && !dto.getCpf().trim().isEmpty();
+        boolean temRg = dto.getRg() != null && !dto.getRg().trim().isEmpty();
+        if (!temCpf && !temRg) throw new IllegalArgumentException("Pelo menos um documento (CPF ou RG) deve ser informado");
     }
 
     private void validarDadosObrigatorios(PessoaMonitoradaDTO dto) {

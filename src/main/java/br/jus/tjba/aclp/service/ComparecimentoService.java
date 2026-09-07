@@ -52,7 +52,8 @@ public class ComparecimentoService {
     @Transactional(readOnly = true)
     public Page<HistoricoComparecimentoResponseDTO> listarPaginadoComFiltros(
             int page, int size, LocalDate dataInicio, LocalDate dataFim,
-            TipoValidacao tipoValidacao, String custodiadoNome, String numeroProcesso) {
+            TipoValidacao tipoValidacao, String custodiadoNome, String numeroProcesso,
+            br.jus.tjba.aclp.model.enums.NaturezaVinculo natureza) {
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "dataComparecimento"));
 
@@ -69,9 +70,15 @@ public class ComparecimentoService {
                 Join<HistoricoComparecimento, PessoaMonitorada> cj = root.join("custodiado", JoinType.LEFT);
                 predicates.add(cb.like(cb.lower(cj.get("nome")), "%" + custodiadoNome.toLowerCase().trim() + "%"));
             }
+            // um único join de processo serve aos dois filtros
+            Join<HistoricoComparecimento, Processo> pj = null;
             if (numeroProcesso != null && !numeroProcesso.isBlank()) {
-                Join<HistoricoComparecimento, Processo> pj = root.join("processo", JoinType.LEFT);
+                pj = root.join("processo", JoinType.LEFT);
                 predicates.add(cb.like(pj.get("numeroProcesso"), "%" + numeroProcesso.trim() + "%"));
+            }
+            if (natureza != null) {
+                if (pj == null) pj = root.join("processo", JoinType.LEFT);
+                predicates.add(cb.equal(pj.get("naturezaVinculo"), natureza));
             }
 
             // Sem estes fetch, cada linha da página dispara selects de custodiado/processo
@@ -129,14 +136,13 @@ public class ComparecimentoService {
             salvo = historicoComparecimentoRepository.save(salvo);
         }
 
+        // o ciclo vive no processo; a pessoa deriva dele
         if (dto.getTipoValidacao() == TipoValidacao.FALTA_JUSTIFICADA) {
             // adia o ciclo sem contar presença: ultimoComparecimento fica intacto
             if (processo != null) {
                 processo.registrarFaltaJustificada(dto.getDataComparecimento());
                 processoRepository.save(processo);
             }
-            custodiado.registrarFaltaJustificada(dto.getDataComparecimento());
-            custodiadoRepository.save(custodiado);
         } else if (dto.getTipoValidacao() != TipoValidacao.CADASTRO_INICIAL) {
             if (processo != null) {
                 processo.setUltimoComparecimento(dto.getDataComparecimento());
@@ -144,10 +150,6 @@ public class ComparecimentoService {
                 processo.atualizarStatusBaseadoEmData();
                 processoRepository.save(processo);
             }
-            custodiado.setUltimoComparecimento(dto.getDataComparecimento());
-            custodiado.calcularProximoComparecimento();
-            custodiado.atualizarStatusBaseadoEmData();
-            custodiadoRepository.save(custodiado);
         }
 
         return toResponseDTO(salvo);

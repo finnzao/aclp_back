@@ -32,12 +32,8 @@ import java.util.Objects;
 @Entity
 @Table(name = "processos",
         indexes = {
-                @Index(name = "idx_processo_custodiado",       columnList = "custodiado_id"),
                 @Index(name = "idx_processo_numero",           columnList = "numero_processo"),
-                @Index(name = "idx_processo_situacao",         columnList = "situacao_processo"),
-                @Index(name = "idx_processo_status_proximo",   columnList = "status, proximo_comparecimento"),
-                @Index(name = "idx_processo_custodiado_situacao", columnList = "custodiado_id, situacao_processo"),
-                @Index(name = "idx_processo_natureza",           columnList = "natureza_vinculo")
+                @Index(name = "idx_processo_custodiado_situacao", columnList = "custodiado_id, situacao_processo")
         }
 )
 @Data

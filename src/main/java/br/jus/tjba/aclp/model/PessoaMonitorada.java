@@ -18,13 +18,8 @@ import java.util.UUID;
         indexes = {
                 @Index(name = "idx_custodiado_cpf", columnList = "cpf"),
                 @Index(name = "idx_custodiado_rg", columnList = "rg"),
-                @Index(name = "idx_custodiado_situacao", columnList = "situacao"),
                 @Index(name = "idx_custodiado_nome", columnList = "nome"),
-                @Index(name = "idx_custodiado_public_id", columnList = "public_id", unique = true),
-                // situacao sozinha tem cardinalidade 2 (quase inútil); toda consulta do
-                // dashboard filtra situacao='ATIVO' + status ou + proximo_comparecimento
-                @Index(name = "idx_custodiado_situacao_status", columnList = "situacao, status"),
-                @Index(name = "idx_custodiado_situacao_proximo", columnList = "situacao, proximo_comparecimento")
+                @Index(name = "idx_custodiado_public_id", columnList = "public_id", unique = true)
         }
 )
 @Data
@@ -90,34 +85,6 @@ public class PessoaMonitorada {
     @Builder.Default
     private Long version = 0L;
 
-    @Column(name = "processo", length = 25)
-    private String processo;
-
-    @Column(name = "vara", length = 100)
-    private String vara;
-
-    @Column(name = "comarca", length = 100)
-    private String comarca;
-
-    @Column(name = "data_decisao")
-    private java.time.LocalDate dataDecisao;
-
-    @Column(name = "periodicidade")
-    private Integer periodicidade;
-
-    @Column(name = "data_comparecimento_inicial")
-    private java.time.LocalDate dataComparecimentoInicial;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "status", length = 20)
-    private br.jus.tjba.aclp.model.enums.StatusComparecimento status;
-
-    @Column(name = "ultimo_comparecimento")
-    private java.time.LocalDate ultimoComparecimento;
-
-    @Column(name = "proximo_comparecimento")
-    private java.time.LocalDate proximoComparecimento;
-
     @OneToMany(mappedBy = "custodiado", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @Builder.Default
     @JsonIgnore
@@ -146,20 +113,13 @@ public class PessoaMonitorada {
         if (version == null) version = 0L;
         if (situacao == null) situacao = SituacaoPessoaMonitorada.ATIVO;
         if (publicId == null) publicId = UUID.randomUUID();
-        if (status == null) status = br.jus.tjba.aclp.model.enums.StatusComparecimento.EM_CONFORMIDADE;
         if (contato == null || contato.trim().isEmpty()) contato = "Pendente";
-        if (ultimoComparecimento == null && dataComparecimentoInicial != null)
-            ultimoComparecimento = dataComparecimentoInicial;
-        if (proximoComparecimento == null && situacao.isAtivo() && periodicidade != null)
-            calcularProximoComparecimento();
-        atualizarStatusBaseadoEmData(); // nasce coerente com a data
     }
 
     @PreUpdate
     public void preUpdate() {
         atualizadoEm = LocalDateTime.now();
         if (contato == null || contato.trim().isEmpty()) contato = "Pendente";
-        if (situacao.isArquivado()) proximoComparecimento = null;
     }
 
     public void setCpf(String cpf) {
@@ -188,19 +148,79 @@ public class PessoaMonitorada {
         }
     }
 
-    public void calcularProximoComparecimento() {
-        if (ultimoComparecimento != null && periodicidade != null && situacao.isAtivo()) {
-            proximoComparecimento = ultimoComparecimento.plusDays(periodicidade);
+    // ---------------------------------------------------------------------
+    // Dados processuais derivados de PROCESSOS (fonte da verdade).
+    // Os getters manuais abaixo tem precedencia sobre o Lombok e substituem
+    // as colunas legadas desta tabela. Fora de sessao, degradam para vazio.
+    // ---------------------------------------------------------------------
+
+    private List<Processo> processosCarregados() {
+        try {
+            processos.size();
+            return processos;
+        } catch (org.hibernate.LazyInitializationException e) {
+            return java.util.List.of();
         }
     }
 
-    public void atualizarStatusBaseadoEmData() {
-        if (situacao.isAtivo() && proximoComparecimento != null
-                && proximoComparecimento.isBefore(java.time.LocalDate.now())) {
-            status = br.jus.tjba.aclp.model.enums.StatusComparecimento.INADIMPLENTE;
-        } else if (situacao.isAtivo()) {
-            status = br.jus.tjba.aclp.model.enums.StatusComparecimento.EM_CONFORMIDADE;
-        }
+    private java.util.stream.Stream<Processo> processosAtivos() {
+        return processosCarregados().stream()
+                .filter(p -> p.getSituacaoProcesso() == br.jus.tjba.aclp.model.enums.SituacaoProcesso.ATIVO);
+    }
+
+    /** Processo ATIVO mais urgente; sem ativos, o mais recente (fichas arquivadas). */
+    public Processo getProcessoPrincipal() {
+        return processosAtivos()
+                .min(java.util.Comparator.comparing(Processo::getProximoComparecimento,
+                        java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())))
+                .orElseGet(() -> processosCarregados().stream()
+                        .max(java.util.Comparator.comparing(Processo::getCriadoEm,
+                                java.util.Comparator.nullsFirst(java.util.Comparator.naturalOrder())))
+                        .orElse(null));
+    }
+
+    public String getProcesso() {
+        Processo p = getProcessoPrincipal();
+        return p != null ? p.getNumeroProcesso() : null;
+    }
+
+    public String getVara() {
+        Processo p = getProcessoPrincipal();
+        return p != null ? p.getVara() : null;
+    }
+
+    public String getComarca() {
+        Processo p = getProcessoPrincipal();
+        return p != null ? p.getComarca() : null;
+    }
+
+    public java.time.LocalDate getDataDecisao() {
+        Processo p = getProcessoPrincipal();
+        return p != null ? p.getDataDecisao() : null;
+    }
+
+    public Integer getPeriodicidade() {
+        Processo p = getProcessoPrincipal();
+        return p != null ? p.getPeriodicidade() : null;
+    }
+
+    public java.time.LocalDate getDataComparecimentoInicial() {
+        Processo p = getProcessoPrincipal();
+        return p != null ? p.getDataComparecimentoInicial() : null;
+    }
+
+    public java.time.LocalDate getUltimoComparecimento() {
+        Processo p = getProcessoPrincipal();
+        return p != null ? p.getUltimoComparecimento() : null;
+    }
+
+    public java.time.LocalDate getProximoComparecimento() {
+        Processo p = getProcessoPrincipal();
+        return p != null ? p.getProximoComparecimento() : null;
+    }
+
+    public br.jus.tjba.aclp.model.enums.StatusComparecimento getStatus() {
+        return getStatusEfetivo();
     }
 
     /** EXECUCAO/CAUTELAR/MISTO pelos processos ativos; requer sessao aberta (processos LAZY). */
@@ -214,32 +234,39 @@ public class PessoaMonitorada {
         return execucao ? "EXECUCAO" : "CAUTELAR";
     }
 
-    /** Status pela DATA; a coluna persistida e cache do scheduler. */
+    /** Status pela DATA dos processos ativos: qualquer um atrasado = inadimplente. */
     public br.jus.tjba.aclp.model.enums.StatusComparecimento getStatusEfetivo() {
-        if (!isAtivo()) return status;
         return isInadimplente()
                 ? br.jus.tjba.aclp.model.enums.StatusComparecimento.INADIMPLENTE
                 : br.jus.tjba.aclp.model.enums.StatusComparecimento.EM_CONFORMIDADE;
     }
 
+    /** Maior atraso entre os processos ativos. */
     public long getDiasAtraso() {
-        if (proximoComparecimento == null || situacao.isArquivado()) return 0;
+        if (!isAtivo()) return 0;
         java.time.LocalDate hoje = java.time.LocalDate.now();
-        return hoje.isAfter(proximoComparecimento)
-                ? java.time.temporal.ChronoUnit.DAYS.between(proximoComparecimento, hoje) : 0;
+        return processosAtivos()
+                .map(Processo::getProximoComparecimento)
+                .filter(d -> d != null && d.isBefore(hoje))
+                .mapToLong(d -> java.time.temporal.ChronoUnit.DAYS.between(d, hoje))
+                .max().orElse(0);
     }
 
     public boolean isInadimplente() {
-        return situacao.isAtivo() && (status == br.jus.tjba.aclp.model.enums.StatusComparecimento.INADIMPLENTE
-                || (proximoComparecimento != null && proximoComparecimento.isBefore(java.time.LocalDate.now())));
+        if (!isAtivo()) return false;
+        java.time.LocalDate hoje = java.time.LocalDate.now();
+        return processosAtivos().anyMatch(p ->
+                p.getProximoComparecimento() != null && p.getProximoComparecimento().isBefore(hoje));
     }
 
     public boolean isComparecimentoHoje() {
-        return situacao.isAtivo() && proximoComparecimento != null
-                && proximoComparecimento.equals(java.time.LocalDate.now());
+        if (!isAtivo()) return false;
+        java.time.LocalDate hoje = java.time.LocalDate.now();
+        return processosAtivos().anyMatch(p -> hoje.equals(p.getProximoComparecimento()));
     }
 
     public String getPeriodicidadeDescricao() {
+        Integer periodicidade = getPeriodicidade();
         if (periodicidade == null) return "Não definida";
         return switch (periodicidade) {
             case 7 -> "Semanal";
@@ -266,7 +293,6 @@ public class PessoaMonitorada {
     public void arquivar(br.jus.tjba.aclp.model.enums.MotivoArquivamento motivo) {
         situacao = SituacaoPessoaMonitorada.ARQUIVADO;
         motivoArquivamento = motivo;
-        proximoComparecimento = null;
         atualizadoEm = LocalDateTime.now();
     }
 
@@ -276,19 +302,10 @@ public class PessoaMonitorada {
         atualizadoEm = LocalDateTime.now();
     }
 
-    /** Volta de ARQUIVADO ou FORAGIDO. */
+    /** Volta de ARQUIVADO ou FORAGIDO; o ciclo de comparecimento vive nos processos. */
     public void reativar() {
         situacao = SituacaoPessoaMonitorada.ATIVO;
         motivoArquivamento = null;
-        calcularProximoComparecimento();
-        atualizarStatusBaseadoEmData();
-        atualizadoEm = LocalDateTime.now();
-    }
-
-    /** Falta justificada: adia o ciclo a partir da falta SEM contar presença. */
-    public void registrarFaltaJustificada(java.time.LocalDate dataFalta) {
-        if (periodicidade != null) proximoComparecimento = dataFalta.plusDays(periodicidade);
-        status = br.jus.tjba.aclp.model.enums.StatusComparecimento.EM_CONFORMIDADE;
         atualizadoEm = LocalDateTime.now();
     }
 

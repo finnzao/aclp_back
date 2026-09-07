@@ -57,19 +57,19 @@ public class HistoricoEnderecoController {
             description = "Retorna o endereço ativo atual de uma pessoa")
     @ApiResponses(value = {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Endereço ativo encontrado"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204", description = "Pessoa monitorada não possui endereço ativa"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "204", description = "Pessoa monitorada não possui endereço ativo"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "ID da pessoa inválido")
     })
     public ResponseEntity<ApiResponse<HistoricoEnderecoDTO>> buscarEnderecoAtivo(
             @Parameter(description = "ID da pessoa") @PathVariable Long pessoaId) {
-        log.info("Buscando endereço ativa - Pessoa monitorada ID: {}", pessoaId);
+        log.info("Buscando endereço ativo - Pessoa monitorada ID: {}", pessoaId);
 
         try {
             Optional<HistoricoEnderecoDTO> endereco = historicoEnderecoService.buscarEnderecoAtivo(pessoaId);
             return endereco.map(dto -> ResponseEntity.ok(
                     ApiResponse.success("Endereço ativo encontrado", dto)
             )).orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).body(
-                    ApiResponse.error("Pessoa monitorada não possui endereço ativa")
+                    ApiResponse.error("Pessoa monitorada não possui endereço ativo")
             ));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(
