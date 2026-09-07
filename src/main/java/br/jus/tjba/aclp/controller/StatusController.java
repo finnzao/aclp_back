@@ -32,24 +32,19 @@ public class StatusController {
     public ResponseEntity<Map<String, Object>> verificarInadimplentes() {
         log.info("Executando verificação manual de inadimplentes");
 
-        try {
-            long pessoasMarcadas = statusSchedulerService.verificarStatusManual();
+        long pessoasMarcadas = statusSchedulerService.verificarStatusManual();
 
-            String mensagem = pessoasMarcadas == 0
-                    ? "Nenhuma pessoa foi marcada como inadimplente"
-                    : String.format("%d pessoa(s) foram marcadas como inadimplentes", pessoasMarcadas);
+        String mensagem = pessoasMarcadas == 0
+                ? "Nenhuma pessoa foi marcada como inadimplente"
+                : String.format("%d pessoa(s) foram marcadas como inadimplentes", pessoasMarcadas);
 
-            Map<String, Object> dados = new HashMap<>();
-            dados.put("pessoasMarcadas", pessoasMarcadas);
-            dados.put("executadoEm", LocalDateTime.now().toString());
-            dados.put("tipo", "verificacao_manual");
+        Map<String, Object> dados = new HashMap<>();
+        dados.put("pessoasMarcadas", pessoasMarcadas);
+        dados.put("executadoEm", LocalDateTime.now().toString());
+        dados.put("tipo", "verificacao_manual");
 
-            return ApiResponseUtil.success(dados, mensagem);
+        return ApiResponseUtil.success(dados, mensagem);
 
-        } catch (Exception e) {
-            log.error("Erro na verificação manual de inadimplentes", e);
-            return ApiResponseUtil.internalServerError("Erro ao verificar inadimplentes: " + e.getMessage());
-        }
     }
 
     @PostMapping("/reprocessar-todos")
@@ -60,20 +55,15 @@ public class StatusController {
     public ResponseEntity<Map<String, Object>> reprocessarTodos() {
         log.info("Executando reprocessamento completo de status");
 
-        try {
-            long inadimplentes = statusSchedulerService.reprocessarTodosStatus();
+        long inadimplentes = statusSchedulerService.reprocessarTodosStatus();
 
-            Map<String, Object> dados = new HashMap<>();
-            dados.put("inadimplentesEncontrados", inadimplentes);
-            dados.put("executadoEm", LocalDateTime.now().toString());
-            dados.put("tipo", "reprocessamento_completo");
+        Map<String, Object> dados = new HashMap<>();
+        dados.put("inadimplentesEncontrados", inadimplentes);
+        dados.put("executadoEm", LocalDateTime.now().toString());
+        dados.put("tipo", "reprocessamento_completo");
 
-            return ApiResponseUtil.success(dados, "Reprocessamento completo executado com sucesso");
+        return ApiResponseUtil.success(dados, "Reprocessamento completo executado com sucesso");
 
-        } catch (Exception e) {
-            log.error("Erro no reprocessamento de status", e);
-            return ApiResponseUtil.internalServerError("Erro ao reprocessar status: " + e.getMessage());
-        }
     }
 
     @GetMapping("/estatisticas")
@@ -81,13 +71,8 @@ public class StatusController {
             description = "Retorna informações sobre quantas pessoas estão em conformidade ou inadimplentes")
     @ApiResponse(responseCode = "200", description = "Estatísticas retornadas com sucesso")
     public ResponseEntity<Map<String, Object>> obterEstatisticas() {
-        try {
-            StatusSchedulerService.StatusInfo statusInfo = statusSchedulerService.obterStatusInfo();
-            return ApiResponseUtil.success(statusInfo, "Estatísticas de status obtidas com sucesso");
-        } catch (Exception e) {
-            log.error("Erro ao obter estatísticas de status", e);
-            return ApiResponseUtil.internalServerError("Erro ao obter estatísticas: " + e.getMessage());
-        }
+        StatusSchedulerService.StatusInfo statusInfo = statusSchedulerService.obterStatusInfo();
+        return ApiResponseUtil.success(statusInfo, "Estatísticas de status obtidas com sucesso");
     }
 
     @GetMapping("/info")

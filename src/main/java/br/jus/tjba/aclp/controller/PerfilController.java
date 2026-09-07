@@ -50,17 +50,10 @@ public class PerfilController {
 
         log.info("Atualizando perfil do usuário: {}", userDetails.getUsername());
 
-        try {
-            Usuario usuario = usuarioService.atualizarPerfil(userDetails.getUsername(), dto);
-            return ResponseEntity.ok(
-                    ApiResponse.success("Perfil atualizado com sucesso", usuario)
-            );
-        } catch (IllegalArgumentException e) {
-            log.error("Erro ao atualizar perfil: {}", e.getMessage());
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error(e.getMessage())
-            );
-        }
+        Usuario usuario = usuarioService.atualizarPerfil(userDetails.getUsername(), dto);
+        return ResponseEntity.ok(
+                ApiResponse.success("Perfil atualizado com sucesso", usuario)
+        );
     }
 
     /**
@@ -73,17 +66,10 @@ public class PerfilController {
 
         log.info("Alterando senha do usuário: {}", userDetails.getUsername());
 
-        try {
-            usuarioService.alterarSenha(userDetails.getUsername(), dto);
-            return ResponseEntity.ok(
-                    ApiResponse.success("Senha alterada com sucesso")
-            );
-        } catch (IllegalArgumentException e) {
-            log.error("Erro ao alterar senha: {}", e.getMessage());
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error(e.getMessage())
-            );
-        }
+        usuarioService.alterarSenha(userDetails.getUsername(), dto);
+        return ResponseEntity.ok(
+                ApiResponse.success("Senha alterada com sucesso")
+        );
     }
 
     /**
@@ -95,16 +81,9 @@ public class PerfilController {
 
         log.info("Desativando conta do usuário: {}", userDetails.getUsername());
 
-        try {
-            usuarioService.desativarPropriaConta(userDetails.getUsername());
-            return ResponseEntity.ok(
-                    ApiResponse.success("Conta desativada com sucesso")
-            );
-        } catch (IllegalArgumentException e) {
-            log.error("Erro ao desativar conta: {}", e.getMessage());
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error(e.getMessage())
-            );
-        }
+        usuarioService.desativarPropriaConta(userDetails.getUsername());
+        return ResponseEntity.ok(
+                ApiResponse.success("Conta desativada com sucesso")
+        );
     }
 }

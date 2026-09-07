@@ -51,11 +51,7 @@ public class ProcessoController {
 
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<ProcessoResponseDTO>> buscarPorId(@PathVariable Long id) {
-        try {
-            return ResponseEntity.ok(ApiResponse.success("Processo encontrado", processoService.buscarPorId(id)));
-        } catch (EntityNotFoundException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(e.getMessage()));
-        }
+        return ResponseEntity.ok(ApiResponse.success("Processo encontrado", processoService.buscarPorId(id)));
     }
 
     @GetMapping("/custodiado/{custodiadoId}")
@@ -99,69 +95,41 @@ public class ProcessoController {
             description = "Máximo 200 IDs. Retorna mapa custodiadoId -> processos.")
     public ResponseEntity<?> buscarProcessosEmLote(@Valid @RequestBody BatchProcessoRequest request) {
         log.info("Busca em lote — {} custodiados", request.getCustodiadoIds().size());
-        try {
-            if (request.getCustodiadoIds().size() > 200) {
-                return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Máximo de 200 IDs por requisição"));
-            }
-
-            Map<Long, List<ProcessoResumoDTO>> resultado =
-                    processoService.buscarProcessosPorCustodiadoIds(request.getCustodiadoIds());
-
-            return ResponseEntity.ok(Map.of("success", true, "data", resultado, "totalCustodiados", resultado.size()));
-        } catch (Exception e) {
-            log.error("Erro na busca em lote", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error("Erro: " + e.getMessage()));
+        if (request.getCustodiadoIds().size() > 200) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Máximo de 200 IDs por requisição"));
         }
+
+        Map<Long, List<ProcessoResumoDTO>> resultado =
+                processoService.buscarProcessosPorCustodiadoIds(request.getCustodiadoIds());
+
+        return ResponseEntity.ok(Map.of("success", true, "data", resultado, "totalCustodiados", resultado.size()));
     }
 
     @PostMapping
     public ResponseEntity<ApiResponse<ProcessoResponseDTO>> criar(@Valid @RequestBody ProcessoDTO dto) {
-        try {
-            return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success("Processo criado", processoService.criarProcesso(dto)));
-        } catch (EntityNotFoundException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(e.getMessage()));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
-        }
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success("Processo criado", processoService.criarProcesso(dto)));
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<ProcessoResponseDTO>> atualizar(@PathVariable Long id, @Valid @RequestBody ProcessoDTO dto) {
-        try {
-            return ResponseEntity.ok(ApiResponse.success("Processo atualizado", processoService.atualizarProcesso(id, dto)));
-        } catch (EntityNotFoundException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(e.getMessage()));
-        }
+        return ResponseEntity.ok(ApiResponse.success("Processo atualizado", processoService.atualizarProcesso(id, dto)));
     }
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')") // destrutivo: só administrador
     public ResponseEntity<ApiResponse<ProcessoResponseDTO>> encerrar(@PathVariable Long id) {
-        try {
-            return ResponseEntity.ok(ApiResponse.success("Processo encerrado", processoService.encerrarProcesso(id)));
-        } catch (EntityNotFoundException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(e.getMessage()));
-        }
+        return ResponseEntity.ok(ApiResponse.success("Processo encerrado", processoService.encerrarProcesso(id)));
     }
 
     @PostMapping("/{id}/suspender")
     @PreAuthorize("hasRole('ADMIN')") // altera situação processual: só administrador
     public ResponseEntity<ApiResponse<ProcessoResponseDTO>> suspender(@PathVariable Long id) {
-        try {
-            return ResponseEntity.ok(ApiResponse.success("Suspenso", processoService.suspenderProcesso(id)));
-        } catch (EntityNotFoundException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(e.getMessage()));
-        }
+        return ResponseEntity.ok(ApiResponse.success("Suspenso", processoService.suspenderProcesso(id)));
     }
 
     @PostMapping("/{id}/reativar")
     @PreAuthorize("hasRole('ADMIN')") // altera situação processual: só administrador
     public ResponseEntity<ApiResponse<ProcessoResponseDTO>> reativar(@PathVariable Long id) {
-        try {
-            return ResponseEntity.ok(ApiResponse.success("Reativado", processoService.reativarProcesso(id)));
-        } catch (EntityNotFoundException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(e.getMessage()));
-        }
+        return ResponseEntity.ok(ApiResponse.success("Reativado", processoService.reativarProcesso(id)));
     }
 }

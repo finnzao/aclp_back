@@ -91,7 +91,7 @@ class HistoricoEnderecoControllerTest extends WebMvcSliceSupport {
 
         mockMvc.perform(get("/api/historico-enderecos/pessoa/0"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success", is(false)))
+                .andExpect(jsonPath("$.message", notNullValue()))
                 .andExpect(jsonPath("$.message", containsString("número positivo")));
     }
 
@@ -173,7 +173,7 @@ class HistoricoEnderecoControllerTest extends WebMvcSliceSupport {
                         .param("inicio", "2024-12-31")
                         .param("fim", "2024-01-01"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success", is(false)));
+                .andExpect(jsonPath("$.message", notNullValue()));
     }
 
     // ========== TESTES DE BUSCA POR LOCALIZAÇÃO ==========

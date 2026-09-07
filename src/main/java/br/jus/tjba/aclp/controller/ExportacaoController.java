@@ -58,86 +58,82 @@ public class ExportacaoController {
     @GetMapping("/custodiados-processos")
     @Operation(summary = "Exportar custodiados com processos e endereços em Excel",
             description = "Gera planilha .xlsx com todos os custodiados, endereços ativos e processos vinculados.")
+    // throws checado sobe para o GlobalExceptionHandler como os demais
     public ResponseEntity<byte[]> exportarPessoasMonitoradasComProcessos(
             @RequestParam(required = false) String nome,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) String comarca) {
+            @RequestParam(required = false) String comarca) throws Exception {
 
         log.info("Exportação Excel solicitada — filtros: nome={}, status={}, comarca={}",
                 nome, status, comarca);
 
-        try {
-            // Buscar todos os custodiados ativos
-            List<PessoaMonitorada> custodiados = custodiadoRepository.findAllActive();
+        // Buscar todos os custodiados ativos
+        List<PessoaMonitorada> custodiados = custodiadoRepository.findAllActive();
 
-            // Aplicar filtros se informados
-            if (nome != null && !nome.isBlank()) {
-                String filtro = nome.toLowerCase().trim();
-                custodiados = custodiados.stream()
-                        .filter(c -> c.getNome().toLowerCase().contains(filtro))
-                        .collect(Collectors.toList());
-            }
-            if (status != null && !status.isBlank()) {
-                custodiados = custodiados.stream()
-                        .filter(c -> c.getStatus() != null &&
-                                c.getStatus().name().equalsIgnoreCase(status.trim()))
-                        .collect(Collectors.toList());
-            }
-            if (comarca != null && !comarca.isBlank()) {
-                String filtroComarca = comarca.toLowerCase().trim();
-                custodiados = custodiados.stream()
-                        .filter(c -> c.getComarca() != null &&
-                                c.getComarca().toLowerCase().contains(filtroComarca))
-                        .collect(Collectors.toList());
-            }
-
-            // Coletar IDs para busca em lote (evita N+1)
-            List<Long> ids = custodiados.stream()
-                    .map(PessoaMonitorada::getId)
+        // Aplicar filtros se informados
+        if (nome != null && !nome.isBlank()) {
+            String filtro = nome.toLowerCase().trim();
+            custodiados = custodiados.stream()
+                    .filter(c -> c.getNome().toLowerCase().contains(filtro))
                     .collect(Collectors.toList());
-
-            // Buscar processos de todos os custodiados em UMA query
-            Map<Long, List<Processo>> processosPorCustodiado = new HashMap<>();
-            if (!ids.isEmpty()) {
-                List<Processo> todosProcessos = processoRepository.findByCustodiadoIdIn(ids);
-                processosPorCustodiado = todosProcessos.stream()
-                        .collect(Collectors.groupingBy(p -> p.getCustodiado().getId()));
-            }
-
-            // Buscar endereços ativos de todos os custodiados em UMA query
-            Map<Long, HistoricoEndereco> enderecosPorCustodiado = new HashMap<>();
-            if (!ids.isEmpty()) {
-                List<HistoricoEndereco> enderecos = historicoEnderecoRepository.findAllEnderecosAtivos();
-                enderecosPorCustodiado = enderecos.stream()
-                        .filter(e -> ids.contains(e.getCustodiado().getId()))
-                        .collect(Collectors.toMap(
-                                e -> e.getCustodiado().getId(),
-                                e -> e,
-                                (e1, e2) -> e1 // Se houver duplicata, pegar o primeiro
-                        ));
-            }
-
-            // Gerar Excel
-            byte[] excelBytes = gerarExcel(custodiados, processosPorCustodiado, enderecosPorCustodiado);
-
-            // Nome do arquivo com data
-            String dataAtual = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-            String nomeArquivo = "custodiados-processos-" + dataAtual + ".xlsx";
-
-            log.info("Exportação concluída — {} custodiados, arquivo: {}",
-                    custodiados.size(), nomeArquivo);
-
-            return ResponseEntity.ok()
-                    .header(HttpHeaders.CONTENT_DISPOSITION,
-                            "attachment; filename=\"" + nomeArquivo + "\"")
-                    .contentType(MediaType.parseMediaType(
-                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
-                    .body(excelBytes);
-
-        } catch (Exception e) {
-            log.error("Erro ao gerar exportação Excel", e);
-            return ResponseEntity.internalServerError().build();
         }
+        if (status != null && !status.isBlank()) {
+            custodiados = custodiados.stream()
+                    .filter(c -> c.getStatus() != null &&
+                            c.getStatus().name().equalsIgnoreCase(status.trim()))
+                    .collect(Collectors.toList());
+        }
+        if (comarca != null && !comarca.isBlank()) {
+            String filtroComarca = comarca.toLowerCase().trim();
+            custodiados = custodiados.stream()
+                    .filter(c -> c.getComarca() != null &&
+                            c.getComarca().toLowerCase().contains(filtroComarca))
+                    .collect(Collectors.toList());
+        }
+
+        // Coletar IDs para busca em lote (evita N+1)
+        List<Long> ids = custodiados.stream()
+                .map(PessoaMonitorada::getId)
+                .collect(Collectors.toList());
+
+        // Buscar processos de todos os custodiados em UMA query
+        Map<Long, List<Processo>> processosPorCustodiado = new HashMap<>();
+        if (!ids.isEmpty()) {
+            List<Processo> todosProcessos = processoRepository.findByCustodiadoIdIn(ids);
+            processosPorCustodiado = todosProcessos.stream()
+                    .collect(Collectors.groupingBy(p -> p.getCustodiado().getId()));
+        }
+
+        // Buscar endereços ativos de todos os custodiados em UMA query
+        Map<Long, HistoricoEndereco> enderecosPorCustodiado = new HashMap<>();
+        if (!ids.isEmpty()) {
+            List<HistoricoEndereco> enderecos = historicoEnderecoRepository.findAllEnderecosAtivos();
+            enderecosPorCustodiado = enderecos.stream()
+                    .filter(e -> ids.contains(e.getCustodiado().getId()))
+                    .collect(Collectors.toMap(
+                            e -> e.getCustodiado().getId(),
+                            e -> e,
+                            (e1, e2) -> e1 // Se houver duplicata, pegar o primeiro
+                    ));
+        }
+
+        // Gerar Excel
+        byte[] excelBytes = gerarExcel(custodiados, processosPorCustodiado, enderecosPorCustodiado);
+
+        // Nome do arquivo com data
+        String dataAtual = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        String nomeArquivo = "custodiados-processos-" + dataAtual + ".xlsx";
+
+        log.info("Exportação concluída — {} custodiados, arquivo: {}",
+                custodiados.size(), nomeArquivo);
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + nomeArquivo + "\"")
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(excelBytes);
+
     }
 
     /**

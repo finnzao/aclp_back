@@ -165,10 +165,8 @@ class ComparecimentoControllerTest extends WebMvcSliceSupport {
 
         mockMvc.perform(get("/api/comparecimentos/custodiado/0"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success", is(false)))
-                // ApiResponseUtil.error() monta {success, error, timestamp}: em resposta
-                // de erro o campo e 'error', nao 'message'.
-                .andExpect(jsonPath("$.error", containsString("número positivo")));
+                // ErrorResponse do GlobalExceptionHandler: a mensagem da excecao vai em 'message'
+                .andExpect(jsonPath("$.message", containsString("número positivo")));
     }
 
     @Test

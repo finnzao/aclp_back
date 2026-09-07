@@ -398,7 +398,7 @@ class AclpIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(usuario)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success", is(false)))
+                .andExpect(jsonPath("$.message", notNullValue()))
                 .andExpect(jsonPath("$.message", containsString("Email")));
     }
 

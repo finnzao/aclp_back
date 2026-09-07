@@ -182,7 +182,7 @@ class UsuarioControllerTest extends WebMvcSliceSupport {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(usuarioDTO)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success", is(false)))
+                .andExpect(jsonPath("$.message", notNullValue()))
                 .andExpect(jsonPath("$.message", containsString("Email já está em uso")));
     }
 
@@ -316,7 +316,7 @@ class UsuarioControllerTest extends WebMvcSliceSupport {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dtoEmail)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success", is(false)))
+                .andExpect(jsonPath("$.message", notNullValue()))
                 .andExpect(jsonPath("$.message", containsString("Email já está em uso")));
     }
 
@@ -356,7 +356,7 @@ class UsuarioControllerTest extends WebMvcSliceSupport {
         mockMvc.perform(delete("/api/usuarios/999")
                         .with(csrf()))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success", is(false)))
+                .andExpect(jsonPath("$.message", notNullValue()))
                 .andExpect(jsonPath("$.message", containsString("não encontrado")));
     }
 

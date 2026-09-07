@@ -56,17 +56,11 @@ public class UsuarioController {
     public ResponseEntity<ApiResponse<Usuario>> save(@Valid @RequestBody UsuarioDTO dto) {
         log.info("Cadastrando novo usuário: {}", dto.getEmail());
 
-        try {
-            Usuario usuario = usuarioService.save(dto);
-            log.info("Usuário cadastrado com sucesso. ID: {}", usuario.getId());
-            return ResponseEntity.status(HttpStatus.CREATED).body(
-                    ApiResponse.success("Usuário cadastrado com sucesso", usuario)
-            );
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error(e.getMessage())
-            );
-        }
+        Usuario usuario = usuarioService.save(dto);
+        log.info("Usuário cadastrado com sucesso. ID: {}", usuario.getId());
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+                ApiResponse.success("Usuário cadastrado com sucesso", usuario)
+        );
     }
 
     /**
@@ -81,17 +75,11 @@ public class UsuarioController {
 
         log.info("Atualizando usuário ID: {}", id);
 
-        try {
-            Usuario usuario = usuarioService.update(id, dto);
-            log.info("Usuário atualizado com sucesso. ID: {}", usuario.getId());
-            return ResponseEntity.ok(
-                    ApiResponse.success("Usuário atualizado com sucesso", usuario)
-            );
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error(e.getMessage())
-            );
-        }
+        Usuario usuario = usuarioService.update(id, dto);
+        log.info("Usuário atualizado com sucesso. ID: {}", usuario.getId());
+        return ResponseEntity.ok(
+                ApiResponse.success("Usuário atualizado com sucesso", usuario)
+        );
     }
 
     @DeleteMapping("/{id}")
@@ -99,33 +87,21 @@ public class UsuarioController {
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
         log.info("Desativando usuário ID: {}", id);
 
-        try {
-            usuarioService.delete(id);
-            log.info("Usuário desativado com sucesso. ID: {}", id);
-            return ResponseEntity.ok(
-                    ApiResponse.success("Usuário desativado com sucesso")
-            );
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error(e.getMessage())
-            );
-        }
+        usuarioService.delete(id);
+        log.info("Usuário desativado com sucesso. ID: {}", id);
+        return ResponseEntity.ok(
+                ApiResponse.success("Usuário desativado com sucesso")
+        );
     }
 
     @GetMapping("/tipo/{tipo}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<List<Usuario>>> findByTipo(@PathVariable TipoUsuario tipo) {
         log.info("Buscando usuários por tipo: {}", tipo);
-        try {
-            List<Usuario> usuarios = usuarioService.findByTipo(tipo);
-            return ResponseEntity.ok(
-                    ApiResponse.success("Usuários encontrados com sucesso", usuarios)
-            );
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error(e.getMessage())
-            );
-        }
+        List<Usuario> usuarios = usuarioService.findByTipo(tipo);
+        return ResponseEntity.ok(
+                ApiResponse.success("Usuários encontrados com sucesso", usuarios)
+        );
     }
 
     @RequestMapping(method = RequestMethod.OPTIONS)

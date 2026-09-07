@@ -127,14 +127,10 @@ public class AuthController {
             @RequestHeader(value = "Authorization", required = false) String authHeader,
             HttpServletRequest request) {
 
-        try {
-            String token = authHeader != null ? extractTokenFromHeader(authHeader)
-                                              : cookieValue(request, ACCESS_COOKIE);
-            if (token != null) authService.logout(token, request);
+        String token = authHeader != null ? extractTokenFromHeader(authHeader)
+                                          : cookieValue(request, ACCESS_COOKIE);
+        if (token != null) authService.logout(token, request);
 
-        } catch (Exception e) {
-            log.error("Erro no logout", e);
-        }
 
         // sempre apaga os cookies, mesmo se a invalidacao no servidor falhar
         return ResponseEntity.ok()
@@ -159,35 +155,28 @@ public class AuthController {
 
         log.debug("Renovação de token solicitada");
 
-        try {
-            // corpo opcional: o refresh normalmente vem no cookie httpOnly
-            String refreshToken = (request != null && request.getRefreshToken() != null
-                    && !request.getRefreshToken().isBlank())
-                    ? request.getRefreshToken()
-                    : cookieValue(httpRequest, REFRESH_COOKIE);
+        // corpo opcional: o refresh normalmente vem no cookie httpOnly
+        String refreshToken = (request != null && request.getRefreshToken() != null
+                && !request.getRefreshToken().isBlank())
+                ? request.getRefreshToken()
+                : cookieValue(httpRequest, REFRESH_COOKIE);
 
-            if (refreshToken == null) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(Map.of("success", false, "message", "Refresh token ausente"));
-            }
-
-            RefreshTokenResponseDTO response = authService.refreshToken(
-                    new RefreshTokenRequestDTO(refreshToken), httpRequest);
-
-            long expiraEm = response.getExpiresIn() != null ? response.getExpiresIn() : 3600L;
-            return ResponseEntity.ok()
-                    .header(HttpHeaders.SET_COOKIE,
-                            authCookie(ACCESS_COOKIE, response.getAccessToken(), expiraEm, "/").toString())
-                    .header(HttpHeaders.SET_COOKIE,
-                            authCookie(REFRESH_COOKIE, response.getRefreshToken(), 604800L, "/api/auth").toString())
-                    .body(response);
-
-        } catch (Exception e) {
-            log.error("Erro ao renovar token", e);
-
+        if (refreshToken == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("success", false, "message", "Sessão expirada"));
+                    .body(Map.of("success", false, "message", "Refresh token ausente"));
         }
+
+        RefreshTokenResponseDTO response = authService.refreshToken(
+                new RefreshTokenRequestDTO(refreshToken), httpRequest);
+
+        long expiraEm = response.getExpiresIn() != null ? response.getExpiresIn() : 3600L;
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE,
+                        authCookie(ACCESS_COOKIE, response.getAccessToken(), expiraEm, "/").toString())
+                .header(HttpHeaders.SET_COOKIE,
+                        authCookie(REFRESH_COOKIE, response.getRefreshToken(), 604800L, "/api/auth").toString())
+                .body(response);
+
     }
 
     /**

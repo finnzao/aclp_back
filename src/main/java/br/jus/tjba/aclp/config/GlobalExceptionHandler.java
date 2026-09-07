@@ -344,6 +344,25 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(error);
     }
 
+    /** @Version detectou escrita concorrente: o segundo a salvar recarrega e refaz. */
+    @ExceptionHandler(org.springframework.orm.ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ErrorResponse> handleConflitoConcorrencia(
+            org.springframework.orm.ObjectOptimisticLockingFailureException ex, HttpServletRequest request) {
+        log.warn("Conflito de concorrência em {}: {}", request.getRequestURI(), ex.getMessage());
+        ErrorResponse error = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.CONFLICT.value())
+                .error("Conflict")
+                .code("CONFLITO_CONCORRENCIA")
+                .message("O registro foi alterado por outro usuário enquanto você editava.")
+                .path(request.getRequestURI())
+                .suggestions(Arrays.asList(
+                        "Recarregue a página para ver a versão atual",
+                        "Repita a alteração sobre os dados atualizados"))
+                .build();
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneral(Exception ex, HttpServletRequest request) {
         log.error("Erro não tratado: ", ex);

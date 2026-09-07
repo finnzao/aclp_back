@@ -37,19 +37,9 @@ public class ConviteController {
 
         log.info("Request para criar convite - Email: {}", request.getEmail());
 
-        try {
-            ConviteResponse convite = conviteService.criarConvite(request, httpRequest);
-            return ResponseEntity.status(HttpStatus.CREATED)
-                    .body(ApiResponse.success("Convite criado com sucesso", convite));
-        } catch (IllegalArgumentException e) {
-            log.warn("Erro ao criar convite: {}", e.getMessage());
-            return ResponseEntity.badRequest()
-                    .body(ApiResponse.error(e.getMessage()));
-        } catch (Exception e) {
-            log.error("Erro inesperado ao criar convite", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error("Erro ao criar convite. Tente novamente."));
-        }
+        ConviteResponse convite = conviteService.criarConvite(request, httpRequest);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Convite criado com sucesso", convite));
     }
 
     @GetMapping("/validar/{token}")
@@ -79,18 +69,8 @@ public class ConviteController {
 
         log.info("Ativando convite - Token: {}", request.getToken());
 
-        try {
-            AtivarConviteResponse response = conviteService.ativarConvite(request, httpRequest);
-            return ResponseEntity.ok(ApiResponse.success(response.getMessage(), response));
-        } catch (IllegalArgumentException e) {
-            log.warn("Erro ao ativar convite: {}", e.getMessage());
-            return ResponseEntity.badRequest()
-                    .body(ApiResponse.error(e.getMessage()));
-        } catch (Exception e) {
-            log.error("Erro inesperado ao ativar convite", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error("Erro ao ativar convite. Tente novamente."));
-        }
+        AtivarConviteResponse response = conviteService.ativarConvite(request, httpRequest);
+        return ResponseEntity.ok(ApiResponse.success(response.getMessage(), response));
     }
 
     @GetMapping
@@ -101,15 +81,9 @@ public class ConviteController {
     public ResponseEntity<ApiResponse<List<ConviteListItem>>> listarConvites() {
         log.info("Listando convites do usuário autenticado");
 
-        try {
-            List<ConviteListItem> convites = conviteService.listarConvitesDoUsuarioAtual();
-            return ResponseEntity.ok(
-                    ApiResponse.success("Convites listados com sucesso", convites));
-        } catch (Exception e) {
-            log.error("Erro ao listar convites", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error("Erro ao listar convites"));
-        }
+        List<ConviteListItem> convites = conviteService.listarConvitesDoUsuarioAtual();
+        return ResponseEntity.ok(
+                ApiResponse.success("Convites listados com sucesso", convites));
     }
 
     @GetMapping("/{id}")
@@ -122,14 +96,9 @@ public class ConviteController {
 
         log.info("Buscando convite - ID: {}", id);
 
-        try {
-            ConviteResponse convite = conviteService.buscarPorId(id);
-            return ResponseEntity.ok(
-                    ApiResponse.success("Convite encontrado", convite));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(ApiResponse.error(e.getMessage()));
-        }
+        ConviteResponse convite = conviteService.buscarPorId(id);
+        return ResponseEntity.ok(
+                ApiResponse.success("Convite encontrado", convite));
     }
 
     @DeleteMapping("/{id}")
@@ -142,15 +111,9 @@ public class ConviteController {
 
         log.info("Cancelando convite - ID: {}", id);
 
-        try {
-            conviteService.cancelarConvite(id);
-            return ResponseEntity.ok(
-                    ApiResponse.success("Convite cancelado com sucesso"));
-        } catch (IllegalArgumentException e) {
-            log.warn("Erro ao cancelar convite: {}", e.getMessage());
-            return ResponseEntity.badRequest()
-                    .body(ApiResponse.error(e.getMessage()));
-        }
+        conviteService.cancelarConvite(id);
+        return ResponseEntity.ok(
+                ApiResponse.success("Convite cancelado com sucesso"));
     }
 
     @PostMapping("/{id}/reenviar")
@@ -163,19 +126,9 @@ public class ConviteController {
 
         log.info("Reenviando convite - ID: {}", id);
 
-        try {
-            conviteService.reenviarConvite(id);
-            return ResponseEntity.ok(
-                    ApiResponse.success("Convite reenviado com sucesso"));
-        } catch (IllegalArgumentException e) {
-            log.warn("Erro ao reenviar convite: {}", e.getMessage());
-            return ResponseEntity.badRequest()
-                    .body(ApiResponse.error(e.getMessage()));
-        } catch (Exception e) {
-            log.error("Erro ao reenviar convite", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error("Erro ao enviar email"));
-        }
+        conviteService.reenviarConvite(id);
+        return ResponseEntity.ok(
+                ApiResponse.success("Convite reenviado com sucesso"));
     }
 
     @GetMapping("/stats")
@@ -186,14 +139,8 @@ public class ConviteController {
     public ResponseEntity<ApiResponse<ConviteStats>> getEstatisticas() {
         log.info("Buscando estatísticas de convites");
 
-        try {
-            ConviteStats stats = conviteService.getEstatisticas();
-            return ResponseEntity.ok(
-                    ApiResponse.success("Estatísticas obtidas", stats));
-        } catch (Exception e) {
-            log.error("Erro ao buscar estatísticas", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error("Erro ao buscar estatísticas"));
-        }
+        ConviteStats stats = conviteService.getEstatisticas();
+        return ResponseEntity.ok(
+                ApiResponse.success("Estatísticas obtidas", stats));
     }
 }

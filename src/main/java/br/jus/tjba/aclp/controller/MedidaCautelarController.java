@@ -76,21 +76,17 @@ public class MedidaCautelarController {
             @PathVariable Long processoId,
             @jakarta.validation.Valid @RequestBody RegistroMedidaRequest req,
             Authentication auth) {
-        try {
-            Processo processo = processoRepository.findById(processoId)
-                    .orElseThrow(() -> new EntityNotFoundException("Processo não encontrado: " + processoId));
-            MedidaCautelar medida = MedidaCautelar.builder()
-                    .processo(processo)
-                    .tipoMedida(req.tipoMedida())
-                    .dataImposicao(req.dataImposicao())
-                    .detalhe(req.detalhe() != null && !req.detalhe().isBlank() ? req.detalhe().trim() : null)
-                    .registradoPor(auth.getName())
-                    .build();
-            return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(
-                    "Medida registrada", MedidaResponse.de(medidaRepository.save(medida))));
-        } catch (EntityNotFoundException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(e.getMessage()));
-        }
+        Processo processo = processoRepository.findById(processoId)
+                .orElseThrow(() -> new EntityNotFoundException("Processo não encontrado: " + processoId));
+        MedidaCautelar medida = MedidaCautelar.builder()
+                .processo(processo)
+                .tipoMedida(req.tipoMedida())
+                .dataImposicao(req.dataImposicao())
+                .detalhe(req.detalhe() != null && !req.detalhe().isBlank() ? req.detalhe().trim() : null)
+                .registradoPor(auth.getName())
+                .build();
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(
+                "Medida registrada", MedidaResponse.de(medidaRepository.save(medida))));
     }
 
     @PatchMapping("/medidas-cautelares/{id}/revogar")
@@ -98,16 +94,10 @@ public class MedidaCautelarController {
     @Transactional
     public ResponseEntity<ApiResponse<MedidaResponse>> revogar(
             @PathVariable Long id, @jakarta.validation.Valid @RequestBody RevogacaoRequest req) {
-        try {
-            MedidaCautelar medida = medidaRepository.findById(id)
-                    .orElseThrow(() -> new EntityNotFoundException("Medida não encontrada: " + id));
-            medida.revogar(req.dataRevogacao());
-            return ResponseEntity.ok(ApiResponse.success(
-                    "Medida revogada", MedidaResponse.de(medidaRepository.save(medida))));
-        } catch (EntityNotFoundException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(e.getMessage()));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
-        }
+        MedidaCautelar medida = medidaRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Medida não encontrada: " + id));
+        medida.revogar(req.dataRevogacao());
+        return ResponseEntity.ok(ApiResponse.success(
+                "Medida revogada", MedidaResponse.de(medidaRepository.save(medida))));
     }
 }

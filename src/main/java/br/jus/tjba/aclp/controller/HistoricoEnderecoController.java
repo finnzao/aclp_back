@@ -40,16 +40,10 @@ public class HistoricoEnderecoController {
             @Parameter(description = "ID da pessoa") @PathVariable Long pessoaId) {
         log.info("Buscando histórico de endereços - Pessoa monitorada ID: {}", pessoaId);
 
-        try {
-            List<HistoricoEnderecoDTO> historico = historicoEnderecoService.buscarHistoricoPorCustodiado(pessoaId);
-            return ResponseEntity.ok(
-                    ApiResponse.success("Histórico de endereços encontrado", historico)
-            );
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error(e.getMessage())
-            );
-        }
+        List<HistoricoEnderecoDTO> historico = historicoEnderecoService.buscarHistoricoPorCustodiado(pessoaId);
+        return ResponseEntity.ok(
+                ApiResponse.success("Histórico de endereços encontrado", historico)
+        );
     }
 
     @GetMapping("/pessoa/{pessoaId}/ativo")
@@ -64,18 +58,12 @@ public class HistoricoEnderecoController {
             @Parameter(description = "ID da pessoa") @PathVariable Long pessoaId) {
         log.info("Buscando endereço ativo - Pessoa monitorada ID: {}", pessoaId);
 
-        try {
-            Optional<HistoricoEnderecoDTO> endereco = historicoEnderecoService.buscarEnderecoAtivo(pessoaId);
-            return endereco.map(dto -> ResponseEntity.ok(
-                    ApiResponse.success("Endereço ativo encontrado", dto)
-            )).orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).body(
-                    ApiResponse.error("Pessoa monitorada não possui endereço ativo")
-            ));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error(e.getMessage())
-            );
-        }
+        Optional<HistoricoEnderecoDTO> endereco = historicoEnderecoService.buscarEnderecoAtivo(pessoaId);
+        return endereco.map(dto -> ResponseEntity.ok(
+                ApiResponse.success("Endereço ativo encontrado", dto)
+        )).orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+                ApiResponse.error("Pessoa monitorada não possui endereço ativo")
+        ));
     }
 
     @GetMapping("/pessoa/{pessoaId}/historicos")
@@ -89,16 +77,10 @@ public class HistoricoEnderecoController {
             @Parameter(description = "ID da pessoa") @PathVariable Long pessoaId) {
         log.info("Buscando endereços históricos - Pessoa monitorada ID: {}", pessoaId);
 
-        try {
-            List<HistoricoEnderecoDTO> enderecos = historicoEnderecoService.buscarEnderecosHistoricos(pessoaId);
-            return ResponseEntity.ok(
-                    ApiResponse.success("Endereços históricos encontrados", enderecos)
-            );
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error(e.getMessage())
-            );
-        }
+        List<HistoricoEnderecoDTO> enderecos = historicoEnderecoService.buscarEnderecosHistoricos(pessoaId);
+        return ResponseEntity.ok(
+                ApiResponse.success("Endereços históricos encontrados", enderecos)
+        );
     }
 
     @GetMapping("/pessoa/{pessoaId}/periodo")
@@ -116,16 +98,10 @@ public class HistoricoEnderecoController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fim) {
         log.info("Buscando endereços por período - Pessoa monitorada ID: {}, Período: {} a {}", pessoaId, inicio, fim);
 
-        try {
-            List<HistoricoEnderecoDTO> enderecos = historicoEnderecoService.buscarEnderecosPorPeriodo(pessoaId, inicio, fim);
-            return ResponseEntity.ok(
-                    ApiResponse.success("Endereços do período encontrados", enderecos)
-            );
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error(e.getMessage())
-            );
-        }
+        List<HistoricoEnderecoDTO> enderecos = historicoEnderecoService.buscarEnderecosPorPeriodo(pessoaId, inicio, fim);
+        return ResponseEntity.ok(
+                ApiResponse.success("Endereços do período encontrados", enderecos)
+        );
     }
 
     @GetMapping("/cidade/{cidade}/pessoas")
@@ -136,16 +112,10 @@ public class HistoricoEnderecoController {
             @Parameter(description = "Nome da cidade") @PathVariable String cidade) {
         log.info("Buscando pessoas por cidade: {}", cidade);
 
-        try {
-            List<PessoaMonitorada> pessoas = historicoEnderecoService.buscarPessoasMonitoradasPorCidade(cidade);
-            return ResponseEntity.ok(
-                    ApiResponse.success("Pessoas monitoradas encontradas na cidade", pessoas)
-            );
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error(e.getMessage())
-            );
-        }
+        List<PessoaMonitorada> pessoas = historicoEnderecoService.buscarPessoasMonitoradasPorCidade(cidade);
+        return ResponseEntity.ok(
+                ApiResponse.success("Pessoas monitoradas encontradas na cidade", pessoas)
+        );
     }
 
     @GetMapping("/estado/{estado}/pessoas")
@@ -156,16 +126,10 @@ public class HistoricoEnderecoController {
             @Parameter(description = "Sigla do estado (ex: BA, SP)") @PathVariable String estado) {
         log.info("Buscando pessoas por estado: {}", estado);
 
-        try {
-            List<PessoaMonitorada> pessoas = historicoEnderecoService.buscarPessoasMonitoradasPorEstado(estado);
-            return ResponseEntity.ok(
-                    ApiResponse.success("Pessoas monitoradas encontradas no estado", pessoas)
-            );
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error(e.getMessage())
-            );
-        }
+        List<PessoaMonitorada> pessoas = historicoEnderecoService.buscarPessoasMonitoradasPorEstado(estado);
+        return ResponseEntity.ok(
+                ApiResponse.success("Pessoas monitoradas encontradas no estado", pessoas)
+        );
     }
 
     @GetMapping("/mudancas/periodo")
@@ -182,16 +146,10 @@ public class HistoricoEnderecoController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fim) {
         log.info("Buscando mudanças de endereço por período: {} a {}", inicio, fim);
 
-        try {
-            List<HistoricoEnderecoDTO> mudancas = historicoEnderecoService.buscarMudancasPorPeriodo(inicio, fim);
-            return ResponseEntity.ok(
-                    ApiResponse.success("Mudanças de endereço encontradas", mudancas)
-            );
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error(e.getMessage())
-            );
-        }
+        List<HistoricoEnderecoDTO> mudancas = historicoEnderecoService.buscarMudancasPorPeriodo(inicio, fim);
+        return ResponseEntity.ok(
+                ApiResponse.success("Mudanças de endereço encontradas", mudancas)
+        );
     }
 
     @GetMapping("/pessoa/{pessoaId}/total")
@@ -205,16 +163,10 @@ public class HistoricoEnderecoController {
             @Parameter(description = "ID da pessoa") @PathVariable Long pessoaId) {
         log.info("Contando endereços - Pessoa monitorada ID: {}", pessoaId);
 
-        try {
-            long total = historicoEnderecoService.contarEnderecosPorCustodiado(pessoaId);
-            return ResponseEntity.ok(
-                    ApiResponse.success("Total de endereços calculado", total)
-            );
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error(e.getMessage())
-            );
-        }
+        long total = historicoEnderecoService.contarEnderecosPorCustodiado(pessoaId);
+        return ResponseEntity.ok(
+                ApiResponse.success("Total de endereços calculado", total)
+        );
     }
 
     @GetMapping("/data/{data}/ativos")
@@ -226,16 +178,10 @@ public class HistoricoEnderecoController {
             @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate data) {
         log.info("Buscando endereços ativos em: {}", data);
 
-        try {
-            List<HistoricoEnderecoDTO> enderecos = historicoEnderecoService.buscarEnderecosAtivosPorData(data);
-            return ResponseEntity.ok(
-                    ApiResponse.success("Endereços ativos na data encontrados", enderecos)
-            );
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error(e.getMessage())
-            );
-        }
+        List<HistoricoEnderecoDTO> enderecos = historicoEnderecoService.buscarEnderecosAtivosPorData(data);
+        return ResponseEntity.ok(
+                ApiResponse.success("Endereços ativos na data encontrados", enderecos)
+        );
     }
 
     @GetMapping("/motivo")
@@ -246,16 +192,10 @@ public class HistoricoEnderecoController {
             @Parameter(description = "Termo de busca no motivo") @RequestParam String motivo) {
         log.info("Buscando endereços por motivo: {}", motivo);
 
-        try {
-            List<HistoricoEnderecoDTO> enderecos = historicoEnderecoService.buscarPorMotivoAlteracao(motivo);
-            return ResponseEntity.ok(
-                    ApiResponse.success("Endereços encontrados por motivo", enderecos)
-            );
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error(e.getMessage())
-            );
-        }
+        List<HistoricoEnderecoDTO> enderecos = historicoEnderecoService.buscarPorMotivoAlteracao(motivo);
+        return ResponseEntity.ok(
+                ApiResponse.success("Endereços encontrados por motivo", enderecos)
+        );
     }
 
     @GetMapping("/pessoa/{pessoaId}/anterior")
@@ -272,18 +212,12 @@ public class HistoricoEnderecoController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate data) {
         log.info("Buscando último endereço anterior - Pessoa monitorada ID: {}, Data: {}", pessoaId, data);
 
-        try {
-            Optional<HistoricoEnderecoDTO> endereco = historicoEnderecoService.buscarUltimoEnderecoAnterior(pessoaId, data);
-            return endereco.map(dto -> ResponseEntity.ok(
-                    ApiResponse.success("Endereço anterior encontrado", dto)
-            )).orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).body(
-                    ApiResponse.error("Nenhum endereço anterior encontrado")
-            ));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(
-                    ApiResponse.error(e.getMessage())
-            );
-        }
+        Optional<HistoricoEnderecoDTO> endereco = historicoEnderecoService.buscarUltimoEnderecoAnterior(pessoaId, data);
+        return endereco.map(dto -> ResponseEntity.ok(
+                ApiResponse.success("Endereço anterior encontrado", dto)
+        )).orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+                ApiResponse.error("Nenhum endereço anterior encontrado")
+        ));
     }
 
     @GetMapping("/estatisticas")

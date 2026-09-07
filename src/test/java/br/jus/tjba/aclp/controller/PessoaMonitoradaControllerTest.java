@@ -314,7 +314,7 @@ class PessoaMonitoradaControllerTest extends WebMvcSliceSupport {
         mockMvc.perform(get("/api/pessoas-monitoradas/buscar")
                         .param("termo", "a"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success", is(false)))
+                .andExpect(jsonPath("$.message", notNullValue()))
                 .andExpect(jsonPath("$.message", containsString("2 caracteres")));
     }
 
