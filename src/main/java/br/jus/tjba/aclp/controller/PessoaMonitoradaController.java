@@ -3,6 +3,8 @@ package br.jus.tjba.aclp.controller;
 import br.jus.tjba.aclp.dto.*;
 import br.jus.tjba.aclp.model.PessoaMonitorada;
 import br.jus.tjba.aclp.model.enums.StatusComparecimento;
+import br.jus.tjba.aclp.service.CadastroPessoaService;
+import br.jus.tjba.aclp.service.ListagemPessoasService;
 import br.jus.tjba.aclp.service.PessoaMonitoradaService;
 import br.jus.tjba.aclp.service.HistoricoEnderecoService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -35,6 +37,8 @@ import java.util.stream.Collectors;
 public class PessoaMonitoradaController {
 
     private final PessoaMonitoradaService custodiadoService;
+    private final ListagemPessoasService listagemService;
+    private final CadastroPessoaService cadastroService;
     private final HistoricoEnderecoService historicoEnderecoService;
 
     @lombok.Data
@@ -158,7 +162,7 @@ public class PessoaMonitoradaController {
 
         // Sem parâmetros → comportamento original (retrocompatibilidade)
         if (page == null && size == null && nome == null && cpf == null && status == null && natureza == null) {
-            List<PessoaMonitoradaListDTO> response = custodiadoService.listarTodosAtivosDTO();
+            List<PessoaMonitoradaListDTO> response = listagemService.listarTodosAtivosDTO();
             return ResponseEntity.ok(ApiResponse.success("Pessoas monitoradas listadas com sucesso", response));
         }
 
@@ -170,7 +174,7 @@ public class PessoaMonitoradaController {
             log.warn("[PERFORMANCE] Requisição com size={} reduzida para 100.", size);
         }
 
-        Page<PessoaMonitoradaListDTO> resultado = custodiadoService
+        Page<PessoaMonitoradaListDTO> resultado = listagemService
                 .listarPaginado(pageNum, pageSize, nome, cpf, status, natureza, ordenarPor, direcao);
 
         Map<String, Object> resposta = new HashMap<>();
@@ -198,7 +202,7 @@ public class PessoaMonitoradaController {
             @RequestParam(required = false, defaultValue = "nome") String ordenarPor,
             @RequestParam(required = false, defaultValue = "asc") String direcao) {
 
-        List<PessoaMonitoradaListDTO> dados = custodiadoService
+        List<PessoaMonitoradaListDTO> dados = listagemService
                 .listarParaExportacao(nome, cpf, status, natureza, ordenarPor, direcao);
 
         Map<String, Object> resposta = new HashMap<>();
@@ -220,7 +224,7 @@ public class PessoaMonitoradaController {
     public ResponseEntity<ApiResponse<CadastroInicialResponseDTO>> cadastroInicial(
             @Valid @RequestBody CadastroInicialDTO dto) {
         try {
-            CadastroInicialResponseDTO response = custodiadoService.cadastroInicial(dto);
+            CadastroInicialResponseDTO response = cadastroService.cadastroInicial(dto);
             return ResponseEntity.status(HttpStatus.CREATED).body(
                     ApiResponse.success("Cadastro inicial realizado com sucesso", response));
         } catch (DataIntegrityViolationException e) {
@@ -274,7 +278,7 @@ public class PessoaMonitoradaController {
     public ResponseEntity<ApiResponse<PessoaMonitoradaResponseDTO>> save(@Valid @RequestBody PessoaMonitoradaDTO dto) {
         try {
             if (dto.getId() != null) dto.setId(null);
-            PessoaMonitorada custodiado = custodiadoService.save(dto);
+            PessoaMonitorada custodiado = cadastroService.save(dto);
             return ResponseEntity.status(HttpStatus.CREATED).body(
                     ApiResponse.success("Pessoa monitorada cadastrada", PessoaMonitoradaResponseDTO.fromEntity(custodiado, historicoEnderecoService)));
         } catch (DataIntegrityViolationException e) {
@@ -289,7 +293,7 @@ public class PessoaMonitoradaController {
 
     @PutMapping("/{publicId}")
     public ResponseEntity<ApiResponse<PessoaMonitoradaResponseDTO>> update(@PathVariable String publicId, @Valid @RequestBody PessoaMonitoradaDTO dto) {
-        PessoaMonitorada custodiado = custodiadoService.updateByPublicId(publicId, dto);
+        PessoaMonitorada custodiado = cadastroService.updateByPublicId(publicId, dto);
         return ResponseEntity.ok(ApiResponse.success("Pessoa monitorada atualizada",
                 PessoaMonitoradaResponseDTO.fromEntity(custodiado, historicoEnderecoService)));
     }

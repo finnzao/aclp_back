@@ -43,6 +43,12 @@ class PessoaMonitoradaControllerTest extends WebMvcSliceSupport {
     @MockBean
     private PessoaMonitoradaService custodiadoService;
 
+    @MockBean
+    private br.jus.tjba.aclp.service.ListagemPessoasService listagemService;
+
+    @MockBean
+    private br.jus.tjba.aclp.service.CadastroPessoaService cadastroService;
+
     // PessoaMonitoradaController injeta este serviço no construtor — específico deste
     // controller, por isso fica aqui e não na base compartilhada.
     @MockBean
@@ -117,7 +123,7 @@ class PessoaMonitoradaControllerTest extends WebMvcSliceSupport {
     @Test
     @DisplayName("Deve listar todos os custodiados")
     void testFindAll() throws Exception {
-        when(custodiadoService.listarTodosAtivosDTO())
+        when(listagemService.listarTodosAtivosDTO())
                 .thenReturn(List.of(br.jus.tjba.aclp.dto.PessoaMonitoradaListDTO.fromEntity(custodiado)));
         when(custodiadoService.getEnderecoResumido(1L)).thenReturn("Centro, Salvador - BA");
         when(custodiadoService.getEnderecoCompleto(1L)).thenReturn("Av. Sete de Setembro, 1234, Centro, Salvador - BA");
@@ -165,7 +171,7 @@ class PessoaMonitoradaControllerTest extends WebMvcSliceSupport {
     @Test
     @DisplayName("Deve criar novo custodiado")
     void testSave() throws Exception {
-        when(custodiadoService.save(any(PessoaMonitoradaDTO.class))).thenReturn(custodiado);
+        when(cadastroService.save(any(PessoaMonitoradaDTO.class))).thenReturn(custodiado);
         when(custodiadoService.getEnderecoResumido(1L)).thenReturn("Centro, Salvador - BA");
         when(custodiadoService.getEnderecoCompleto(1L)).thenReturn("Av. Sete de Setembro, 1234, Centro, Salvador - BA");
         when(custodiadoService.getCidadeEstado(1L)).thenReturn("Salvador - BA");
@@ -194,7 +200,7 @@ class PessoaMonitoradaControllerTest extends WebMvcSliceSupport {
     @Test
     @DisplayName("Deve retornar erro ao criar custodiado com CPF duplicado")
     void testSaveDuplicateCPF() throws Exception {
-        when(custodiadoService.save(any(PessoaMonitoradaDTO.class)))
+        when(cadastroService.save(any(PessoaMonitoradaDTO.class)))
                 .thenThrow(new IllegalArgumentException("CPF já está cadastrado no sistema"));
 
         mockMvc.perform(post("/api/pessoas-monitoradas")
@@ -210,7 +216,7 @@ class PessoaMonitoradaControllerTest extends WebMvcSliceSupport {
     @Test
     @DisplayName("Deve atualizar custodiado")
     void testUpdate() throws Exception {
-        when(custodiadoService.updateByPublicId(eq(PUBLIC_ID.toString()), any(PessoaMonitoradaDTO.class))).thenReturn(custodiado);
+        when(cadastroService.updateByPublicId(eq(PUBLIC_ID.toString()), any(PessoaMonitoradaDTO.class))).thenReturn(custodiado);
         when(custodiadoService.getEnderecoResumido(1L)).thenReturn("Centro, Salvador - BA");
         when(custodiadoService.getEnderecoCompleto(1L)).thenReturn("Av. Sete de Setembro, 1234, Centro, Salvador - BA");
         when(custodiadoService.getCidadeEstado(1L)).thenReturn("Salvador - BA");
