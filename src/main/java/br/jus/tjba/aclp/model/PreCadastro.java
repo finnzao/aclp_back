@@ -139,10 +139,10 @@ public class PreCadastro {
     @PrePersist
     protected void onCreate() {
         if (this.criadoEm == null) {
-            this.criadoEm = LocalDateTime.now();
+            this.criadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
         }
         if (this.expiraEm == null) {
-            this.expiraEm = LocalDateTime.now().plusHours(24); // 24h para verificar
+            this.expiraEm = br.jus.tjba.aclp.util.TempoAtual.agora().plusHours(24); // 24h para verificar
         }
         if (this.tokenVerificacao == null) {
             this.tokenVerificacao = "ver-" + UUID.randomUUID().toString();
@@ -159,14 +159,14 @@ public class PreCadastro {
      * Verifica se o pré-cadastro ainda é válido
      */
     public boolean isValido() {
-        return !verificado && LocalDateTime.now().isBefore(expiraEm);
+        return !verificado && br.jus.tjba.aclp.util.TempoAtual.agora().isBefore(expiraEm);
     }
 
     /**
      * Verifica se expirou
      */
     public boolean isExpirado() {
-        return LocalDateTime.now().isAfter(expiraEm);
+        return br.jus.tjba.aclp.util.TempoAtual.agora().isAfter(expiraEm);
     }
 
     /**
@@ -181,7 +181,7 @@ public class PreCadastro {
      */
     public void marcarVerificado(String ip, Long usuarioId) {
         this.verificado = true;
-        this.verificadoEm = LocalDateTime.now();
+        this.verificadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
         this.ipVerificacao = ip;
         this.usuarioCriadoId = usuarioId;
     }

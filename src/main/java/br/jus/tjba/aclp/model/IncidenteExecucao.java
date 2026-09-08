@@ -67,7 +67,7 @@ public class IncidenteExecucao {
 
     @Column(name = "criado_em", nullable = false)
     @Builder.Default
-    private LocalDateTime criadoEm = LocalDateTime.now();
+    private LocalDateTime criadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
 
     @Version
     @Column(name = "version")
@@ -80,7 +80,7 @@ public class IncidenteExecucao {
 
     @PrePersist
     public void prePersist() {
-        if (criadoEm == null) criadoEm = LocalDateTime.now();
+        if (criadoEm == null) criadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
         if (version == null) version = 0L;
         if (resultado == null) resultado = ResultadoIncidente.AGUARDANDO;
     }

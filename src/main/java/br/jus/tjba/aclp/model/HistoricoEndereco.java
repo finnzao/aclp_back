@@ -110,7 +110,7 @@ public class HistoricoEndereco {
     // Auditoria
     @Column(name = "criado_em", nullable = false)
     @Builder.Default
-    private LocalDateTime criadoEm = LocalDateTime.now();
+    private LocalDateTime criadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
 
     @Column(name = "atualizado_em")
     private LocalDateTime atualizadoEm;
@@ -123,7 +123,7 @@ public class HistoricoEndereco {
     @PrePersist
     public void prePersist() {
         if (this.criadoEm == null) {
-            this.criadoEm = LocalDateTime.now();
+            this.criadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
         }
         if (this.version == null) {
             this.version = 0L;
@@ -137,7 +137,7 @@ public class HistoricoEndereco {
 
     @PreUpdate
     public void preUpdate() {
-        this.atualizadoEm = LocalDateTime.now();
+        this.atualizadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
         validarEstado();
         formatarCep();
     }
@@ -244,7 +244,7 @@ public class HistoricoEndereco {
     }
 
     public long getDiasResidencia() {
-        LocalDate fim = dataFim != null ? dataFim : LocalDate.now();
+        LocalDate fim = dataFim != null ? dataFim : br.jus.tjba.aclp.util.TempoAtual.hoje();
         return java.time.temporal.ChronoUnit.DAYS.between(dataInicio, fim);
     }
 

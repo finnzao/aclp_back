@@ -133,10 +133,10 @@ public class Convite {
     @PrePersist
     protected void onCreate() {
         if (this.criadoEm == null) {
-            this.criadoEm = LocalDateTime.now();
+            this.criadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
         }
         if (this.expiraEm == null) {
-            this.expiraEm = LocalDateTime.now().plusDays(7); // 7 dias de validade
+            this.expiraEm = br.jus.tjba.aclp.util.TempoAtual.agora().plusDays(7); // 7 dias de validade
         }
         if (this.token == null) {
             this.token = UUID.randomUUID().toString();
@@ -172,7 +172,7 @@ public class Convite {
      * Verifica se o convite já expirou
      */
     public boolean isExpirado() {
-        return LocalDateTime.now().isAfter(expiraEm);
+        return br.jus.tjba.aclp.util.TempoAtual.agora().isAfter(expiraEm);
     }
 
     /**
@@ -195,7 +195,7 @@ public class Convite {
     public void registrarUso() {
         this.usosRealizados = 1;
         this.status = StatusConvite.ATIVADO;
-        this.ativadoEm = LocalDateTime.now();
+        this.ativadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
     }
 
     /**
@@ -206,7 +206,7 @@ public class Convite {
     public void ativar(Usuario usuario, String ip) {
         this.usuario = usuario;
         this.status = StatusConvite.ATIVADO;
-        this.ativadoEm = LocalDateTime.now();
+        this.ativadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
         this.ipAtivacao = ip;
         this.usosRealizados = 1;
     }

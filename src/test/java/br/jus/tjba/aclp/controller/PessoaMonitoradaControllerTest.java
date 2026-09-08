@@ -28,6 +28,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(PessoaMonitoradaController.class)
+@org.springframework.context.annotation.Import(br.jus.tjba.aclp.mapper.PessoaMonitoradaMapper.class)
 // Sem filtros de seguranca: o slice @WebMvcTest nao carrega o SecurityConfig da
 // aplicacao (usa o chain padrao do Boot), entao autenticar aqui nao testaria a
 // seguranca real — so obrigaria @WithMockUser e csrf() em cada metodo por causa de

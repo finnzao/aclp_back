@@ -35,7 +35,7 @@ public class SetupStatus {
 
     @Column(name = "created_at", nullable = false)
     @Builder.Default
-    private LocalDateTime createdAt = LocalDateTime.now();
+    private LocalDateTime createdAt = br.jus.tjba.aclp.util.TempoAtual.agora();
 
     @PrePersist
     public void prePersist() {
@@ -43,7 +43,7 @@ public class SetupStatus {
             this.id = "SINGLE_ROW";
         }
         if (this.createdAt == null) {
-            this.createdAt = LocalDateTime.now();
+            this.createdAt = br.jus.tjba.aclp.util.TempoAtual.agora();
         }
         if (this.completed == null) {
             this.completed = Boolean.FALSE;
@@ -56,7 +56,7 @@ public class SetupStatus {
 
     public void markAsCompleted(String adminEmail, String clientIp) {
         this.completed = Boolean.TRUE;
-        this.completedAt = LocalDateTime.now();
+        this.completedAt = br.jus.tjba.aclp.util.TempoAtual.agora();
         this.firstAdminEmail = adminEmail;
         this.completedByIp = clientIp;
     }

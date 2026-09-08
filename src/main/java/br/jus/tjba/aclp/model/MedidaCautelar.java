@@ -46,7 +46,7 @@ public class MedidaCautelar {
 
     @Column(name = "criado_em", nullable = false, updatable = false)
     @Builder.Default
-    private LocalDateTime criadoEm = LocalDateTime.now();
+    private LocalDateTime criadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
 
     @Version
     @Builder.Default

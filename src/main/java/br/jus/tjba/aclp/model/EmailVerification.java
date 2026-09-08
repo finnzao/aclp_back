@@ -48,7 +48,7 @@ public class EmailVerification {
 
     @Column(name = "criado_em", nullable = false)
     @Builder.Default
-    private LocalDateTime criadoEm = LocalDateTime.now();
+    private LocalDateTime criadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
 
     @Column(name = "expira_em", nullable = false)
     private LocalDateTime expiraEm;
@@ -76,7 +76,7 @@ public class EmailVerification {
     @PrePersist
     public void prePersist() {
         if (this.criadoEm == null) {
-            this.criadoEm = LocalDateTime.now();
+            this.criadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
         }
         if (this.verificado == null) {
             this.verificado = Boolean.FALSE;
@@ -101,7 +101,7 @@ public class EmailVerification {
      * Verifica se o código está expirado
      */
     public boolean isExpirado() {
-        return LocalDateTime.now().isAfter(expiraEm);
+        return br.jus.tjba.aclp.util.TempoAtual.agora().isAfter(expiraEm);
     }
 
     /**
@@ -123,7 +123,7 @@ public class EmailVerification {
      */
     public void marcarComoVerificado(String ipVerificacao) {
         this.verificado = Boolean.TRUE;
-        this.verificadoEm = LocalDateTime.now();
+        this.verificadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
         this.ipVerificacao = ipVerificacao;
     }
 
@@ -141,7 +141,7 @@ public class EmailVerification {
         if (isExpirado()) {
             return 0;
         }
-        return java.time.Duration.between(LocalDateTime.now(), expiraEm).toMinutes();
+        return java.time.Duration.between(br.jus.tjba.aclp.util.TempoAtual.agora(), expiraEm).toMinutes();
     }
 
     /**

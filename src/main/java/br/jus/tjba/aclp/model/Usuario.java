@@ -80,7 +80,7 @@ public class Usuario {
 
     @Column(name = "criado_em", nullable = false)
     @Builder.Default
-    private LocalDateTime criadoEm = LocalDateTime.now();
+    private LocalDateTime criadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
 
     @Column(name = "atualizado_em")
     private LocalDateTime atualizadoEm;
@@ -138,7 +138,7 @@ public class Usuario {
     @PrePersist
     public void prePersist() {
         if (this.criadoEm == null) {
-            this.criadoEm = LocalDateTime.now();
+            this.criadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
         }
         if (this.ativo == null) {
             this.ativo = Boolean.TRUE;
@@ -163,13 +163,13 @@ public class Usuario {
         }
 
         if (this.senhaExpiraEm == null) {
-            this.senhaExpiraEm = LocalDateTime.now().plusDays(320);
+            this.senhaExpiraEm = br.jus.tjba.aclp.util.TempoAtual.agora().plusDays(320);
         }
     }
 
     @PreUpdate
     public void preUpdate() {
-        this.atualizadoEm = LocalDateTime.now();
+        this.atualizadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
     }
 
     public boolean isAdmin() {
@@ -181,7 +181,7 @@ public class Usuario {
     }
 
     public void registrarLogin() {
-        this.ultimoLogin = LocalDateTime.now();
+        this.ultimoLogin = br.jus.tjba.aclp.util.TempoAtual.agora();
     }
 
     public String getNomeCompleto() {
@@ -198,7 +198,7 @@ public class Usuario {
         if (!ativo) {
             return false;
         }
-        if (bloqueadoAte != null && bloqueadoAte.isAfter(LocalDateTime.now())) {
+        if (bloqueadoAte != null && bloqueadoAte.isAfter(br.jus.tjba.aclp.util.TempoAtual.agora())) {
             return false;
         }
         return true;
@@ -208,7 +208,7 @@ public class Usuario {
      * Verifica se senha expirou
      */
     public boolean senhaExpirada() {
-        return senhaExpiraEm != null && senhaExpiraEm.isBefore(LocalDateTime.now());
+        return senhaExpiraEm != null && senhaExpiraEm.isBefore(br.jus.tjba.aclp.util.TempoAtual.agora());
     }
 
     /**
@@ -222,7 +222,7 @@ public class Usuario {
 
         // Bloquear após 5 tentativas
         if (tentativasLoginFalhadas >= 5) {
-            bloqueadoAte = LocalDateTime.now().plusMinutes(30);
+            bloqueadoAte = br.jus.tjba.aclp.util.TempoAtual.agora().plusMinutes(30);
         }
     }
 
@@ -239,7 +239,7 @@ public class Usuario {
      */
     public void marcarEmailVerificado() {
         this.emailVerificado = true;
-        this.dataVerificacaoEmail = LocalDateTime.now();
+        this.dataVerificacaoEmail = br.jus.tjba.aclp.util.TempoAtual.agora();
     }
 
     @Override

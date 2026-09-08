@@ -39,7 +39,7 @@ public class PessoaMonitoradaController {
     private final PessoaMonitoradaService custodiadoService;
     private final ListagemPessoasService listagemService;
     private final CadastroPessoaService cadastroService;
-    private final HistoricoEnderecoService historicoEnderecoService;
+    private final br.jus.tjba.aclp.mapper.PessoaMonitoradaMapper pessoaMapper;
 
     @lombok.Data
     @lombok.Builder
@@ -97,49 +97,6 @@ public class PessoaMonitoradaController {
         private boolean inadimplente;
         private boolean comparecimentoHoje;
 
-        public static PessoaMonitoradaResponseDTO fromEntity(PessoaMonitorada custodiado,
-                                                        HistoricoEnderecoService enderecoService) {
-            EnderecoDetalhadoDTO enderecoDetalhado = null;
-            Optional<HistoricoEnderecoDTO> enderecoOpt =
-                    enderecoService.buscarEnderecoAtivo(custodiado.getId());
-            if (enderecoOpt.isPresent()) {
-                HistoricoEnderecoDTO enderecoDTO = enderecoOpt.get();
-                enderecoDetalhado = EnderecoDetalhadoDTO.builder()
-                        .id(enderecoDTO.getId()).cep(enderecoDTO.getCep())
-                        .logradouro(enderecoDTO.getLogradouro()).numero(enderecoDTO.getNumero())
-                        .complemento(enderecoDTO.getComplemento()).bairro(enderecoDTO.getBairro())
-                        .cidade(enderecoDTO.getCidade()).estado(enderecoDTO.getEstado())
-                        .nomeEstado(enderecoDTO.getNomeEstado()).regiaoEstado(enderecoDTO.getRegiaoEstado())
-                        .dataInicio(enderecoDTO.getDataInicio()).dataFim(enderecoDTO.getDataFim())
-                        .ativo(enderecoDTO.getEnderecoAtivo()).motivoAlteracao(enderecoDTO.getMotivoAlteracao())
-                        .validadoPor(enderecoDTO.getValidadoPor())
-                        .enderecoCompleto(enderecoDTO.getEnderecoCompleto())
-                        .enderecoResumido(enderecoDTO.getEnderecoResumido())
-                        .diasResidencia(enderecoDTO.getDiasResidencia())
-                        .periodoResidencia(enderecoDTO.getPeriodoResidencia())
-                        .criadoEm(enderecoDTO.getCriadoEm()).atualizadoEm(enderecoDTO.getAtualizadoEm())
-                        .build();
-            }
-
-            return PessoaMonitoradaResponseDTO.builder()
-                    .id(custodiado.getPublicId() != null ? custodiado.getPublicId().toString() : null)
-                    .nome(custodiado.getNome()).cpf(custodiado.getCpf()).rg(custodiado.getRg())
-                    .contato(custodiado.getContato()).contatoPendente(custodiado.isContatoPendente())
-                    .processo(custodiado.getProcesso()).vara(custodiado.getVara()).comarca(custodiado.getComarca())
-                    .dataDecisao(custodiado.getDataDecisao()).periodicidade(custodiado.getPeriodicidade())
-                    .periodicidadeDescricao(custodiado.getPeriodicidadeDescricao())
-                    .dataComparecimentoInicial(custodiado.getDataComparecimentoInicial())
-                    .status(custodiado.getStatusEfetivo())
-                    .situacao(custodiado.getSituacao())
-                    .motivoArquivamento(custodiado.getMotivoArquivamento())
-                    .ultimoComparecimento(custodiado.getUltimoComparecimento())
-                    .proximoComparecimento(custodiado.getProximoComparecimento())
-                    .diasAtraso(custodiado.getDiasAtraso()).observacoes(custodiado.getObservacoes())
-                    .endereco(enderecoDetalhado).criadoEm(custodiado.getCriadoEm())
-                    .atualizadoEm(custodiado.getAtualizadoEm()).identificacao(custodiado.getIdentificacao())
-                    .inadimplente(custodiado.isInadimplente()).comparecimentoHoje(custodiado.isComparecimentoHoje())
-                    .build();
-        }
     }
 
     // =====================================================================
@@ -269,7 +226,7 @@ public class PessoaMonitoradaController {
     public ResponseEntity<ApiResponse<PessoaMonitoradaResponseDTO>> findById(@PathVariable String publicId) {
         return custodiadoService.findByPublicId(publicId)
                 .map(c -> ResponseEntity.ok(ApiResponse.success("Pessoa monitorada encontrada",
-                        PessoaMonitoradaResponseDTO.fromEntity(c, historicoEnderecoService))))
+                        pessoaMapper.paraResponse(c))))
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(ApiResponse.error("Pessoa monitorada não encontrada: " + publicId)));
     }
@@ -280,7 +237,7 @@ public class PessoaMonitoradaController {
             if (dto.getId() != null) dto.setId(null);
             PessoaMonitorada custodiado = cadastroService.save(dto);
             return ResponseEntity.status(HttpStatus.CREATED).body(
-                    ApiResponse.success("Pessoa monitorada cadastrada", PessoaMonitoradaResponseDTO.fromEntity(custodiado, historicoEnderecoService)));
+                    ApiResponse.success("Pessoa monitorada cadastrada", pessoaMapper.paraResponse(custodiado)));
         } catch (DataIntegrityViolationException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(extrairMensagemIntegridade(e)));
         } catch (IllegalArgumentException e) {
@@ -295,7 +252,7 @@ public class PessoaMonitoradaController {
     public ResponseEntity<ApiResponse<PessoaMonitoradaResponseDTO>> update(@PathVariable String publicId, @Valid @RequestBody PessoaMonitoradaDTO dto) {
         PessoaMonitorada custodiado = cadastroService.updateByPublicId(publicId, dto);
         return ResponseEntity.ok(ApiResponse.success("Pessoa monitorada atualizada",
-                PessoaMonitoradaResponseDTO.fromEntity(custodiado, historicoEnderecoService)));
+                pessoaMapper.paraResponse(custodiado)));
     }
 
     @DeleteMapping("/{publicId}")

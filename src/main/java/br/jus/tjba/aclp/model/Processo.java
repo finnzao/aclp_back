@@ -130,7 +130,7 @@ public class Processo {
 
     @Column(name = "criado_em", nullable = false)
     @Builder.Default
-    private LocalDateTime criadoEm = LocalDateTime.now();
+    private LocalDateTime criadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
 
     @Column(name = "atualizado_em")
     private LocalDateTime atualizadoEm;
@@ -152,7 +152,7 @@ public class Processo {
 
     @PrePersist
     public void prePersist() {
-        if (criadoEm == null) criadoEm = LocalDateTime.now();
+        if (criadoEm == null) criadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
         if (version == null) version = 0L;
         if (status == null) status = StatusComparecimento.EM_CONFORMIDADE;
         if (situacaoProcesso == null) situacaoProcesso = SituacaoProcesso.ATIVO;
@@ -164,7 +164,7 @@ public class Processo {
 
     @PreUpdate
     public void preUpdate() {
-        atualizadoEm = LocalDateTime.now();
+        atualizadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
         if (!situacaoProcesso.isAtivo()) proximoComparecimento = null;
     }
 
@@ -186,7 +186,7 @@ public class Processo {
 
     public void atualizarStatusBaseadoEmData() {
         if (situacaoProcesso.isAtivo() && proximoComparecimento != null
-                && proximoComparecimento.isBefore(LocalDate.now())) {
+                && proximoComparecimento.isBefore(br.jus.tjba.aclp.util.TempoAtual.hoje())) {
             status = StatusComparecimento.INADIMPLENTE;
         } else if (situacaoProcesso.isAtivo()) {
             status = StatusComparecimento.EM_CONFORMIDADE;
@@ -200,19 +200,19 @@ public class Processo {
 
     public long getDiasAtraso() {
         if (proximoComparecimento == null || !situacaoProcesso.isAtivo()) return 0;
-        LocalDate hoje = LocalDate.now();
+        LocalDate hoje = br.jus.tjba.aclp.util.TempoAtual.hoje();
         return hoje.isAfter(proximoComparecimento)
                 ? ChronoUnit.DAYS.between(proximoComparecimento, hoje) : 0;
     }
 
     public boolean isInadimplente() {
         return situacaoProcesso.isAtivo() && (status == StatusComparecimento.INADIMPLENTE
-                || (proximoComparecimento != null && proximoComparecimento.isBefore(LocalDate.now())));
+                || (proximoComparecimento != null && proximoComparecimento.isBefore(br.jus.tjba.aclp.util.TempoAtual.hoje())));
     }
 
     public boolean isComparecimentoHoje() {
         return situacaoProcesso.isAtivo() && proximoComparecimento != null
-                && proximoComparecimento.equals(LocalDate.now());
+                && proximoComparecimento.equals(br.jus.tjba.aclp.util.TempoAtual.hoje());
     }
 
     public String getPeriodicidadeDescricao() {

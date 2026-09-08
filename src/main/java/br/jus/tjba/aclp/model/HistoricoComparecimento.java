@@ -147,7 +147,7 @@ public class HistoricoComparecimento {
 
     @Column(name = "criado_em", nullable = false)
     @Builder.Default
-    private LocalDateTime criadoEm = LocalDateTime.now();
+    private LocalDateTime criadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
 
     @Column(name = "atualizado_em")
     private LocalDateTime atualizadoEm;
@@ -163,14 +163,14 @@ public class HistoricoComparecimento {
 
     @PrePersist
     public void prePersist() {
-        if (criadoEm == null) criadoEm = LocalDateTime.now();
+        if (criadoEm == null) criadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
         if (version == null) version = 0L;
         if (mudancaEndereco == null) mudancaEndereco = Boolean.FALSE;
     }
 
     @PreUpdate
     public void preUpdate() {
-        atualizadoEm = LocalDateTime.now();
+        atualizadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
     }
 
     // =====================================================================

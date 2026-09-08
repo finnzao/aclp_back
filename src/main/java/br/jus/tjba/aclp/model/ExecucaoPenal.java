@@ -95,7 +95,7 @@ public class ExecucaoPenal {
 
     @Column(name = "criado_em", nullable = false)
     @Builder.Default
-    private LocalDateTime criadoEm = LocalDateTime.now();
+    private LocalDateTime criadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
 
     @Column(name = "atualizado_em")
     private LocalDateTime atualizadoEm;
@@ -188,20 +188,20 @@ public class ExecucaoPenal {
     }
 
     public long getDiasCumpridos() {
-        LocalDate hoje = LocalDate.now();
+        LocalDate hoje = br.jus.tjba.aclp.util.TempoAtual.hoje();
         if (hoje.isBefore(dataInicioCumprimento)) return 0;
         return Math.min(ChronoUnit.DAYS.between(dataInicioCumprimento, hoje) + 1, penaTotalDias);
     }
 
     public long getDiasRestantes() {
-        LocalDate hoje = LocalDate.now();
+        LocalDate hoje = br.jus.tjba.aclp.util.TempoAtual.hoje();
         return hoje.isAfter(dataTerminoPrevista) ? 0
                 : ChronoUnit.DAYS.between(hoje, dataTerminoPrevista);
     }
 
     @PrePersist
     public void prePersist() {
-        if (criadoEm == null) criadoEm = LocalDateTime.now();
+        if (criadoEm == null) criadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
         if (version == null) version = 0L;
         if (situacaoExecucao == null) situacaoExecucao = SituacaoExecucao.EM_CUMPRIMENTO;
         if (diasDetraidos == null) diasDetraidos = 0;
@@ -212,7 +212,7 @@ public class ExecucaoPenal {
 
     @PreUpdate
     public void preUpdate() {
-        atualizadoEm = LocalDateTime.now();
+        atualizadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
         dataTerminoPrevista = calcularTerminoPrevisto();
     }
 }

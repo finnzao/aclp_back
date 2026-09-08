@@ -75,7 +75,7 @@ public class PessoaMonitorada {
 
     @Column(name = "criado_em", nullable = false)
     @Builder.Default
-    private LocalDateTime criadoEm = LocalDateTime.now();
+    private LocalDateTime criadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
 
     @Column(name = "atualizado_em")
     private LocalDateTime atualizadoEm;
@@ -109,7 +109,7 @@ public class PessoaMonitorada {
 
     @PrePersist
     public void prePersist() {
-        if (criadoEm == null) criadoEm = LocalDateTime.now();
+        if (criadoEm == null) criadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
         if (version == null) version = 0L;
         if (situacao == null) situacao = SituacaoPessoaMonitorada.ATIVO;
         if (publicId == null) publicId = UUID.randomUUID();
@@ -118,7 +118,7 @@ public class PessoaMonitorada {
 
     @PreUpdate
     public void preUpdate() {
-        atualizadoEm = LocalDateTime.now();
+        atualizadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
         if (contato == null || contato.trim().isEmpty()) contato = "Pendente";
     }
 
@@ -244,7 +244,7 @@ public class PessoaMonitorada {
     /** Maior atraso entre os processos ativos. */
     public long getDiasAtraso() {
         if (!isAtivo()) return 0;
-        java.time.LocalDate hoje = java.time.LocalDate.now();
+        java.time.LocalDate hoje = br.jus.tjba.aclp.util.TempoAtual.hoje();
         return processosAtivos()
                 .map(Processo::getProximoComparecimento)
                 .filter(d -> d != null && d.isBefore(hoje))
@@ -254,14 +254,14 @@ public class PessoaMonitorada {
 
     public boolean isInadimplente() {
         if (!isAtivo()) return false;
-        java.time.LocalDate hoje = java.time.LocalDate.now();
+        java.time.LocalDate hoje = br.jus.tjba.aclp.util.TempoAtual.hoje();
         return processosAtivos().anyMatch(p ->
                 p.getProximoComparecimento() != null && p.getProximoComparecimento().isBefore(hoje));
     }
 
     public boolean isComparecimentoHoje() {
         if (!isAtivo()) return false;
-        java.time.LocalDate hoje = java.time.LocalDate.now();
+        java.time.LocalDate hoje = br.jus.tjba.aclp.util.TempoAtual.hoje();
         return processosAtivos().anyMatch(p -> hoje.equals(p.getProximoComparecimento()));
     }
 
@@ -293,20 +293,20 @@ public class PessoaMonitorada {
     public void arquivar(br.jus.tjba.aclp.model.enums.MotivoArquivamento motivo) {
         situacao = SituacaoPessoaMonitorada.ARQUIVADO;
         motivoArquivamento = motivo;
-        atualizadoEm = LocalDateTime.now();
+        atualizadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
     }
 
     /** Ato humano, nunca automático. Sai dos contadores de atraso (queries filtram ATIVO). */
     public void declararForagido() {
         situacao = SituacaoPessoaMonitorada.FORAGIDO;
-        atualizadoEm = LocalDateTime.now();
+        atualizadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
     }
 
     /** Volta de ARQUIVADO ou FORAGIDO; o ciclo de comparecimento vive nos processos. */
     public void reativar() {
         situacao = SituacaoPessoaMonitorada.ATIVO;
         motivoArquivamento = null;
-        atualizadoEm = LocalDateTime.now();
+        atualizadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
     }
 
     public boolean podeSerExcluidoFisicamente() {

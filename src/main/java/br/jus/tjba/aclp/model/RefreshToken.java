@@ -34,7 +34,7 @@ public class RefreshToken {
 
     @Column(name = "created_at", nullable = false)
     @Builder.Default
-    private LocalDateTime createdAt = LocalDateTime.now();
+    private LocalDateTime createdAt = br.jus.tjba.aclp.util.TempoAtual.agora();
 
     @Column(name = "ip_address", length = 45)
     private String ipAddress;
@@ -53,7 +53,7 @@ public class RefreshToken {
     private String revokedReason;
 
     public boolean isExpired() {
-        return LocalDateTime.now().isAfter(expiryDate);
+        return br.jus.tjba.aclp.util.TempoAtual.agora().isAfter(expiryDate);
     }
 
     public boolean isRevoked() {
@@ -62,6 +62,6 @@ public class RefreshToken {
 
     public void revogar() {
         this.revoked = true;
-        this.revokedAt = LocalDateTime.now();
+        this.revokedAt = br.jus.tjba.aclp.util.TempoAtual.agora();
     }
 }
