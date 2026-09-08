@@ -47,7 +47,9 @@ public class PessoaMonitoradaListDTO {
         }
 
         long diasAtraso = custodiado.getDiasAtraso();
-        Integer periodicidade = custodiado.getPeriodicidade();
+        // resolve o processo principal UMA vez; cada getter derivado refaria o stream+min
+        br.jus.tjba.aclp.model.Processo principal = custodiado.getProcessoPrincipal();
+        Integer periodicidade = principal != null ? principal.getPeriodicidade() : null;
         boolean urgente = periodicidade != null && diasAtraso >= periodicidade;
 
         return PessoaMonitoradaListDTO.builder()
@@ -57,13 +59,14 @@ public class PessoaMonitoradaListDTO {
                 .cpf(custodiado.getCpf())
                 .rg(custodiado.getRg())
                 .documentoExibicao(documentoExibicao)
-                .processo(custodiado.getProcesso())
-                .vara(custodiado.getVara())
-                .comarca(custodiado.getComarca())
+                .processo(principal != null ? principal.getNumeroProcesso() : null)
+                .vara(principal != null ? principal.getVara() : null)
+                .comarca(principal != null ? principal.getComarca() : null)
+                // agregados continuam na entidade: varrem TODOS os ativos, nao so o principal
                 .status(custodiado.getStatusEfetivo())
                 .situacao(custodiado.getSituacao())
-                .ultimoComparecimento(custodiado.getUltimoComparecimento())
-                .proximoComparecimento(custodiado.getProximoComparecimento())
+                .ultimoComparecimento(principal != null ? principal.getUltimoComparecimento() : null)
+                .proximoComparecimento(principal != null ? principal.getProximoComparecimento() : null)
                 .diasAtraso(diasAtraso)
                 .periodicidade(periodicidade)
                 .inadimplente(custodiado.isInadimplente())

@@ -21,6 +21,15 @@ public interface HistoricoComparecimentoRepository
         extends JpaRepository<HistoricoComparecimento, Long>,
                 JpaSpecificationExecutor<HistoricoComparecimento> {
 
+    /** Guarda de idempotência: mesmo processo, mesma data e mesmo tipo = duplicata. */
+    @Query("SELECT COUNT(h) > 0 FROM HistoricoComparecimento h " +
+            "WHERE h.processo.id = :processoId AND h.dataComparecimento = :data " +
+            "AND h.tipoValidacao = :tipo")
+    boolean existsByProcessoIdAndDataComparecimentoAndTipoValidacao(
+            @Param("processoId") Long processoId,
+            @Param("data") java.time.LocalDate dataComparecimento,
+            @Param("tipo") br.jus.tjba.aclp.model.enums.TipoValidacao tipoValidacao);
+
     @Query("SELECT h FROM HistoricoComparecimento h " +
             "LEFT JOIN FETCH h.custodiado c " +
             "LEFT JOIN FETCH h.processo p " +

@@ -121,6 +121,18 @@ public class ComparecimentoService {
             throw new IllegalArgumentException("processoId ou custodiadoId é obrigatório");
         }
 
+        // idempotencia: duplo-clique/retry nao pode duplicar registro judicial.
+        // Retificacao legitima usa outra data ou outro tipo.
+        if (processo != null && dto.getTipoValidacao() != TipoValidacao.CADASTRO_INICIAL
+                && historicoComparecimentoRepository.existsByProcessoIdAndDataComparecimentoAndTipoValidacao(
+                        processo.getId(), dto.getDataComparecimento(), dto.getTipoValidacao())) {
+            throw new IllegalArgumentException(String.format(
+                    "Já existe comparecimento (%s) registrado para o processo %s em %s. "
+                            + "Confira o histórico antes de registrar novamente.",
+                    dto.getTipoValidacao().getLabel(), processo.getNumeroProcesso(),
+                    dto.getDataComparecimento()));
+        }
+
         HistoricoComparecimento historico = HistoricoComparecimento.builder()
                 .processo(processo).custodiado(custodiado)
                 .dataComparecimento(dto.getDataComparecimento()).horaComparecimento(dto.getHoraComparecimento())
