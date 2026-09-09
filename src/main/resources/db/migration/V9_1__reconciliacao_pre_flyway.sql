@@ -8,13 +8,30 @@
 --     (renomeada na V12) -> ALTER TABLE IF EXISTS vira no-op.
 -- Requer spring.flyway.out-of-order=true.
 
--- era V3: identidade publica
+-- era V3: identidade publica.
+-- O tipo da coluna diverge por origem: ddl-auto criou uuid nativo (producao),
+-- o script manual V3 criou VARCHAR(36) (local). O UPDATE respeita o que houver.
 ALTER TABLE IF EXISTS custodiados ADD COLUMN IF NOT EXISTS public_id VARCHAR(36);
-DO $$ BEGIN
-    IF to_regclass('custodiados') IS NOT NULL THEN
+DO $$
+DECLARE tipo TEXT;
+BEGIN
+    IF to_regclass('custodiados') IS NULL THEN RETURN; END IF;
+
+    SELECT data_type INTO tipo FROM information_schema.columns
+     WHERE table_name = 'custodiados' AND column_name = 'public_id';
+
+    IF tipo = 'uuid' THEN
+        UPDATE custodiados SET public_id = gen_random_uuid() WHERE public_id IS NULL;
+    ELSE
         UPDATE custodiados SET public_id = gen_random_uuid()::VARCHAR WHERE public_id IS NULL;
-        ALTER TABLE custodiados ALTER COLUMN public_id SET NOT NULL;
-        ALTER TABLE custodiados DROP CONSTRAINT IF EXISTS uq_custodiado_public_id;
+    END IF;
+
+    ALTER TABLE custodiados ALTER COLUMN public_id SET NOT NULL;
+
+    -- ddl-auto pode ja ter criado um unique com nome proprio; nao duplicar indice
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes
+                   WHERE tablename = 'custodiados'
+                     AND indexdef LIKE 'CREATE UNIQUE%(public_id)%') THEN
         ALTER TABLE custodiados ADD CONSTRAINT uq_custodiado_public_id UNIQUE (public_id);
     END IF;
 END $$;
