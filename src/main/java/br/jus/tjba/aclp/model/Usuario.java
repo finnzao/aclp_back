@@ -44,6 +44,19 @@ public class Usuario {
     @Column(name = "email", nullable = false, unique = true, length = 150)
     private String email;
 
+    /** Email sempre minúsculo e sem espaços: as buscas usam LOWER(), mas gravar
+     *  normalizado evita registros em caixa mista (ver caso adminRioReal, 09/09). */
+    public void setEmail(String email) {
+        this.email = email != null ? email.trim().toLowerCase() : null;
+    }
+
+    // o @Builder escreve o campo direto, sem passar pelo setter — os hooks reaplicam
+    private void normalizarEmail() {
+        if (email != null) {
+            email = email.trim().toLowerCase();
+        }
+    }
+
     @NotBlank(message = "Senha é obrigatória")
     @Column(name = "senha", nullable = false)
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
@@ -137,6 +150,7 @@ public class Usuario {
 
     @PrePersist
     public void prePersist() {
+        normalizarEmail();
         if (this.criadoEm == null) {
             this.criadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
         }
@@ -169,6 +183,7 @@ public class Usuario {
 
     @PreUpdate
     public void preUpdate() {
+        normalizarEmail();
         this.atualizadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
     }
 
