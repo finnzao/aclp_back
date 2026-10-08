@@ -27,7 +27,8 @@ class IdempotenciaComparecimentoTest {
                 historicoRepo,
                 mock(br.jus.tjba.aclp.repository.HistoricoEnderecoRepository.class),
                 processoRepo,
-                mock(br.jus.tjba.aclp.repository.ExecucaoPenalRepository.class));
+                mock(br.jus.tjba.aclp.repository.ExecucaoPenalRepository.class),
+                mock(br.jus.tjba.aclp.repository.ProvidenciaRepository.class));
 
         PessoaMonitorada pessoa = PessoaMonitorada.builder().nome("Teste").build();
         pessoa.setId(1L);

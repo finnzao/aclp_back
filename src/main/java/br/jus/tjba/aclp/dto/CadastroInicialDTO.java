@@ -84,8 +84,8 @@ public class CadastroInicialDTO {
     @Size(max = 100, message = "Comarca deve ter no máximo 100 caracteres")
     private String comarca;
 
+    // obrigatoria na cautelar; na execucao assume o inicio da pena
     @JsonFormat(pattern = "yyyy-MM-dd")
-    @NotNull(message = "Data da decisão é obrigatória")
     private LocalDate dataDecisao;
 
     @JsonFormat(pattern = "yyyy-MM-dd")
@@ -101,18 +101,17 @@ public class CadastroInicialDTO {
 
     // ======================== 4. PERIODICIDADE ========================
 
-    @NotNull(message = "Periodicidade é obrigatória")
+    // obrigatoria na cautelar e nas modalidades com agenda (validado no service)
     @Min(value = 1, message = "Periodicidade mínima é 1 dia")
     @Max(value = 365, message = "Periodicidade máxima é 365 dias")
     private Integer periodicidade;
 
     // ======================== 5. ENDEREÇO ========================
+    // obrigatorio na cautelar; opcional na execucao (validado no service)
 
-    @NotBlank(message = "CEP é obrigatório")
     @Pattern(regexp = "\\d{5}-?\\d{3}|\\d{8}", message = "CEP deve ter o formato 00000-000 ou apenas números")
     private String cep;
 
-    @NotBlank(message = "Logradouro é obrigatório")
     @Size(min = 5, max = 200, message = "Logradouro deve ter entre 5 e 200 caracteres")
     private String logradouro;
 
@@ -122,15 +121,12 @@ public class CadastroInicialDTO {
     @Size(max = 100, message = "Complemento deve ter no máximo 100 caracteres")
     private String complemento;
 
-    @NotBlank(message = "Bairro é obrigatório")
     @Size(min = 2, max = 100, message = "Bairro deve ter entre 2 e 100 caracteres")
     private String bairro;
 
-    @NotBlank(message = "Cidade é obrigatória")
     @Size(min = 2, max = 100, message = "Cidade deve ter entre 2 e 100 caracteres")
     private String cidade;
 
-    @NotBlank(message = "Estado é obrigatório")
     @Size(min = 2, max = 2, message = "Estado deve ter exatamente 2 caracteres")
     @Pattern(regexp = "[A-Z]{2}", message = "Estado deve ser uma sigla válida com 2 letras maiúsculas")
     private String estado;

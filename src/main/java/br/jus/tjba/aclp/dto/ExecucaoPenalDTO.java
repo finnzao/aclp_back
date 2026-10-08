@@ -1,6 +1,7 @@
 package br.jus.tjba.aclp.dto;
 
 import br.jus.tjba.aclp.model.ExecucaoPenal;
+import br.jus.tjba.aclp.model.enums.ModalidadeExecucao;
 import br.jus.tjba.aclp.model.enums.OrigemCalculo;
 import br.jus.tjba.aclp.model.enums.SituacaoExecucao;
 import com.fasterxml.jackson.annotation.JsonFormat;
@@ -25,7 +26,13 @@ public class ExecucaoPenalDTO {
         // opcional quando aninhado no cadastro inicial; o service valida no endpoint direto
         private Long processoId;
 
-        @NotNull(message = "Origem do cálculo é obrigatória")
+        @NotNull(message = "Modalidade é obrigatória")
+        private ModalidadeExecucao modalidade;
+
+        @JsonFormat(pattern = "yyyy-MM-dd")
+        private LocalDate dataDistribuicao;
+
+        // obrigatoria exceto em tratamento ambulatorial; validado no service
         private OrigemCalculo origemCalculo;
 
         @NotBlank(message = "Número da execução (PEC) é obrigatório")
@@ -88,6 +95,9 @@ public class ExecucaoPenalDTO {
         private Long processoId;
         private String numeroProcesso;
         private String custodiadoNome;
+        private ModalidadeExecucao modalidade;
+        private String modalidadeDescricao;
+        private LocalDate dataDistribuicao;
         private String numeroExecucao;
         private String guiaRecolhimento;
         private String numeroSeeu;
@@ -103,6 +113,9 @@ public class ExecucaoPenalDTO {
         private long diasCumpridos;
         private long diasRestantes;
         private String observacoes;
+        private LocalDate ultimaMovimentacao;
+        private long providenciasPendentes;
+        private long providenciasVencidas;
 
         // chamar dentro da transacao (processo LAZY)
         public static ExecucaoPenalResponse fromEntity(ExecucaoPenal e) {
@@ -112,6 +125,9 @@ public class ExecucaoPenalDTO {
                     .numeroProcesso(e.getProcesso().getNumeroProcesso())
                     .custodiadoNome(e.getProcesso().getCustodiado() != null
                             ? e.getProcesso().getCustodiado().getNome() : null)
+                    .modalidade(e.getModalidade())
+                    .modalidadeDescricao(e.getModalidade().getDescricao())
+                    .dataDistribuicao(e.getDataDistribuicao())
                     .numeroExecucao(e.getNumeroExecucao())
                     .guiaRecolhimento(e.getGuiaRecolhimento())
                     .numeroSeeu(e.getNumeroSeeu())

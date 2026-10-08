@@ -10,6 +10,7 @@ import br.jus.tjba.aclp.model.enums.SituacaoProcesso;
 import br.jus.tjba.aclp.model.enums.TipoValidacao;
 import br.jus.tjba.aclp.repository.PessoaMonitoradaRepository;
 import br.jus.tjba.aclp.repository.ExecucaoPenalRepository;
+import br.jus.tjba.aclp.repository.ProvidenciaRepository;
 import br.jus.tjba.aclp.repository.HistoricoComparecimentoRepository;
 import br.jus.tjba.aclp.repository.HistoricoEnderecoRepository;
 import br.jus.tjba.aclp.repository.ProcessoRepository;
@@ -44,6 +45,7 @@ public class ComparecimentoService {
     private final HistoricoEnderecoRepository historicoEnderecoRepository;
     private final ProcessoRepository processoRepository;
     private final ExecucaoPenalRepository execucaoPenalRepository;
+    private final ProvidenciaRepository providenciaRepository;
 
     // =====================================================================
     // CORREÇÃO DE PERFORMANCE: Listagem paginada com filtros server-side
@@ -318,6 +320,7 @@ public class ComparecimentoService {
                 .execucoesProximasExtincao(execucaoPenalRepository
                         .countBySituacaoExecucaoAndDataTerminoPrevistaLessThanEqual(
                                 br.jus.tjba.aclp.model.enums.SituacaoExecucao.EM_CUMPRIMENTO, hoje.plusDays(60)))
+                .providenciasVencidas(providenciaRepository.countByConcluidaEmIsNullAndPrazoBefore(hoje))
                 .proximosComparecimentos(montarProximosComparecimentos(ativos, hoje))
                 .analiseAtrasos(montarAnaliseAtrasos(ativos))
                 .relatorioUltimosMeses(montarRelatorioUltimosMeses(hoje))
@@ -568,6 +571,7 @@ public class ComparecimentoService {
         private long processosExecucao;
         private long execucoesAguardandoJustificacao;
         private long execucoesProximasExtincao;
+        private long providenciasVencidas;
         private ProximosComparecimentosDTO proximosComparecimentos;
         private AnaliseAtrasosDTO analiseAtrasos;
         private RelatorioUltimosMesesDTO relatorioUltimosMeses;

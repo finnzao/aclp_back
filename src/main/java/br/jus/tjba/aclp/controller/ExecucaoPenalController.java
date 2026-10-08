@@ -7,6 +7,8 @@ import br.jus.tjba.aclp.dto.ExecucaoPenalDTO.RemicaoRequest;
 import br.jus.tjba.aclp.dto.IncidenteExecucaoDTO.IncidenteResponse;
 import br.jus.tjba.aclp.dto.IncidenteExecucaoDTO.RegistroIncidenteRequest;
 import br.jus.tjba.aclp.dto.IncidenteExecucaoDTO.ResultadoRequest;
+import br.jus.tjba.aclp.dto.ProvidenciaDTO.ProvidenciaResponse;
+import br.jus.tjba.aclp.dto.ProvidenciaDTO.RegistroProvidenciaRequest;
 import br.jus.tjba.aclp.service.ExecucaoPenalService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -25,7 +27,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/execucoes")
 @RequiredArgsConstructor
-@Tag(name = "Execução Penal", description = "Registro e consulta de execuções de pena em regime aberto")
+@Tag(name = "Execução Penal", description = "Registro e consulta de execuções de pena")
 @Slf4j
 public class ExecucaoPenalController {
 
@@ -65,6 +67,42 @@ public class ExecucaoPenalController {
             @RequestParam(defaultValue = "60") int dias) {
         return ResponseEntity.ok(ApiResponse.success("Painel D-" + dias,
                 execucaoPenalService.proximasExtincao(dias)));
+    }
+
+    @GetMapping("/inativas")
+    public ResponseEntity<ApiResponse<List<ExecucaoPenalResponse>>> inativas(
+            @RequestParam(defaultValue = "90") int dias) {
+        return ResponseEntity.ok(ApiResponse.success("Sem movimentação há " + dias + " dias",
+                execucaoPenalService.inativas(dias)));
+    }
+
+    @GetMapping("/providencias/pendentes")
+    public ResponseEntity<ApiResponse<List<ProvidenciaResponse>>> providenciasPendentes() {
+        return ResponseEntity.ok(ApiResponse.success("Providências pendentes",
+                execucaoPenalService.listarPendentes()));
+    }
+
+    @GetMapping("/{id}/providencias")
+    public ResponseEntity<ApiResponse<List<ProvidenciaResponse>>> listarProvidencias(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success("Providências listadas",
+                execucaoPenalService.listarProvidencias(id)));
+    }
+
+    @PostMapping("/{id}/providencias")
+    public ResponseEntity<ApiResponse<ProvidenciaResponse>> registrarProvidencia(
+            @PathVariable Long id,
+            @Valid @RequestBody RegistroProvidenciaRequest request,
+            Authentication auth) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(
+                "Providência registrada",
+                execucaoPenalService.registrarProvidencia(id, request, auth.getName())));
+    }
+
+    @PatchMapping("/providencias/{providenciaId}/concluir")
+    public ResponseEntity<ApiResponse<ProvidenciaResponse>> concluirProvidencia(
+            @PathVariable Long providenciaId, Authentication auth) {
+        return ResponseEntity.ok(ApiResponse.success("Providência concluída",
+                execucaoPenalService.concluirProvidencia(providenciaId, auth.getName())));
     }
 
     @PostMapping("/{id}/incidentes")

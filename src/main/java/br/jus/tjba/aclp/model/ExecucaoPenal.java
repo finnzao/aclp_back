@@ -1,5 +1,6 @@
 package br.jus.tjba.aclp.model;
 
+import br.jus.tjba.aclp.model.enums.ModalidadeExecucao;
 import br.jus.tjba.aclp.model.enums.OrigemCalculo;
 import br.jus.tjba.aclp.model.enums.SituacaoExecucao;
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -12,11 +13,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 
-/**
- * Execução de pena em regime aberto (LEP 113-119). 1:0..1 com Processo.
- * Prazos seguem o CP art. 10: o dia do início conta (termino = inicio + dias - 1)
- * e meses/anos contam pelo calendário.
- */
+// 1:0..1 com Processo. Prazos pelo CP art. 10: o dia do inicio conta.
+// Tratamento ambulatorial nao tem pena nem termino: campos de calculo ficam nulos.
 @Entity
 @Table(name = "execucoes_penais")
 @Data
@@ -52,12 +50,20 @@ public class ExecucaoPenal {
     private String numeroSeeu;
 
     @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(name = "modalidade", nullable = false, length = 30)
+    @Builder.Default
+    private ModalidadeExecucao modalidade = ModalidadeExecucao.ABERTO;
+
+    @Column(name = "data_distribuicao")
+    private LocalDate dataDistribuicao;
+
+    @NotNull
     @Column(name = "data_inicio_cumprimento", nullable = false)
     private LocalDate dataInicioCumprimento;
 
-    @NotNull
     @Min(1)
-    @Column(name = "pena_total_dias", nullable = false)
+    @Column(name = "pena_total_dias")
     private Integer penaTotalDias;
 
     @Column(name = "dias_detraidos", nullable = false)
@@ -69,18 +75,15 @@ public class ExecucaoPenal {
     private Integer diasRemidos = 0;
 
     // termino sem abatimentos; imutavel apos o registro
-    @NotNull
-    @Column(name = "data_termino_original", nullable = false)
+    @Column(name = "data_termino_original")
     private LocalDate dataTerminoOriginal;
 
     // materializada para a consulta D-60 usar indice
-    @NotNull
-    @Column(name = "data_termino_prevista", nullable = false)
+    @Column(name = "data_termino_prevista")
     private LocalDate dataTerminoPrevista;
 
-    @NotNull
     @Enumerated(EnumType.STRING)
-    @Column(name = "origem_calculo", nullable = false, length = 30)
+    @Column(name = "origem_calculo", length = 30)
     private OrigemCalculo origemCalculo;
 
     @NotNull
@@ -136,6 +139,8 @@ public class ExecucaoPenal {
     public void adicionarRemicao(int dias) {
         if (dias <= 0)
             throw new IllegalArgumentException("Remição deve ser de pelo menos 1 dia");
+        if (!temPena())
+            throw new IllegalArgumentException("Esta modalidade não tem pena em dias para remir");
         int total = (diasDetraidos != null ? diasDetraidos : 0)
                   + (diasRemidos != null ? diasRemidos : 0) + dias;
         if (total >= penaTotalDias)
@@ -145,8 +150,13 @@ public class ExecucaoPenal {
         dataTerminoPrevista = calcularTerminoPrevisto();
     }
 
+    public boolean temPena() {
+        return penaTotalDias != null && dataTerminoOriginal != null;
+    }
+
     /** original - (detraidos + remidos). */
     public LocalDate calcularTerminoPrevisto() {
+        if (dataTerminoOriginal == null) return null;
         int abatimento = (diasDetraidos != null ? diasDetraidos : 0)
                        + (diasRemidos  != null ? diasRemidos  : 0);
         return dataTerminoOriginal.minusDays(abatimento);
@@ -189,12 +199,13 @@ public class ExecucaoPenal {
 
     public long getDiasCumpridos() {
         LocalDate hoje = br.jus.tjba.aclp.util.TempoAtual.hoje();
-        if (hoje.isBefore(dataInicioCumprimento)) return 0;
+        if (!temPena() || hoje.isBefore(dataInicioCumprimento)) return 0;
         return Math.min(ChronoUnit.DAYS.between(dataInicioCumprimento, hoje) + 1, penaTotalDias);
     }
 
     public long getDiasRestantes() {
         LocalDate hoje = br.jus.tjba.aclp.util.TempoAtual.hoje();
+        if (dataTerminoPrevista == null) return 0;
         return hoje.isAfter(dataTerminoPrevista) ? 0
                 : ChronoUnit.DAYS.between(hoje, dataTerminoPrevista);
     }
@@ -204,6 +215,7 @@ public class ExecucaoPenal {
         if (criadoEm == null) criadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
         if (version == null) version = 0L;
         if (situacaoExecucao == null) situacaoExecucao = SituacaoExecucao.EM_CUMPRIMENTO;
+        if (modalidade == null) modalidade = ModalidadeExecucao.ABERTO;
         if (diasDetraidos == null) diasDetraidos = 0;
         if (diasRemidos == null) diasRemidos = 0;
         if (dataTerminoPrevista == null && dataTerminoOriginal != null)

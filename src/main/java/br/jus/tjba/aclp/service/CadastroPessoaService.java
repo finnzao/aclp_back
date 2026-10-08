@@ -56,6 +56,25 @@ public class CadastroPessoaService {
 
         validarDuplicidadesDocumentosCadastroInicial(cpfFormatado, dto.getRg());
 
+        boolean execucao = dto.getNaturezaVinculo() == NaturezaVinculo.EXECUCAO_REGIME_ABERTO;
+        if (execucao && dto.getPena() == null)
+            throw new IllegalArgumentException(
+                    "Cadastro de execução de pena exige o bloco 'pena' com os dados da sentença.");
+        boolean temAgenda = !execucao || dto.getPena().getModalidade() == null
+                || dto.getPena().getModalidade().isComparecimentoPeriodico();
+        boolean temEndereco = temTexto(dto.getCep());
+        if (temAgenda && dto.getPeriodicidade() == null)
+            throw new IllegalArgumentException("Periodicidade é obrigatória nesta modalidade");
+        if (!execucao && dto.getDataDecisao() == null)
+            throw new IllegalArgumentException("Data da decisão é obrigatória");
+        if (!execucao && !temEndereco)
+            throw new IllegalArgumentException("Endereço é obrigatório");
+        if (temEndereco && (!temTexto(dto.getLogradouro()) || !temTexto(dto.getBairro())
+                || !temTexto(dto.getCidade()) || !temTexto(dto.getEstado())))
+            throw new IllegalArgumentException("Endereço incompleto: logradouro, bairro, cidade e UF");
+        LocalDate dataDecisao = dto.getDataDecisao() != null ? dto.getDataDecisao()
+                : (execucao ? dto.getPena().getDataInicio() : null);
+
         PessoaMonitorada custodiado = PessoaMonitorada.builder()
                 .nome(dto.getNome().trim())
                 .cpf(cpfFormatado)
@@ -73,8 +92,8 @@ public class CadastroPessoaService {
                 .numeroProcesso(processoFormatado)
                 .vara(dto.getVara().trim())
                 .comarca(dto.getComarca().trim())
-                .dataDecisao(dto.getDataDecisao())
-                .periodicidade(dto.getPeriodicidade())
+                .dataDecisao(dataDecisao)
+                .periodicidade(temAgenda ? dto.getPeriodicidade() : null)
                 .dataComparecimentoInicial(dataCompInicial)
                 .ultimoComparecimento(dataCompInicial)
                 .status(StatusComparecimento.EM_CONFORMIDADE)
@@ -90,13 +109,12 @@ public class CadastroPessoaService {
 
         // execucao sem pena nao existe: tudo na mesma transacao do cadastro
         if (processoSalvo.isExecucao()) {
-            if (dto.getPena() == null)
-                throw new IllegalArgumentException(
-                        "Cadastro de execução de pena exige o bloco 'pena' com os dados da sentença.");
             dto.getPena().setProcessoId(processoSalvo.getId());
             execucaoPenalService.registrarPena(dto.getPena());
         }
 
+        HistoricoEndereco enderecoSalvo = null;
+        if (temEndereco) {
         String cepFormatado = formatarCep(dto.getCep().trim());
         HistoricoEndereco endereco = HistoricoEndereco.builder()
                 .custodiado(custodiadoSalvo)
@@ -113,7 +131,8 @@ public class CadastroPessoaService {
                 .validadoPor("Sistema SCC")
                 .build();
 
-        HistoricoEndereco enderecoSalvo = historicoEnderecoRepository.save(endereco);
+        enderecoSalvo = historicoEnderecoRepository.save(endereco);
+        }
 
         HistoricoComparecimento comparecimento = HistoricoComparecimento.builder()
                 .custodiado(custodiadoSalvo)
@@ -149,10 +168,10 @@ public class CadastroPessoaService {
                 .dataComparecimentoInicial(processoSalvo.getDataComparecimentoInicial())
                 .statusProcesso(processoSalvo.getStatus())
                 .proximoComparecimento(processoSalvo.getProximoComparecimento())
-                .enderecoCompleto(enderecoSalvo.getEnderecoCompleto())
-                .enderecoResumido(enderecoSalvo.getEnderecoResumido())
-                .cidade(enderecoSalvo.getCidade())
-                .estado(enderecoSalvo.getEstado())
+                .enderecoCompleto(enderecoSalvo != null ? enderecoSalvo.getEnderecoCompleto() : null)
+                .enderecoResumido(enderecoSalvo != null ? enderecoSalvo.getEnderecoResumido() : null)
+                .cidade(enderecoSalvo != null ? enderecoSalvo.getCidade() : null)
+                .estado(enderecoSalvo != null ? enderecoSalvo.getEstado() : null)
                 .observacoes(custodiadoSalvo.getObservacoes())
                 .criadoEm(custodiadoSalvo.getCriadoEm())
                 .build();
@@ -161,6 +180,8 @@ public class CadastroPessoaService {
     // =====================================================================
     // Validações (inalteradas)
     // =====================================================================
+
+    private static boolean temTexto(String s) { return s != null && !s.trim().isEmpty(); }
 
     private void validarCadastroInicial(CadastroInicialDTO dto) {
         if (dto.getNome() == null || dto.getNome().trim().isEmpty())
@@ -192,32 +213,24 @@ public class CadastroPessoaService {
         if (dto.getComarca() == null || dto.getComarca().trim().isEmpty())
             throw new IllegalArgumentException("Comarca é obrigatória");
 
-        if (dto.getDataDecisao() == null)
-            throw new IllegalArgumentException("Data da decisão é obrigatória");
-        if (dto.getDataDecisao().isAfter(LocalDate.now()))
+        // obrigatoriedade por natureza fica em cadastroInicial; aqui so formato
+        if (dto.getDataDecisao() != null && dto.getDataDecisao().isAfter(LocalDate.now()))
             throw new IllegalArgumentException("Data da decisão não pode ser futura");
-        if (dto.getDataComparecimentoInicial() != null && dto.getDataComparecimentoInicial().isBefore(dto.getDataDecisao()))
+        if (dto.getDataDecisao() != null && dto.getDataComparecimentoInicial() != null
+                && dto.getDataComparecimentoInicial().isBefore(dto.getDataDecisao()))
             throw new IllegalArgumentException("Data do comparecimento inicial não pode ser anterior à data da decisão");
 
-        if (dto.getPeriodicidade() == null || dto.getPeriodicidade() < 1 || dto.getPeriodicidade() > 365)
+        if (dto.getPeriodicidade() != null && (dto.getPeriodicidade() < 1 || dto.getPeriodicidade() > 365))
             throw new IllegalArgumentException("Periodicidade deve estar entre 1 e 365 dias");
 
-        if (dto.getCep() == null || dto.getCep().trim().isEmpty())
-            throw new IllegalArgumentException("CEP é obrigatório");
-        if (!validarFormatoCep(dto.getCep().trim()))
+        if (temTexto(dto.getCep()) && !validarFormatoCep(dto.getCep().trim()))
             throw new IllegalArgumentException("CEP deve ter formato válido");
-        if (dto.getLogradouro() == null || dto.getLogradouro().trim().isEmpty())
-            throw new IllegalArgumentException("Logradouro é obrigatório");
-        if (dto.getBairro() == null || dto.getBairro().trim().isEmpty())
-            throw new IllegalArgumentException("Bairro é obrigatório");
-        if (dto.getCidade() == null || dto.getCidade().trim().isEmpty())
-            throw new IllegalArgumentException("Cidade é obrigatória");
-        if (dto.getEstado() == null || dto.getEstado().trim().isEmpty())
-            throw new IllegalArgumentException("Estado é obrigatório");
-        try {
-            EstadoBrasil.fromString(dto.getEstado().trim());
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Estado inválido: " + dto.getEstado());
+        if (temTexto(dto.getEstado())) {
+            try {
+                EstadoBrasil.fromString(dto.getEstado().trim());
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Estado inválido: " + dto.getEstado());
+            }
         }
     }
 

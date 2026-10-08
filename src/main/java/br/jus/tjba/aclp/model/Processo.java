@@ -76,16 +76,15 @@ public class Processo {
     @Column(name = "comarca", nullable = false, length = 100)
     private String comarca;
 
+    // nulos so em execucao (V17); cautelar continua exigindo os dois
     @JsonFormat(pattern = "yyyy-MM-dd")
-    @NotNull(message = "Data da decisão é obrigatória")
     @PastOrPresent(message = "Data da decisão não pode ser futura")
-    @Column(name = "data_decisao", nullable = false)
+    @Column(name = "data_decisao")
     private LocalDate dataDecisao;
 
-    @NotNull(message = "Periodicidade é obrigatória")
     @Min(value = 1,   message = "Periodicidade deve ser no mínimo 1 dia")
     @Max(value = 365, message = "Periodicidade não pode exceder 365 dias")
-    @Column(name = "periodicidade", nullable = false)
+    @Column(name = "periodicidade")
     private Integer periodicidade;
 
     @JsonFormat(pattern = "yyyy-MM-dd")
