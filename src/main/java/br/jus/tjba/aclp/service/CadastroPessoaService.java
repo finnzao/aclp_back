@@ -56,7 +56,7 @@ public class CadastroPessoaService {
 
         validarDuplicidadesDocumentosCadastroInicial(cpfFormatado, dto.getRg());
 
-        boolean execucao = dto.getNaturezaVinculo() == NaturezaVinculo.EXECUCAO_REGIME_ABERTO;
+        boolean execucao = dto.getNaturezaVinculo() == NaturezaVinculo.EXECUCAO_PENAL;
         if (execucao && dto.getPena() == null)
             throw new IllegalArgumentException(
                     "Cadastro de execução de pena exige o bloco 'pena' com os dados da sentença.");

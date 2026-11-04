@@ -36,7 +36,7 @@ public class ListagemPessoasService {
                    pp.ultimo_comparecimento, pp.proximo_comparecimento,
                    CASE WHEN EXISTS (SELECT 1 FROM processos e WHERE e.custodiado_id = c.id
                                      AND e.situacao_processo = 'ATIVO'
-                                     AND e.natureza_vinculo = 'EXECUCAO_REGIME_ABERTO')
+                                     AND e.natureza_vinculo = 'EXECUCAO_PENAL')
                         THEN CASE WHEN EXISTS (SELECT 1 FROM processos e2 WHERE e2.custodiado_id = c.id
                                                AND e2.situacao_processo = 'ATIVO'
                                                AND e2.natureza_vinculo = 'CAUTELAR')
@@ -73,7 +73,7 @@ public class ListagemPessoasService {
             w.append(" AND (pp.proximo_comparecimento IS NULL OR pp.proximo_comparecimento >= CURRENT_DATE)");
         }
         String existsExec = "EXISTS (SELECT 1 FROM processos e WHERE e.custodiado_id = c.id "
-                + "AND e.situacao_processo = 'ATIVO' AND e.natureza_vinculo = 'EXECUCAO_REGIME_ABERTO')";
+                + "AND e.situacao_processo = 'ATIVO' AND e.natureza_vinculo = 'EXECUCAO_PENAL')";
         if ("EXECUCAO".equalsIgnoreCase(natureza)) w.append(" AND ").append(existsExec);
         else if ("CAUTELAR".equalsIgnoreCase(natureza)) w.append(" AND NOT ").append(existsExec);
         return w.toString();

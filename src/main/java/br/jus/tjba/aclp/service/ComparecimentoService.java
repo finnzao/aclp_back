@@ -314,7 +314,7 @@ public class ComparecimentoService {
                 .processosCautelar(processoRepository.countByNaturezaVinculoAndSituacaoProcesso(
                         br.jus.tjba.aclp.model.enums.NaturezaVinculo.CAUTELAR, SituacaoProcesso.ATIVO))
                 .processosExecucao(processoRepository.countByNaturezaVinculoAndSituacaoProcesso(
-                        br.jus.tjba.aclp.model.enums.NaturezaVinculo.EXECUCAO_REGIME_ABERTO, SituacaoProcesso.ATIVO))
+                        br.jus.tjba.aclp.model.enums.NaturezaVinculo.EXECUCAO_PENAL, SituacaoProcesso.ATIVO))
                 .execucoesAguardandoJustificacao(execucaoPenalRepository.countBySituacaoExecucao(
                         br.jus.tjba.aclp.model.enums.SituacaoExecucao.AGUARDANDO_JUSTIFICACAO))
                 .execucoesProximasExtincao(execucaoPenalRepository

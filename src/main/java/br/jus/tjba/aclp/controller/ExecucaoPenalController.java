@@ -4,6 +4,10 @@ import br.jus.tjba.aclp.dto.ApiResponse;
 import br.jus.tjba.aclp.dto.ExecucaoPenalDTO.ExecucaoPenalResponse;
 import br.jus.tjba.aclp.dto.ExecucaoPenalDTO.RegistroPenaRequest;
 import br.jus.tjba.aclp.dto.ExecucaoPenalDTO.RemicaoRequest;
+import br.jus.tjba.aclp.dto.ExecucaoPenalDTO.RetificarTerminoRequest;
+import br.jus.tjba.aclp.dto.ExecucaoPenalDTO.MotivoRequest;
+import br.jus.tjba.aclp.dto.ExecucaoPenalDTO.ExtincaoRequest;
+import br.jus.tjba.aclp.dto.ExecucaoPenalDTO.EdicaoExecucaoRequest;
 import br.jus.tjba.aclp.dto.IncidenteExecucaoDTO.IncidenteResponse;
 import br.jus.tjba.aclp.dto.IncidenteExecucaoDTO.RegistroIncidenteRequest;
 import br.jus.tjba.aclp.dto.IncidenteExecucaoDTO.ResultadoRequest;
@@ -35,7 +39,7 @@ public class ExecucaoPenalController {
 
     @PostMapping
     @Operation(summary = "Registrar pena",
-            description = "Cria a execução penal de um processo EXECUCAO_REGIME_ABERTO. "
+            description = "Cria a execução penal de um processo EXECUCAO_PENAL. "
                     + "origem SENTENCA: envia dataTermino. origem DOSIMETRIA_CALCULADA: envia anos/meses/dias.")
     public ResponseEntity<ApiResponse<ExecucaoPenalResponse>> registrar(
             @Valid @RequestBody RegistroPenaRequest request) {
@@ -136,6 +140,67 @@ public class ExecucaoPenalController {
             Authentication auth) {
         return ResponseEntity.ok(ApiResponse.success("Remição lançada",
                 execucaoPenalService.lancarRemicao(id, request, auth.getName())));
+    }
+
+    @PatchMapping("/{id}/termino")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Retificar término",
+            description = "Nova data de término conforme atestado de pena do SEEU (interrupção, alteração de data-base). "
+                    + "Recalcula a pena em dias mantendo detração e remição já lançadas; o motivo fica no histórico.")
+    public ResponseEntity<ApiResponse<ExecucaoPenalResponse>> retificarTermino(
+            @PathVariable Long id,
+            @Valid @RequestBody RetificarTerminoRequest request,
+            Authentication auth) {
+        return ResponseEntity.ok(ApiResponse.success("Término retificado",
+                execucaoPenalService.retificarTermino(id, request, auth.getName())));
+    }
+
+    @PatchMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Editar dados cadastrais da execução")
+    public ResponseEntity<ApiResponse<ExecucaoPenalResponse>> editar(
+            @PathVariable Long id, @Valid @RequestBody EdicaoExecucaoRequest request, Authentication auth) {
+        return ResponseEntity.ok(ApiResponse.success("Execução atualizada",
+                execucaoPenalService.editar(id, request, auth.getName())));
+    }
+
+    @PatchMapping("/{id}/suspender")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<ExecucaoPenalResponse>> suspender(
+            @PathVariable Long id, @Valid @RequestBody MotivoRequest request, Authentication auth) {
+        return ResponseEntity.ok(ApiResponse.success("Execução suspensa",
+                execucaoPenalService.suspender(id, request, auth.getName())));
+    }
+
+    @PatchMapping("/{id}/retomar")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<ExecucaoPenalResponse>> retomar(
+            @PathVariable Long id, @Valid @RequestBody MotivoRequest request, Authentication auth) {
+        return ResponseEntity.ok(ApiResponse.success("Execução retomada",
+                execucaoPenalService.retomar(id, request, auth.getName())));
+    }
+
+    @PatchMapping("/{id}/extinguir")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Registrar sentença de extinção",
+            description = "Registra incidente de extinção já decidido, encerra a cobrança e abre as providências de TRE e arquivamento.")
+    public ResponseEntity<ApiResponse<ExecucaoPenalResponse>> extinguir(
+            @PathVariable Long id, @Valid @RequestBody ExtincaoRequest request, Authentication auth) {
+        return ResponseEntity.ok(ApiResponse.success("Extinção registrada",
+                execucaoPenalService.extinguir(id, request, auth.getName())));
+    }
+
+    @PatchMapping("/providencias/{providenciaId}")
+    public ResponseEntity<ApiResponse<ProvidenciaResponse>> editarProvidencia(
+            @PathVariable Long providenciaId, @Valid @RequestBody RegistroProvidenciaRequest request) {
+        return ResponseEntity.ok(ApiResponse.success("Providência atualizada",
+                execucaoPenalService.editarProvidencia(providenciaId, request)));
+    }
+
+    @DeleteMapping("/providencias/{providenciaId}")
+    public ResponseEntity<ApiResponse<Void>> excluirProvidencia(@PathVariable Long providenciaId) {
+        execucaoPenalService.excluirProvidencia(providenciaId);
+        return ResponseEntity.ok(ApiResponse.success("Providência excluída", null));
     }
 
     @PatchMapping("/incidentes/{incidenteId}/resultado")

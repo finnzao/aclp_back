@@ -3,6 +3,11 @@ package br.jus.tjba.aclp.service;
 import br.jus.tjba.aclp.dto.ExecucaoPenalDTO.ExecucaoPenalResponse;
 import br.jus.tjba.aclp.dto.ExecucaoPenalDTO.RegistroPenaRequest;
 import br.jus.tjba.aclp.dto.ExecucaoPenalDTO.RemicaoRequest;
+import br.jus.tjba.aclp.dto.ExecucaoPenalDTO.RetificarTerminoRequest;
+import br.jus.tjba.aclp.dto.ExecucaoPenalDTO.MotivoRequest;
+import br.jus.tjba.aclp.dto.ExecucaoPenalDTO.ExtincaoRequest;
+import br.jus.tjba.aclp.dto.ExecucaoPenalDTO.EdicaoExecucaoRequest;
+import br.jus.tjba.aclp.model.enums.TipoIncidente;
 import br.jus.tjba.aclp.dto.IncidenteExecucaoDTO.IncidenteResponse;
 import br.jus.tjba.aclp.dto.IncidenteExecucaoDTO.RegistroIncidenteRequest;
 import br.jus.tjba.aclp.dto.IncidenteExecucaoDTO.ResultadoRequest;
@@ -59,7 +64,7 @@ public class ExecucaoPenalService {
 
         if (!processo.isExecucao())
             throw new IllegalArgumentException(
-                    "Registro de pena exige processo de natureza EXECUCAO_REGIME_ABERTO. "
+                    "Registro de pena exige processo de natureza EXECUCAO_PENAL. "
                     + "Este processo é " + processo.getNaturezaVinculo() + ".");
 
         if (execucaoPenalRepository.existsByProcessoId(processo.getId()))
@@ -243,6 +248,28 @@ public class ExecucaoPenalService {
     }
 
     @Transactional
+    public ExecucaoPenalResponse retificarTermino(Long execucaoId, RetificarTerminoRequest req, String por) {
+        ExecucaoPenal e = execucaoPenalRepository.findById(execucaoId)
+                .orElseThrow(() -> new EntityNotFoundException("Execução não encontrada: " + execucaoId));
+        if (!e.temPena())
+            throw new IllegalArgumentException("Esta modalidade não tem término calculável");
+        if (e.getSituacaoExecucao() == SituacaoExecucao.EXTINTA)
+            throw new IllegalArgumentException("Execução extinta não pode ter o término alterado");
+        LocalDate anterior = e.getDataTerminoPrevista();
+        e.retificarTermino(req.getNovoTermino());
+        providenciaRepository.save(Providencia.builder()
+                .execucaoPenal(e)
+                .tipo(TipoProvidencia.CERTIFICAR)
+                .descricao("Término retificado de " + anterior + " para " + e.getDataTerminoPrevista() + ": " + req.getMotivo().trim())
+                .concluidaEm(TempoAtual.hoje())
+                .concluidaPor(por)
+                .registradoPor(por)
+                .build());
+        log.info("Término da execução {} retificado para {} por {}", execucaoId, e.getDataTerminoPrevista(), por);
+        return toResponse(e);
+    }
+
+    @Transactional
     public IncidenteResponse registrarIncidente(Long execucaoId, RegistroIncidenteRequest req,
                                                 String registradoPor) {
         ExecucaoPenal execucao = execucaoPenalRepository.findById(execucaoId)
@@ -296,12 +323,99 @@ public class ExecucaoPenalService {
 
         ExecucaoPenal execucao = incidente.getExecucaoPenal();
         execucao.aoDecidirIncidente(req.getResultado());
-        if (execucao.getSituacaoExecucao() == SituacaoExecucao.EXTINTA) {
-            criarAutomatica(execucao, TipoProvidencia.COMUNICAR_TRE, "Comunicar extinção ao TRE", 15);
-            criarAutomatica(execucao, TipoProvidencia.ARQUIVAR, "Arquivar a execução", 30);
-        }
+        abrirProvidenciasDeExtincao(execucao);
         log.info("Incidente {} decidido: {} por {}", incidenteId, req.getResultado(), decididoPor);
         return IncidenteResponse.fromEntity(incidente);
+    }
+
+    private void abrirProvidenciasDeExtincao(ExecucaoPenal execucao) {
+        if (execucao.getSituacaoExecucao() != SituacaoExecucao.EXTINTA) return;
+        criarAutomatica(execucao, TipoProvidencia.COMUNICAR_TRE, "Comunicar extinção ao TRE", 15);
+        criarAutomatica(execucao, TipoProvidencia.ARQUIVAR, "Arquivar a execução", 30);
+    }
+
+    // sentenca de extincao por cumprimento: incidente ja decidido, mesmo rito, um passo
+    @Transactional
+    public ExecucaoPenalResponse extinguir(Long execucaoId, ExtincaoRequest req, String por) {
+        ExecucaoPenal e = buscar(execucaoId);
+        if (e.getSituacaoExecucao() == SituacaoExecucao.EXTINTA)
+            throw new IllegalArgumentException("Execução já está extinta");
+        incidenteExecucaoRepository.save(IncidenteExecucao.builder()
+                .execucaoPenal(e)
+                .tipo(TipoIncidente.EXTINCAO_PUNIBILIDADE)
+                .dataOcorrencia(req.getDataSentenca())
+                .descricao(req.getDescricao().trim())
+                .resultado(ResultadoIncidente.EXTINCAO_DECLARADA)
+                .dataDecisao(req.getDataSentenca())
+                .registradoPor(por)
+                .decididoPor(por)
+                .build());
+        e.aoDecidirIncidente(ResultadoIncidente.EXTINCAO_DECLARADA);
+        abrirProvidenciasDeExtincao(e);
+        log.info("Execução {} extinta por sentença de {} ({})", execucaoId, req.getDataSentenca(), por);
+        return toResponse(e);
+    }
+
+    @Transactional
+    public ExecucaoPenalResponse suspender(Long execucaoId, MotivoRequest req, String por) {
+        ExecucaoPenal e = buscar(execucaoId);
+        e.suspender();
+        registrarNoHistorico(e, "Execução suspensa: " + req.getMotivo().trim(), por);
+        return toResponse(e);
+    }
+
+    @Transactional
+    public ExecucaoPenalResponse retomar(Long execucaoId, MotivoRequest req, String por) {
+        ExecucaoPenal e = buscar(execucaoId);
+        e.retomar();
+        registrarNoHistorico(e, "Execução retomada: " + req.getMotivo().trim(), por);
+        return toResponse(e);
+    }
+
+    @Transactional
+    public ExecucaoPenalResponse editar(Long execucaoId, EdicaoExecucaoRequest req, String por) {
+        ExecucaoPenal e = buscar(execucaoId);
+        String pec = req.getNumeroExecucao().trim();
+        if (!pec.equals(e.getNumeroExecucao()) && execucaoPenalRepository.existsByNumeroExecucao(pec))
+            throw new IllegalArgumentException("Já existe execução com o PEC " + pec);
+        ModalidadeExecucao nova = req.getModalidade();
+        if (nova.isTerminoCalculavel() && !e.temPena())
+            throw new IllegalArgumentException("A modalidade " + nova.getDescricao() + " exige pena registrada; esta execução não tem término calculável");
+        if (nova.isComparecimentoPeriodico() && req.getPeriodicidade() == null && e.getProcesso().getPeriodicidade() == null)
+            throw new IllegalArgumentException("Informe a periodicidade: " + nova.getDescricao() + " tem agenda de comparecimento");
+
+        StringBuilder mudancas = new StringBuilder();
+        if (e.getModalidade() != nova) mudancas.append("modalidade ").append(e.getModalidade()).append(" -> ").append(nova).append("; ");
+        if (!pec.equals(e.getNumeroExecucao())) mudancas.append("PEC ").append(e.getNumeroExecucao()).append(" -> ").append(pec).append("; ");
+
+        e.setNumeroExecucao(pec);
+        e.setModalidade(nova);
+        e.setGuiaRecolhimento(req.getGuiaRecolhimento());
+        e.setNumeroSeeu(req.getNumeroSeeu());
+        e.setDataDistribuicao(req.getDataDistribuicao());
+        e.setObservacoes(req.getObservacoes());
+        if (req.getPeriodicidade() != null) e.getProcesso().setPeriodicidade(req.getPeriodicidade());
+        if (!nova.isComparecimentoPeriodico()) e.getProcesso().setPeriodicidade(null);
+        if (e.getSituacaoExecucao() == SituacaoExecucao.EM_CUMPRIMENTO) e.ajustarAgendaDoProcesso();
+        if (mudancas.length() > 0) registrarNoHistorico(e, "Dados alterados: " + mudancas, por);
+        return toResponse(e);
+    }
+
+    private ExecucaoPenal buscar(Long id) {
+        return execucaoPenalRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Execução não encontrada: " + id));
+    }
+
+    // trilha sem tabela nova: providencia ja concluida
+    private void registrarNoHistorico(ExecucaoPenal e, String texto, String por) {
+        providenciaRepository.save(Providencia.builder()
+                .execucaoPenal(e)
+                .tipo(TipoProvidencia.CERTIFICAR)
+                .descricao(texto.length() > 500 ? texto.substring(0, 500) : texto)
+                .concluidaEm(TempoAtual.hoje())
+                .concluidaPor(por)
+                .registradoPor(por)
+                .build());
     }
 
     @Transactional
@@ -355,6 +469,26 @@ public class ExecucaoPenalService {
             criarAutomatica(e, TipoProvidencia.OFICIAR, "Solicitar laudo atualizado ao CAPS", PRAZO_LAUDO_DIAS);
         }
         return ProvidenciaResponse.fromEntity(p);
+    }
+
+    @Transactional
+    public ProvidenciaResponse editarProvidencia(Long providenciaId, RegistroProvidenciaRequest req) {
+        Providencia p = providenciaRepository.findById(providenciaId)
+                .orElseThrow(() -> new EntityNotFoundException("Providência não encontrada: " + providenciaId));
+        if (!p.isPendente()) throw new IllegalArgumentException("Providência concluída não pode ser editada");
+        p.setTipo(req.getTipo());
+        p.setDescricao(req.getDescricao() != null ? req.getDescricao().trim() : null);
+        p.setPrazo(req.getPrazo());
+        p.setPrioritaria(req.isPrioritaria());
+        return ProvidenciaResponse.fromEntity(p);
+    }
+
+    @Transactional
+    public void excluirProvidencia(Long providenciaId) {
+        Providencia p = providenciaRepository.findById(providenciaId)
+                .orElseThrow(() -> new EntityNotFoundException("Providência não encontrada: " + providenciaId));
+        if (!p.isPendente()) throw new IllegalArgumentException("Providência concluída faz parte do histórico e não pode ser excluída");
+        providenciaRepository.delete(p);
     }
 
     @Transactional(readOnly = true)

@@ -24,9 +24,27 @@ public class HistoricoEnderecoService {
     private final HistoricoEnderecoRepository historicoEnderecoRepository;
     private final PessoaMonitoradaRepository custodiadoRepository;
 
-    /**
-     * Busca histórico completo de endereços de uma pessoa
-     */
+    @Transactional
+    public HistoricoEnderecoDTO registrarEndereco(Long pessoaId, HistoricoEnderecoDTO dto, String por) {
+        PessoaMonitorada pessoa = custodiadoRepository.findById(pessoaId)
+                .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException("Pessoa não encontrada: " + pessoaId));
+        for (String campo : new String[]{dto.getCep(), dto.getLogradouro(), dto.getBairro(), dto.getCidade(), dto.getEstado()}) {
+            if (campo == null || campo.trim().isEmpty())
+                throw new IllegalArgumentException("CEP, logradouro, bairro, cidade e UF são obrigatórios");
+        }
+        historicoEnderecoRepository.desativarTodosEnderecosPorCustodiado(pessoaId);
+        HistoricoEndereco salvo = historicoEnderecoRepository.save(HistoricoEndereco.builder()
+                .custodiado(pessoa).cep(dto.getCep()).logradouro(dto.getLogradouro().trim())
+                .numero(dto.getNumero()).complemento(dto.getComplemento()).bairro(dto.getBairro().trim())
+                .cidade(dto.getCidade().trim()).estado(dto.getEstado().trim().toUpperCase())
+                .dataInicio(dto.getDataInicio() != null ? dto.getDataInicio() : LocalDate.now())
+                .ativo(Boolean.TRUE)
+                .motivoAlteracao(dto.getMotivoAlteracao() != null ? dto.getMotivoAlteracao() : "Endereço informado pela ficha")
+                .validadoPor(por).build());
+        historicoEnderecoRepository.desativarOutrosEnderecosAtivos(pessoaId, salvo.getId());
+        return convertToDTO(salvo);
+    }
+
     @Transactional(readOnly = true)
     public List<HistoricoEnderecoDTO> buscarHistoricoPorCustodiado(Long pessoaId) {
         log.info("Buscando histórico de endereços - Pessoa monitorada ID: {}", pessoaId);

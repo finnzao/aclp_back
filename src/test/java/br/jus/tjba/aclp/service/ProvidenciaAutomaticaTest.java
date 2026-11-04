@@ -35,7 +35,7 @@ class ProvidenciaAutomaticaTest {
     private Processo processo() {
         PessoaMonitorada p = PessoaMonitorada.builder().nome("Teste").build();
         Processo pr = Processo.builder().numeroProcesso("0000001-00.2026.8.05.0001")
-                .custodiado(p).naturezaVinculo(NaturezaVinculo.EXECUCAO_REGIME_ABERTO)
+                .custodiado(p).naturezaVinculo(NaturezaVinculo.EXECUCAO_PENAL)
                 .periodicidade(30).proximoComparecimento(LocalDate.of(2026, 11, 1)).build();
         pr.setId(10L);
         when(procRepo.findById(10L)).thenReturn(Optional.of(pr));
@@ -69,6 +69,17 @@ class ProvidenciaAutomaticaTest {
         ArgumentCaptor<Providencia> cap = ArgumentCaptor.forClass(Providencia.class);
         verify(provRepo).save(cap.capture());
         assertEquals(TipoProvidencia.OFICIAR, cap.getValue().getTipo());
+    }
+
+    @Test
+    void retificarTerminoRecalculaPenaEMantemRemicao() {
+        ExecucaoPenal e = ExecucaoPenal.builder().dataInicioCumprimento(LocalDate.of(2026, 1, 1))
+                .penaTotalDias(365).dataTerminoOriginal(LocalDate.of(2026, 12, 31)).dataTerminoPrevista(LocalDate.of(2026, 12, 21))
+                .diasRemidos(10).build();
+        e.retificarTermino(LocalDate.of(2027, 1, 30));
+        assertEquals(395, e.getPenaTotalDias());
+        assertEquals(LocalDate.of(2027, 1, 20), e.getDataTerminoPrevista());
+        assertThrows(IllegalArgumentException.class, () -> e.retificarTermino(LocalDate.of(2025, 12, 31)));
     }
 
     @Test

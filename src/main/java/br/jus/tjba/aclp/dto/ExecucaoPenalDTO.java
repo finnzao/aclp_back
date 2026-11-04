@@ -89,12 +89,82 @@ public class ExecucaoPenalDTO {
     }
 
     @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class RetificarTerminoRequest {
+
+        @NotNull(message = "Nova data de término é obrigatória")
+        @JsonFormat(pattern = "yyyy-MM-dd")
+        private LocalDate novoTermino;
+
+        @NotBlank(message = "Motivo é obrigatório")
+        @Size(max = 400)
+        private String motivo;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class MotivoRequest {
+        @NotBlank(message = "Motivo é obrigatório")
+        @Size(max = 400)
+        private String motivo;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class ExtincaoRequest {
+        @NotNull(message = "Data da sentença é obrigatória")
+        @JsonFormat(pattern = "yyyy-MM-dd")
+        private LocalDate dataSentenca;
+
+        @NotBlank(message = "Descrição é obrigatória")
+        @Size(max = 1000)
+        private String descricao;
+    }
+
+    // so dados cadastrais; pena e termino tem acoes proprias
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class EdicaoExecucaoRequest {
+        @NotBlank
+        @Pattern(regexp = "\\d{7}-\\d{2}\\.\\d{4}\\.\\d{1}\\.\\d{2}\\.\\d{4}",
+                message = "Número da execução deve seguir o padrão CNJ: 0000000-00.0000.0.00.0000")
+        private String numeroExecucao;
+
+        @NotNull
+        private ModalidadeExecucao modalidade;
+
+        @Min(1) @Max(365)
+        private Integer periodicidade;
+
+        @Size(max = 50)
+        private String guiaRecolhimento;
+
+        @Size(max = 30)
+        private String numeroSeeu;
+
+        @JsonFormat(pattern = "yyyy-MM-dd")
+        private LocalDate dataDistribuicao;
+
+        @Size(max = 500)
+        private String observacoes;
+    }
+
+    @Data
     @Builder
     public static class ExecucaoPenalResponse {
         private Long id;
         private Long processoId;
         private String numeroProcesso;
         private String custodiadoNome;
+        private Integer periodicidade;
         private ModalidadeExecucao modalidade;
         private String modalidadeDescricao;
         private LocalDate dataDistribuicao;
@@ -125,6 +195,7 @@ public class ExecucaoPenalDTO {
                     .numeroProcesso(e.getProcesso().getNumeroProcesso())
                     .custodiadoNome(e.getProcesso().getCustodiado() != null
                             ? e.getProcesso().getCustodiado().getNome() : null)
+                    .periodicidade(e.getProcesso().getPeriodicidade())
                     .modalidade(e.getModalidade())
                     .modalidadeDescricao(e.getModalidade().getDescricao())
                     .dataDistribuicao(e.getDataDistribuicao())

@@ -20,14 +20,14 @@ class NaturezaMonitoramentoTest {
     @Test
     void execucaoAtivaVence() {
         PessoaMonitorada c = PessoaMonitorada.builder().build();
-        c.getProcessos().add(processo(NaturezaVinculo.EXECUCAO_REGIME_ABERTO, SituacaoProcesso.ATIVO));
+        c.getProcessos().add(processo(NaturezaVinculo.EXECUCAO_PENAL, SituacaoProcesso.ATIVO));
         assertEquals("EXECUCAO", c.getNaturezaMonitoramento());
     }
 
     @Test
     void execucaoEncerradaNaoConta() {
         PessoaMonitorada c = PessoaMonitorada.builder().build();
-        c.getProcessos().add(processo(NaturezaVinculo.EXECUCAO_REGIME_ABERTO, SituacaoProcesso.ENCERRADO));
+        c.getProcessos().add(processo(NaturezaVinculo.EXECUCAO_PENAL, SituacaoProcesso.ENCERRADO));
         c.getProcessos().add(processo(NaturezaVinculo.CAUTELAR, SituacaoProcesso.ATIVO));
         assertEquals("CAUTELAR", c.getNaturezaMonitoramento());
     }
@@ -36,7 +36,7 @@ class NaturezaMonitoramentoTest {
     void ambasAtivasEhMisto() {
         PessoaMonitorada c = PessoaMonitorada.builder().build();
         c.getProcessos().add(processo(NaturezaVinculo.CAUTELAR, SituacaoProcesso.ATIVO));
-        c.getProcessos().add(processo(NaturezaVinculo.EXECUCAO_REGIME_ABERTO, SituacaoProcesso.ATIVO));
+        c.getProcessos().add(processo(NaturezaVinculo.EXECUCAO_PENAL, SituacaoProcesso.ATIVO));
         assertEquals("MISTO", c.getNaturezaMonitoramento());
     }
 }

@@ -28,6 +28,16 @@ public class HistoricoEnderecoController {
 
     private final HistoricoEnderecoService historicoEnderecoService;
 
+    @PostMapping("/pessoa/{pessoaId}")
+    @Operation(summary = "Registrar endereço atual", description = "Desativa o anterior e abre um novo ativo na trilha.")
+    public ResponseEntity<ApiResponse<HistoricoEnderecoDTO>> registrar(
+            @PathVariable Long pessoaId,
+            @RequestBody HistoricoEnderecoDTO dto,
+            org.springframework.security.core.Authentication auth) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success("Endereço registrado",
+                historicoEnderecoService.registrarEndereco(pessoaId, dto, auth.getName())));
+    }
+
     @GetMapping("/pessoa/{pessoaId}")
     @Operation(summary = "Histórico completo de endereços",
             description = "Retorna o histórico completo de endereços de uma pessoa ordenado por data de início")

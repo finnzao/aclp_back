@@ -56,9 +56,9 @@ class NaturezaVinculoTest {
     @Test
     @DisplayName("prePersist não sobrescreve natureza já informada")
     void prePersistPreservaNaturezaInformada() {
-        Processo execucao = processoCom(NaturezaVinculo.EXECUCAO_REGIME_ABERTO);
+        Processo execucao = processoCom(NaturezaVinculo.EXECUCAO_PENAL);
 
-        assertEquals(NaturezaVinculo.EXECUCAO_REGIME_ABERTO, execucao.getNaturezaVinculo());
+        assertEquals(NaturezaVinculo.EXECUCAO_PENAL, execucao.getNaturezaVinculo());
         assertTrue(execucao.isExecucao());
     }
 
@@ -76,7 +76,7 @@ class NaturezaVinculoTest {
         // O ganho de estender em vez de duplicar o modelo é exatamente este: a
         // execução de pena reaproveita o ciclo de comparecimento sem bifurcação.
         Processo cautelar = processoCom(NaturezaVinculo.CAUTELAR);
-        Processo execucao = processoCom(NaturezaVinculo.EXECUCAO_REGIME_ABERTO);
+        Processo execucao = processoCom(NaturezaVinculo.EXECUCAO_PENAL);
 
         assertEquals(cautelar.getProximoComparecimento(), execucao.getProximoComparecimento());
         assertEquals(cautelar.getStatus(), execucao.getStatus());
@@ -87,7 +87,7 @@ class NaturezaVinculoTest {
     @Test
     @DisplayName("isExecucao concentra a decisão de natureza num ponto só")
     void isExecucaoDistingueAsDuas() {
-        assertTrue(processoCom(NaturezaVinculo.EXECUCAO_REGIME_ABERTO).isExecucao());
+        assertTrue(processoCom(NaturezaVinculo.EXECUCAO_PENAL).isExecucao());
         assertFalse(processoCom(NaturezaVinculo.CAUTELAR).isExecucao());
     }
 }

@@ -107,7 +107,7 @@ public class ComparecimentoController {
             catch (IllegalArgumentException e) {
                 // aceita tambem o apelido curto usado no frontend
                 if ("EXECUCAO".equalsIgnoreCase(natureza))
-                    naturezaEnum = br.jus.tjba.aclp.model.enums.NaturezaVinculo.EXECUCAO_REGIME_ABERTO;
+                    naturezaEnum = br.jus.tjba.aclp.model.enums.NaturezaVinculo.EXECUCAO_PENAL;
                 else log.warn("Natureza de vínculo inválida ignorada: {}", natureza);
             }
         }

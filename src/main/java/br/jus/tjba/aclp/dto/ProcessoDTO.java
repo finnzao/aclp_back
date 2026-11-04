@@ -32,12 +32,12 @@ public class ProcessoDTO {
     @Size(max = 100, message = "Comarca deve ter no máximo 100 caracteres")
     private String comarca;
 
+    // obrigatoria na cautelar; na execucao assume o inicio da pena
     @JsonFormat(pattern = "yyyy-MM-dd")
-    @NotNull(message = "Data da decisão é obrigatória")
     @PastOrPresent(message = "Data da decisão não pode ser futura")
     private LocalDate dataDecisao;
 
-    @NotNull(message = "Periodicidade é obrigatória")
+    // obrigatoria na cautelar e nas modalidades com agenda (validado no service)
     @Min(value = 1, message = "Periodicidade mínima é 1 dia")
     @Max(value = 365, message = "Periodicidade máxima é 365 dias")
     private Integer periodicidade;
@@ -51,4 +51,8 @@ public class ProcessoDTO {
 
     /** Opcional — ausente = CAUTELAR (comportamento atual preservado). */
     private NaturezaVinculo naturezaVinculo;
+
+    // obrigatorio na execucao: a pena nasce na mesma transacao
+    @jakarta.validation.Valid
+    private ExecucaoPenalDTO.RegistroPenaRequest pena;
 }

@@ -45,7 +45,7 @@ class CadastroExecucaoFlexivelTest {
 
     @Test
     void prdSemPeriodicidadeEnderecoEDecisaoCadastra() {
-        var r = service.cadastroInicial(base().naturezaVinculo(NaturezaVinculo.EXECUCAO_REGIME_ABERTO)
+        var r = service.cadastroInicial(base().naturezaVinculo(NaturezaVinculo.EXECUCAO_PENAL)
                 .pena(pena(ModalidadeExecucao.PRD)).build());
         ArgumentCaptor<Processo> cap = ArgumentCaptor.forClass(Processo.class);
         verify(procRepo).save(cap.capture());
@@ -57,7 +57,7 @@ class CadastroExecucaoFlexivelTest {
 
     @Test
     void abertoExigePeriodicidade() {
-        var dto = base().naturezaVinculo(NaturezaVinculo.EXECUCAO_REGIME_ABERTO).pena(pena(ModalidadeExecucao.ABERTO)).build();
+        var dto = base().naturezaVinculo(NaturezaVinculo.EXECUCAO_PENAL).pena(pena(ModalidadeExecucao.ABERTO)).build();
         assertThrows(IllegalArgumentException.class, () -> service.cadastroInicial(dto));
     }
 

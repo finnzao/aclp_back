@@ -36,6 +36,7 @@ public class ProcessoService {
 
     private final ProcessoRepository processoRepository;
     private final PessoaMonitoradaRepository custodiadoRepository;
+    private final ExecucaoPenalService execucaoPenalService;
 
     /**
      * CORREÇÃO DE PERFORMANCE: Busca processos de múltiplos custodiados em uma query.
@@ -116,19 +117,37 @@ public class ProcessoService {
         PessoaMonitorada custodiado = custodiadoRepository.findById(dto.getCustodiadoId())
                 .orElseThrow(() -> new EntityNotFoundException("Pessoa monitorada não encontrada: " + dto.getCustodiadoId()));
 
+        boolean execucao = dto.getNaturezaVinculo() == NaturezaVinculo.EXECUCAO_PENAL;
+        if (execucao && dto.getPena() == null)
+            throw new IllegalArgumentException("Processo de execução exige o bloco 'pena' com os dados da sentença.");
+        boolean temAgenda = !execucao || dto.getPena().getModalidade() == null
+                || dto.getPena().getModalidade().isComparecimentoPeriodico();
+        if (temAgenda && dto.getPeriodicidade() == null)
+            throw new IllegalArgumentException("Periodicidade é obrigatória nesta modalidade");
+        if (!execucao && dto.getDataDecisao() == null)
+            throw new IllegalArgumentException("Data da decisão é obrigatória");
+        LocalDate dataDecisao = dto.getDataDecisao() != null ? dto.getDataDecisao()
+                : (execucao ? dto.getPena().getDataInicio() : null);
+        LocalDate dataCompInicial = dto.getDataComparecimentoInicial() != null
+                ? dto.getDataComparecimentoInicial() : LocalDate.now();
+
         Processo processo = Processo.builder()
                 .custodiado(custodiado).numeroProcesso(dto.getNumeroProcesso())
                 .vara(dto.getVara().trim()).comarca(dto.getComarca().trim())
-                .dataDecisao(dto.getDataDecisao()).periodicidade(dto.getPeriodicidade())
-                .dataComparecimentoInicial(dto.getDataComparecimentoInicial())
-                .ultimoComparecimento(dto.getDataComparecimentoInicial())
+                .dataDecisao(dataDecisao).periodicidade(temAgenda ? dto.getPeriodicidade() : null)
+                .dataComparecimentoInicial(dataCompInicial)
+                .ultimoComparecimento(dataCompInicial)
                 .status(StatusComparecimento.EM_CONFORMIDADE).situacaoProcesso(SituacaoProcesso.ATIVO)
-                .naturezaVinculo(dto.getNaturezaVinculo() != null
-                        ? dto.getNaturezaVinculo() : NaturezaVinculo.CAUTELAR)
+                .naturezaVinculo(execucao ? NaturezaVinculo.EXECUCAO_PENAL : NaturezaVinculo.CAUTELAR)
                 .observacoes(dto.getObservacoes()).build();
 
         processo.calcularProximoComparecimento();
-        return ProcessoResponseDTO.fromEntity(processoRepository.save(processo));
+        Processo salvo = processoRepository.save(processo);
+        if (execucao) {
+            dto.getPena().setProcessoId(salvo.getId());
+            execucaoPenalService.registrarPena(dto.getPena());
+        }
+        return ProcessoResponseDTO.fromEntity(salvo);
     }
 
     @Transactional

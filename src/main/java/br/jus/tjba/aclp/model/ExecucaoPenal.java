@@ -150,6 +150,15 @@ public class ExecucaoPenal {
         dataTerminoPrevista = calcularTerminoPrevisto();
     }
 
+    // interrupcao ou atestado novo do SEEU: move a data original; abatimentos continuam valendo
+    public void retificarTermino(LocalDate novoTermino) {
+        if (novoTermino == null || novoTermino.isBefore(dataInicioCumprimento))
+            throw new IllegalArgumentException("Novo término não pode ser anterior ao início do cumprimento");
+        dataTerminoOriginal = novoTermino;
+        penaTotalDias = calcularPenaDias(dataInicioCumprimento, novoTermino);
+        dataTerminoPrevista = calcularTerminoPrevisto();
+    }
+
     public boolean temPena() {
         return penaTotalDias != null && dataTerminoOriginal != null;
     }
@@ -187,6 +196,39 @@ public class ExecucaoPenal {
             }
             case NAO_JUSTIFICADO, AGUARDANDO -> { /* segue aguardando decisão de regressão */ }
         }
+    }
+
+    // prisao em outro processo ou decisao judicial: para a cobranca sem mexer na pena
+    public void suspender() {
+        if (situacaoExecucao == SituacaoExecucao.EXTINTA || situacaoExecucao == SituacaoExecucao.REGREDIDA
+                || situacaoExecucao == SituacaoExecucao.SUSPENSA)
+            throw new IllegalArgumentException("Execução " + situacaoExecucao.getDescricao().toLowerCase() + " não pode ser suspensa");
+        situacaoExecucao = SituacaoExecucao.SUSPENSA;
+        encerrarCobrancaDoProcesso(br.jus.tjba.aclp.model.enums.SituacaoProcesso.SUSPENSO);
+    }
+
+    public void retomar() {
+        if (situacaoExecucao != SituacaoExecucao.SUSPENSA)
+            throw new IllegalArgumentException("Só execução suspensa pode ser retomada");
+        situacaoExecucao = SituacaoExecucao.EM_CUMPRIMENTO;
+        if (processo != null) {
+            processo.setSituacaoProcesso(br.jus.tjba.aclp.model.enums.SituacaoProcesso.ATIVO);
+            ajustarAgendaDoProcesso();
+        }
+    }
+
+    // agenda so nas modalidades com comparecimento; o ciclo reinicia hoje
+    public void ajustarAgendaDoProcesso() {
+        if (processo == null) return;
+        if (modalidade.isComparecimentoPeriodico() && processo.getPeriodicidade() != null) {
+            if (processo.getProximoComparecimento() == null) {
+                processo.setUltimoComparecimento(br.jus.tjba.aclp.util.TempoAtual.hoje());
+                processo.calcularProximoComparecimento();
+            }
+        } else {
+            processo.setProximoComparecimento(null);
+        }
+        processo.atualizarStatusBaseadoEmData();
     }
 
     // quem saiu do regime (preso ou pena quitada) nao pode continuar sendo cobrado

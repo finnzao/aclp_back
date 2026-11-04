@@ -194,7 +194,7 @@ public class Processo {
 
     /** Ponto único para distinguir execução de pena — nunca espalhar comparação de enum por serviço. */
     public boolean isExecucao() {
-        return naturezaVinculo == NaturezaVinculo.EXECUCAO_REGIME_ABERTO;
+        return naturezaVinculo == NaturezaVinculo.EXECUCAO_PENAL;
     }
 
     public long getDiasAtraso() {

@@ -94,7 +94,7 @@ public class CadastroInicialDTO {
     /** Opcional — ausente = CAUTELAR (comportamento atual preservado). */
     private NaturezaVinculo naturezaVinculo;
 
-    // obrigatorio quando naturezaVinculo = EXECUCAO_REGIME_ABERTO (validado no service);
+    // obrigatorio quando naturezaVinculo = EXECUCAO_PENAL (validado no service);
     // processoId e ignorado — o service usa o processo criado nesta transacao
     @Valid
     private ExecucaoPenalDTO.RegistroPenaRequest pena;
