@@ -40,24 +40,22 @@ public class PessoaMonitoradaDTO {
             message = "Contato deve conter apenas números e caracteres de formatação")
     private String contato;
 
-    @NotBlank(message = "Processo é obrigatório")
+    // processo, vara, comarca, decisao, periodicidade e endereco: obrigatorios so na criacao
+    // (validados no service). Na edicao a tela nao envia os dados processuais, e os
+    // @NotBlank/@NotNull aqui faziam todo PUT /pessoas-monitoradas/{id} falhar.
     @Pattern(regexp = "[\\d.-]+",
             message = "Processo deve conter apenas números, pontos e hífens")
     private String processo;
 
-    @NotBlank(message = "Vara é obrigatória")
     @Size(max = 100, message = "Vara deve ter no máximo 100 caracteres")
     private String vara;
 
-    @NotBlank(message = "Comarca é obrigatória")
     @Size(max = 100, message = "Comarca deve ter no máximo 100 caracteres")
     private String comarca;
 
     @JsonFormat(pattern = "yyyy-MM-dd")
-    @NotNull(message = "Data da decisão é obrigatória")
     private LocalDate dataDecisao;
 
-    @NotNull(message = "Periodicidade é obrigatória")
     private Integer periodicidade;
 
     @JsonFormat(pattern = "yyyy-MM-dd")
@@ -74,12 +72,10 @@ public class PessoaMonitoradaDTO {
     @Size(max = 500, message = "Observações deve ter no máximo 500 caracteres")
     private String observacoes;
 
-    @NotBlank(message = "CEP é obrigatório")
-    @Pattern(regexp = "\\d{5}-?\\d{3}|\\d{8}", message = "CEP deve ter o formato 00000-000 ou apenas números")
+    @Pattern(regexp = "\\d{5}-?\\d{3}|\\d{8}|", message = "CEP deve ter o formato 00000-000 ou apenas números")
     private String cep;
 
-    @NotBlank(message = "Logradouro é obrigatório")
-    @Size(min = 5, max = 200, message = "Logradouro deve ter entre 5 e 200 caracteres")
+    @Size(max = 200, message = "Logradouro deve ter no máximo 200 caracteres")
     private String logradouro;
 
     @Size(max = 20, message = "Número deve ter no máximo 20 caracteres")
@@ -88,17 +84,13 @@ public class PessoaMonitoradaDTO {
     @Size(max = 100, message = "Complemento deve ter no máximo 100 caracteres")
     private String complemento;
 
-    @NotBlank(message = "Bairro é obrigatório")
-    @Size(min = 2, max = 100, message = "Bairro deve ter entre 2 e 100 caracteres")
+    @Size(max = 100, message = "Bairro deve ter no máximo 100 caracteres")
     private String bairro;
 
-    @NotBlank(message = "Cidade é obrigatória")
-    @Size(min = 2, max = 100, message = "Cidade deve ter entre 2 e 100 caracteres")
+    @Size(max = 100, message = "Cidade deve ter no máximo 100 caracteres")
     private String cidade;
 
-    @NotBlank(message = "Estado é obrigatório")
-    @Size(min = 2, max = 2, message = "Estado deve ter exatamente 2 caracteres")
-    @Pattern(regexp = "[A-Z]{2}", message = "Estado deve ser uma sigla válida com 2 letras maiúsculas")
+    @Pattern(regexp = "[A-Z]{2}|", message = "Estado deve ser uma sigla válida com 2 letras maiúsculas")
     private String estado;
 
     public boolean hasDocumento() {

@@ -16,7 +16,8 @@ import java.time.LocalDate;
 @Builder
 public class ProcessoDTO {
 
-    @NotNull(message = "ID do custodiado é obrigatório")
+    // obrigatorio so na criacao (validado no service); a edicao nao troca a pessoa
+    // e o @NotNull aqui fazia todo PUT /processos/{id} falhar
     private Long custodiadoId;
 
     @NotBlank(message = "Número do processo é obrigatório")

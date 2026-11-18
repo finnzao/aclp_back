@@ -115,6 +115,8 @@ public class ProcessoService {
 
     @Transactional
     public ProcessoResponseDTO criarProcesso(ProcessoDTO dto) {
+        if (dto.getCustodiadoId() == null)
+            throw new IllegalArgumentException("ID do custodiado é obrigatório");
         PessoaMonitorada custodiado = custodiadoRepository.findById(dto.getCustodiadoId())
                 .orElseThrow(() -> new EntityNotFoundException("Pessoa monitorada não encontrada: " + dto.getCustodiadoId()));
 
@@ -155,6 +157,8 @@ public class ProcessoService {
     public ProcessoResponseDTO atualizarProcesso(Long id, ProcessoDTO dto) {
         Processo processo = processoRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Processo não encontrado: " + id));
+        if (dto.getDataComparecimentoInicial().isAfter(br.jus.tjba.aclp.util.TempoAtual.hoje()))
+            throw new IllegalArgumentException("Data do comparecimento inicial não pode ser futura");
         processo.setNumeroProcesso(dto.getNumeroProcesso());
         processo.setVara(dto.getVara().trim());
         processo.setComarca(dto.getComarca().trim());

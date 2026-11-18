@@ -327,7 +327,30 @@ public class CadastroPessoaService {
         custodiado.setRg(dto.getRg());
         custodiado.setContato(dto.getContatoEfetivo());
         custodiado.setObservacoes(dto.getObservacoes() != null ? dto.getObservacoes().trim() : null);
-        return custodiadoRepository.save(custodiado);
+        PessoaMonitorada salvo = custodiadoRepository.save(custodiado);
+        corrigirEnderecoAtual(salvo, dto);
+        return salvo;
+    }
+
+    /**
+     * Correcao cadastral do endereco atual, no proprio registro. Mudanca de endereco
+     * (com historico) continua sendo feita no comparecimento.
+     */
+    private void corrigirEnderecoAtual(PessoaMonitorada custodiado, PessoaMonitoradaDTO dto) {
+        if (!dto.hasEnderecoCompleto()) return;
+        HistoricoEndereco e = historicoEnderecoRepository.findEnderecoAtivoPorCustodiado(custodiado.getId())
+                .orElseGet(() -> HistoricoEndereco.builder()
+                        .custodiado(custodiado).dataInicio(LocalDate.now()).ativo(Boolean.TRUE)
+                        .motivoAlteracao("Endereço informado na edição do cadastro")
+                        .validadoPor("Sistema SCC").build());
+        e.setCep(formatarCep(dto.getCep().trim()));
+        e.setLogradouro(dto.getLogradouro().trim());
+        e.setNumero(temTexto(dto.getNumero()) ? dto.getNumero().trim() : null);
+        e.setComplemento(temTexto(dto.getComplemento()) ? dto.getComplemento().trim() : null);
+        e.setBairro(dto.getBairro().trim());
+        e.setCidade(dto.getCidade().trim());
+        e.setEstado(dto.getEstado().trim().toUpperCase());
+        historicoEnderecoRepository.save(e);
     }
 
     private void criarHistoricoEnderecoInicial(PessoaMonitorada custodiado, PessoaMonitoradaDTO dto) {
