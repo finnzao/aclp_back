@@ -108,7 +108,6 @@ public class ExecucaoPenal {
     @Builder.Default
     private Long version = 0L;
 
-    /** SENTENCA: data final -> pena em dias. */
     public static int calcularPenaDias(LocalDate inicio, LocalDate termino) {
         if (inicio == null || termino == null)
             throw new IllegalArgumentException("Data de início e de término são obrigatórias");
@@ -117,7 +116,6 @@ public class ExecucaoPenal {
         return (int) ChronoUnit.DAYS.between(inicio, termino) + 1;
     }
 
-    /** DOSIMETRIA: anos/meses/dias -> data final pelo calendario. */
     public static LocalDate calcularTerminoPorTempo(LocalDate inicio, int anos, int meses, int dias) {
         if (inicio == null)
             throw new IllegalArgumentException("Data de início é obrigatória");
@@ -128,14 +126,12 @@ public class ExecucaoPenal {
         return inicio.plusYears(anos).plusMonths(meses).plusDays(dias).minusDays(1);
     }
 
-    /** LEP 126: 3 dias trabalhados ou 12h de estudo = 1 dia remido. */
     public static int calcularRemicao(int diasTrabalhados, int horasEstudo) {
         if (diasTrabalhados < 0 || horasEstudo < 0)
             throw new IllegalArgumentException("Dias trabalhados e horas de estudo não podem ser negativos");
         return diasTrabalhados / 3 + horasEstudo / 12;
     }
 
-    /** Soma remição já decidida; abatimentos nunca alcançam a pena inteira. */
     public void adicionarRemicao(int dias) {
         if (dias <= 0)
             throw new IllegalArgumentException("Remição deve ser de pelo menos 1 dia");
@@ -163,7 +159,6 @@ public class ExecucaoPenal {
         return penaTotalDias != null && dataTerminoOriginal != null;
     }
 
-    /** original - (detraidos + remidos). */
     public LocalDate calcularTerminoPrevisto() {
         if (dataTerminoOriginal == null) return null;
         int abatimento = (diasDetraidos != null ? diasDetraidos : 0)
@@ -171,7 +166,6 @@ public class ExecucaoPenal {
         return dataTerminoOriginal.minusDays(abatimento);
     }
 
-    /** Incidente que exige justificacao suspende a execucao (LEP 118 p2). */
     public void aoRegistrarIncidente(br.jus.tjba.aclp.model.enums.TipoIncidente tipo) {
         if (tipo.isExigeJustificacao() && situacaoExecucao == SituacaoExecucao.EM_CUMPRIMENTO) {
             situacaoExecucao = SituacaoExecucao.AGUARDANDO_JUSTIFICACAO;

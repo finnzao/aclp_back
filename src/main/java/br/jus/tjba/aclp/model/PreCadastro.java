@@ -10,9 +10,6 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * Entidade para armazenar pré-cadastros aguardando verificação de email
- */
 @Entity
 @Table(name = "pre_cadastros",
         indexes = {
@@ -31,108 +28,57 @@ public class PreCadastro {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /**
-     * Token do convite que originou este pré-cadastro
-     */
     @Column(name = "token_convite", nullable = false)
     private String tokenConvite;
 
-    /**
-     * Token único para verificação de email
-     */
     @Column(name = "token_verificacao", unique = true, nullable = false)
     private String tokenVerificacao;
 
-    /**
-     * Email do usuário (será o login)
-     */
     @Column(nullable = false, unique = true)
     private String email;
 
-    /**
-     * Nome completo do usuário
-     */
     @Column(nullable = false)
     private String nome;
 
-    /**
-     * Senha já criptografada
-     */
     @Column(nullable = false)
     private String senha;
 
-    /**
-     * Tipo de usuário que será criado
-     */
     @Enumerated(EnumType.STRING)
     @Column(name = "tipo_usuario", nullable = false)
     private TipoUsuario tipoUsuario;
 
-    /**
-     * Comarca herdada do convite
-     */
     @Column(length = 100)
     private String comarca;
 
-    /**
-     * Departamento herdado do convite
-     */
     @Column(length = 100)
     private String departamento;
 
-    /**
-     * Cargo informado pelo usuário
-     */
     @Column(length = 100)
     private String cargo;
 
-    /**
-     * IP de onde foi feito o pré-cadastro
-     */
     @Column(name = "ip_cadastro", length = 45)
     private String ipCadastro;
 
-    /**
-     * Data/hora do pré-cadastro
-     */
     @Column(name = "criado_em", nullable = false)
     private LocalDateTime criadoEm;
 
-    /**
-     * Data/hora de expiração para verificação (24h)
-     */
     @Column(name = "expira_em", nullable = false)
     private LocalDateTime expiraEm;
 
-    /**
-     * Se o email foi verificado
-     */
     @Column(nullable = false)
     @Builder.Default
     private Boolean verificado = false;
 
-    /**
-     * Data/hora da verificação
-     */
     @Column(name = "verificado_em")
     private LocalDateTime verificadoEm;
 
-    /**
-     * IP de onde foi verificado
-     */
     @Column(name = "ip_verificacao", length = 45)
     private String ipVerificacao;
 
-    /**
-     * Tentativas de verificação (para rate limiting)
-     */
     @Column(name = "tentativas_verificacao")
     @Builder.Default
     private Integer tentativasVerificacao = 0;
 
-    /**
-     * ID do usuário criado após verificação
-     */
     @Column(name = "usuario_criado_id")
     private Long usuarioCriadoId;
 
@@ -155,30 +101,18 @@ public class PreCadastro {
         }
     }
 
-    /**
-     * Verifica se o pré-cadastro ainda é válido
-     */
     public boolean isValido() {
         return !verificado && br.jus.tjba.aclp.util.TempoAtual.agora().isBefore(expiraEm);
     }
 
-    /**
-     * Verifica se expirou
-     */
     public boolean isExpirado() {
         return br.jus.tjba.aclp.util.TempoAtual.agora().isAfter(expiraEm);
     }
 
-    /**
-     * Verifica se foi verificado
-     */
     public boolean isVerificado() {
         return Boolean.TRUE.equals(verificado);
     }
 
-    /**
-     * Marca como verificado
-     */
     public void marcarVerificado(String ip, Long usuarioId) {
         this.verificado = true;
         this.verificadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
@@ -186,9 +120,6 @@ public class PreCadastro {
         this.usuarioCriadoId = usuarioId;
     }
 
-    /**
-     * Incrementa tentativas de verificação
-     */
     public void incrementarTentativas() {
         if (this.tentativasVerificacao == null) {
             this.tentativasVerificacao = 0;
@@ -196,9 +127,6 @@ public class PreCadastro {
         this.tentativasVerificacao++;
     }
 
-    /**
-     * Verifica se excedeu tentativas (máximo 5)
-     */
     public boolean excedeuTentativas() {
         return this.tentativasVerificacao != null && this.tentativasVerificacao >= 5;
     }

@@ -9,14 +9,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * DTOs para o sistema de verificação por email
- */
 public class EmailVerificationDTO {
 
-    /**
-     * DTO para solicitar código de verificação
-     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -32,9 +26,6 @@ public class EmailVerificationDTO {
         @Pattern(regexp = "ADMIN|USUARIO", message = "Tipo deve ser ADMIN ou USUARIO")
         private String tipoUsuario;
 
-        /**
-         * Limpa e formata o email
-         */
         public void limparEFormatarDados() {
             if (email != null) {
                 email = email.trim().toLowerCase();
@@ -44,9 +35,6 @@ public class EmailVerificationDTO {
             }
         }
 
-        /**
-         * Valida se email é institucional para ADMIN
-         */
         public boolean isEmailValidoParaTipo() {
             if ("ADMIN".equals(tipoUsuario)) {
                 return email != null && email.endsWith("@tjba.jus.br");
@@ -56,9 +44,6 @@ public class EmailVerificationDTO {
         }
     }
 
-    /**
-     * DTO para verificar código
-     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -73,9 +58,6 @@ public class EmailVerificationDTO {
         @Pattern(regexp = "\\d{6}", message = "Código deve ter 6 dígitos")
         private String codigo;
 
-        /**
-         * Limpa e formata os dados
-         */
         public void limparEFormatarDados() {
             if (email != null) {
                 email = email.trim().toLowerCase();
@@ -86,9 +68,6 @@ public class EmailVerificationDTO {
         }
     }
 
-    /**
-     * DTO de resposta para solicitação de código
-     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -103,9 +82,6 @@ public class EmailVerificationDTO {
         private String codigoId; // Hash do ID para rastreamento sem expor dados
     }
 
-    /**
-     * DTO de resposta para verificação de código
-     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -120,9 +96,6 @@ public class EmailVerificationDTO {
         private String validoAte;
     }
 
-    /**
-     * DTO para status de verificação
-     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -137,9 +110,6 @@ public class EmailVerificationDTO {
         private Boolean podeReenviar;
     }
 
-    /**
-     * DTO para reenvio de código
-     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -150,9 +120,6 @@ public class EmailVerificationDTO {
         @Email(message = "Email deve ser válido")
         private String email;
 
-        /**
-         * Limpa e formata o email
-         */
         public void limparEFormatarDados() {
             if (email != null) {
                 email = email.trim().toLowerCase();

@@ -16,9 +16,6 @@ import java.time.LocalDateTime;
  */
 public class ConviteDTO {
 
-    /**
-     * DTO para validar convite
-     */
     @Data
     @Builder
     @NoArgsConstructor
@@ -40,9 +37,6 @@ public class ConviteDTO {
         }
     }
 
-    /**
-     * DTO para criar convite específico (com email)
-     */
     @Data
     @Builder
     @NoArgsConstructor
@@ -56,9 +50,6 @@ public class ConviteDTO {
         private TipoUsuario tipoUsuario;
     }
 
-    /**
-     * DTO para resposta de convite
-     */
     @Data
     @Builder
     @NoArgsConstructor
@@ -78,9 +69,6 @@ public class ConviteDTO {
         private Long criadoPorId;
     }
 
-    /**
-     * DTO para ativar convite
-     */
     @Data
     @Builder
     @NoArgsConstructor
@@ -110,9 +98,6 @@ public class ConviteDTO {
         }
     }
 
-    /**
-     * DTO para resposta de ativação
-     */
     @Data
     @Builder
     @NoArgsConstructor
@@ -123,9 +108,6 @@ public class ConviteDTO {
         private UsuarioInfoDTO usuario;
     }
 
-    /**
-     * DTO com informações do usuário criado
-     */
     @Data
     @Builder
     @NoArgsConstructor
@@ -140,9 +122,6 @@ public class ConviteDTO {
         private String cargo;
     }
 
-    /**
-     * DTO para listagem de convites
-     */
     @Data
     @Builder
     @NoArgsConstructor
@@ -163,9 +142,6 @@ public class ConviteDTO {
         private Boolean usado;
     }
 
-    /**
-     * DTO para estatísticas de convites
-     */
     @Data
     @Builder
     @NoArgsConstructor
@@ -178,9 +154,6 @@ public class ConviteDTO {
         private Long cancelados;
     }
 
-    /**
-     * DTO para pré-cadastro
-     */
     @Data
     @Builder
     @NoArgsConstructor
@@ -214,9 +187,6 @@ public class ConviteDTO {
         }
     }
 
-    /**
-     * DTO para resposta de pré-cadastro
-     */
     @Data
     @Builder
     @NoArgsConstructor
@@ -228,9 +198,6 @@ public class ConviteDTO {
         private LocalDateTime expiracaoVerificacao;
     }
 
-    /**
-     * DTO para verificação de email
-     */
     @Data
     @Builder
     @NoArgsConstructor
@@ -240,9 +207,6 @@ public class ConviteDTO {
         private String token;
     }
 
-    /**
-     * DTO para resposta de verificação de email
-     */
     @Data
     @Builder
     @NoArgsConstructor
@@ -256,9 +220,6 @@ public class ConviteDTO {
         private String loginUrl = "/login";
     }
 
-    /**
-     * DTO para gerar link de convite (removido - não há mais convites genéricos)
-     */
     @Deprecated
     @Data
     @Builder
@@ -272,9 +233,6 @@ public class ConviteDTO {
         private Integer diasValidade = 30;
     }
 
-    /**
-     * DTO para resposta de link de convite (removido - não há mais convites genéricos)
-     */
     @Deprecated
     @Data
     @Builder

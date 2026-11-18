@@ -277,18 +277,10 @@ public class EmailVerificationController {
         ));
     }
 
-    // ========== MÉTODOS UTILITÁRIOS ==========
-
-    /**
-     * Extrai endereço IP do cliente considerando proxies
-     */
     private String getClientIpAddress(HttpServletRequest request) {
         return ClientIpUtil.extrair(request);
     }
 
-    /**
-     * Determina código de erro baseado na mensagem
-     */
     private String determinarCodigoErro(String mensagem) {
         if (mensagem.contains("institucional") || mensagem.contains("@tjba.jus.br")) {
             return "EMAIL_NAO_INSTITUCIONAL";
@@ -305,9 +297,6 @@ public class EmailVerificationController {
         return "VALIDATION_ERROR";
     }
 
-    /**
-     * Handler global para erros de validação
-     */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, String>> handleValidationError(IllegalArgumentException e, HttpServletRequest request) {
         String clientIp = getClientIpAddress(request);
@@ -321,9 +310,6 @@ public class EmailVerificationController {
                 ));
     }
 
-    /**
-     * Handler para erros gerais
-     */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, String>> handleGeneralError(Exception e, HttpServletRequest request) {
         String clientIp = getClientIpAddress(request);

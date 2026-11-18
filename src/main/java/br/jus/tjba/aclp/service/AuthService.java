@@ -69,35 +69,13 @@ public class AuthService {
     @Value("${aclp.auth.password-reset-token-hours:2}")
     private int passwordResetTokenHours;
 
-    @Value("${aclp.auth.mfa-enabled:false}")
-    private boolean mfaEnabled;
-
     @Value("${aclp.frontend.url:http://localhost:3000}")
     private String frontendUrl;
 
     private final SecureRandom secureRandom = new SecureRandom();
 
-    /**
-     * Impede subir com MFA "ligado" enquanto ele não existe.
-     *
-     * A propriedade promete um segundo fator que nenhum código verifica. Aceitá-la
-     * daria a operadores a impressão de proteção que não há — e é o tipo de engano
-     * que só aparece depois de um incidente. Mesma postura fail-closed do middleware
-     * do frontend quando falta JWT_SECRET.
-     */
-    @PostConstruct
-    void validarConfiguracaoMfa() {
-        if (mfaEnabled) {
-            throw new IllegalStateException(
-                    "aclp.auth.mfa-enabled=true, mas a autenticacao multifator nao esta implementada. " +
-                            "Defina a propriedade como false ate que o TOTP seja implementado.");
-        }
-    }
-
-    // =====================================================================
     // FIX #6: Job para limpeza de sessões expiradas (a cada 5 minutos)
     // Evita memory leak progressivo no ConcurrentHashMap
-    // =====================================================================
     @Scheduled(fixedRate = 300_000)
     public void limparSessoesExpiradas() {
         int antes = activeSessions.size();
@@ -135,24 +113,6 @@ public class AuthService {
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.getEmail(), request.getSenha())
             );
-
-            // MFA não está implementado: não há verificação TOTP nem provisionamento de
-            // segredo (a coluna mfa_secret nunca é preenchida). A conta com mfa_enabled=true
-            // não pode ser autenticada — deixar passar seria ignorar um segundo fator que o
-            // usuário pediu, e prosseguir para uma validação inexistente devolvia erro
-            // genérico de servidor, sem dizer o que fazer. Fail-closed, com saída acionável.
-            //
-            // A checagem fica DEPOIS de authenticate() de propósito: revelar antes quais
-            // contas têm MFA daria um oráculo de enumeração a quem não sabe a senha.
-            //
-            // Ao implementar TOTP, este bloco volta a ser o fluxo de desafio/resposta.
-            if (Boolean.TRUE.equals(usuario.getMfaEnabled())) {
-                log.warn("Login bloqueado: MFA habilitado para {} mas não implementado no sistema",
-                        usuario.getEmail());
-                throw new AuthenticationException(
-                        "Autenticacao multifator esta habilitada nesta conta, mas ainda nao foi " +
-                                "implementada no sistema. Peca a um administrador para desativa-la.");
-            }
 
             handleConcurrentSessions(usuario, request.isForceLogin());
 
@@ -649,7 +609,6 @@ public class AuthService {
                 .tipo(usuario.getTipo())
                 .departamento(usuario.getDepartamento())
                 .ultimoLogin(usuario.getUltimoLogin())
-                .mfaEnabled(usuario.getMfaEnabled())
                 .build();
     }
 

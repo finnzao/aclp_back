@@ -8,9 +8,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * DTO para alteração de senha do próprio usuário
- */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

@@ -54,10 +54,6 @@ public class PessoaMonitoradaService {
     private final ExecucaoPenalService execucaoPenalService;
     private final jakarta.persistence.EntityManager entityManager;
 
-    // =====================================================================
-    // CORREÇÃO DE PERFORMANCE: Novos métodos para busca paginada
-    // =====================================================================
-
     /**
      * CORREÇÃO DE PERFORMANCE: Busca paginada de custodiados com filtros.
      *
@@ -73,14 +69,6 @@ public class PessoaMonitoradaService {
      * @param ordenarPor Campo para ordenação (nome, proximoComparecimento, status, etc.)
      * @param direcao   Direção da ordenação (asc ou desc)
      */
-    // =====================================================================
-    // CADASTRO INICIAL — cria tudo em uma única transação (inalterado)
-    // =====================================================================
-
-    // =====================================================================
-    // Métodos existentes (inalterados)
-    // =====================================================================
-
     @Transactional(readOnly = true)
     public Optional<PessoaMonitorada> findByPublicId(String publicIdStr) {
         if (publicIdStr == null || publicIdStr.trim().isEmpty())
@@ -246,10 +234,6 @@ public class PessoaMonitoradaService {
     public String getCidadeEstado(Long id) {
         return historicoEnderecoRepository.findEnderecoAtivoPorCustodiado(id).map(e -> e.getCidade() + " - " + e.getEstado()).orElse("Não informado");
     }
-
-    // =====================================================================
-    // Métodos privados (inalterados)
-    // =====================================================================
 
     private UUID parseUuid(String v) {
         try { return UUID.fromString(v); } catch (IllegalArgumentException e) { throw new EntityNotFoundException("Identificador inválido: " + v); }

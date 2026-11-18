@@ -63,8 +63,6 @@ public class PessoaMonitoradaCreateDTO {
     @Size(max = 500, message = "Observações deve ter no máximo 500 caracteres")
     private String observacoes;
 
-    // === CAMPOS DE ENDEREÇO - OBRIGATÓRIOS ===
-
     @NotBlank(message = "CEP é obrigatório")
     @Pattern(regexp = "\\d{5}-?\\d{3}", message = "CEP deve ter o formato 00000-000")
     private String cep;
@@ -92,9 +90,6 @@ public class PessoaMonitoradaCreateDTO {
     @Pattern(regexp = "[A-Z]{2}", message = "Estado deve ser uma sigla válida com 2 letras maiúsculas")
     private String estado;
 
-    /**
-     *  Converter para PessoaMonitoradaDTO para compatibilidade com service
-     */
     public PessoaMonitoradaDTO toPessoaMonitoradaDTO() {
         return PessoaMonitoradaDTO.builder()
                 .nome(this.nome)
@@ -118,17 +113,11 @@ public class PessoaMonitoradaCreateDTO {
                 .build();
     }
 
-    /**
-     * Valida se pelo menos um documento foi fornecido
-     */
     public boolean hasDocumento() {
         return (cpf != null && !cpf.trim().isEmpty()) ||
                 (rg != null && !rg.trim().isEmpty());
     }
 
-    /**
-     * Valida se todos os campos obrigatórios de endereço estão preenchidos
-     */
     public boolean hasEnderecoCompleto() {
         return cep != null && !cep.trim().isEmpty() &&
                 logradouro != null && !logradouro.trim().isEmpty() &&
@@ -137,9 +126,6 @@ public class PessoaMonitoradaCreateDTO {
                 estado != null && !estado.trim().isEmpty();
     }
 
-    /**
-     * Limpa e formata os dados antes da validação
-     */
     public void limparEFormatarDados() {
         if (nome != null) nome = nome.trim();
         if (cpf != null) cpf = cpf.trim();

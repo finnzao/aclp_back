@@ -177,10 +177,6 @@ public class CadastroPessoaService {
                 .build();
     }
 
-    // =====================================================================
-    // Validações (inalteradas)
-    // =====================================================================
-
     private static boolean temTexto(String s) { return s != null && !s.trim().isEmpty(); }
 
     private void validarCadastroInicial(CadastroInicialDTO dto) {
@@ -245,7 +241,6 @@ public class CadastroPessoaService {
         }
     }
 
-
     @Transactional
     public PessoaMonitorada updateByPublicId(String publicIdStr, PessoaMonitoradaDTO dto) {
         UUID publicId = parseUuid(publicIdStr);
@@ -253,7 +248,6 @@ public class CadastroPessoaService {
                 .orElseThrow(() -> new EntityNotFoundException("Pessoa monitorada não encontrada: " + publicIdStr));
         return atualizarPessoaMonitorada(custodiado, dto);
     }
-
 
     @Transactional
     public PessoaMonitorada save(PessoaMonitoradaDTO dto) {
@@ -317,7 +311,6 @@ public class CadastroPessoaService {
                 .orElseThrow(() -> new EntityNotFoundException("Pessoa monitorada não encontrada com ID: " + id));
         return atualizarPessoaMonitorada(custodiado, dto);
     }
-
 
     private PessoaMonitorada atualizarPessoaMonitorada(PessoaMonitorada custodiado, PessoaMonitoradaDTO dto) {
         if (custodiado.isArquivado())
@@ -427,7 +420,6 @@ public class CadastroPessoaService {
             throw new IllegalArgumentException("Data do comparecimento inicial não pode ser anterior à data da decisão");
     }
 
-
     private boolean validarCpfAlgoritmo(String cpf) {
         String c = cpf.replaceAll("[^\\d]", "");
         if (c.length() != 11 || c.matches("(\\d)\\1{10}")) return false;
@@ -457,7 +449,6 @@ public class CadastroPessoaService {
         String c = cep.replaceAll("[^\\d]", "");
         return c.length() == 8 ? c.substring(0,5) + "-" + c.substring(5) : cep;
     }
-
 
     private UUID parseUuid(String v) {
         try { return UUID.fromString(v); } catch (IllegalArgumentException e) { throw new EntityNotFoundException("Identificador inválido: " + v); }

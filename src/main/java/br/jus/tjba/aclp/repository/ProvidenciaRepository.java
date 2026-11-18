@@ -25,6 +25,10 @@ public interface ProvidenciaRepository extends JpaRepository<Providencia, Long> 
             "ORDER BY CASE WHEN p.prazo IS NULL THEN 1 ELSE 0 END, p.prazo, p.prioritaria DESC, p.criadoEm")
     List<Providencia> findPendentes();
 
+    @Query("SELECT p.execucaoPenal.id, COUNT(p), SUM(CASE WHEN p.prazo < :hoje THEN 1 ELSE 0 END) " +
+            "FROM Providencia p WHERE p.concluidaEm IS NULL AND p.execucaoPenal.id IN :ids GROUP BY p.execucaoPenal.id")
+    List<Object[]> contarPendentesPorExecucao(@Param("ids") Collection<Long> ids, @Param("hoje") LocalDate hoje);
+
     @Query("SELECT p.execucaoPenal.id, MAX(COALESCE(p.concluidaEm, CAST(p.criadoEm AS date))) " +
             "FROM Providencia p WHERE p.execucaoPenal.id IN :ids GROUP BY p.execucaoPenal.id")
     List<Object[]> ultimaMovimentacaoPorExecucao(@Param("ids") Collection<Long> ids);

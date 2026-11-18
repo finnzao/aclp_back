@@ -42,16 +42,10 @@ public enum SituacaoPessoaMonitorada {
         return description;
     }
 
-    /**
-     * Verifica se o custodiado está ativo (deve comparecer)
-     */
     public boolean isAtivo() {
         return this == ATIVO;
     }
 
-    /**
-     * Verifica se o custodiado está arquivado (não precisa comparecer)
-     */
     public boolean isArquivado() {
         return this == ARQUIVADO;
     }

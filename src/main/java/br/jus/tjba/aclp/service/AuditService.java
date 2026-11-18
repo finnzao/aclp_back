@@ -5,9 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import br.jus.tjba.aclp.model.Usuario;
 
-/**
- * Serviço de auditoria para rastrear ações importantes no sistema
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -36,10 +33,6 @@ public class AuditService {
 
     public void logPasswordChange(String email, String status) {
         log.info("AUDIT - Password Change: email={}, status={}", email, status);
-    }
-
-    public void logMfaSetup(String email, String status) {
-        log.info("AUDIT - MFA Setup: email={}, status={}", email, status);
     }
 
     public void logSessionInvalidation(String email, String sessionId, String reason) {

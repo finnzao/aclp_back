@@ -2,9 +2,6 @@ package br.jus.tjba.aclp.util;
 
 import jakarta.servlet.http.HttpServletRequest;
 
-/**
- * Extração do IP real do cliente atrás do nginx.
- */
 public final class ClientIpUtil {
 
     private ClientIpUtil() {}

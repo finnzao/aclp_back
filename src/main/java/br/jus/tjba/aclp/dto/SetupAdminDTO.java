@@ -40,25 +40,16 @@ public class SetupAdminDTO {
             message = "Telefone deve ter formato válido (ex: (71) 99999-9999)")
     private String telefone;
 
-    /**
-     * Valida se as senhas coincidem
-     */
     @AssertTrue(message = "Senhas não coincidem")
     public boolean isSenhasCoincidentes() {
         return senha != null && senha.equals(confirmaSenha);
     }
 
-    /**
-     * Valida se o nome é completo (pelo menos nome e sobrenome)
-     */
     @AssertTrue(message = "Informe nome completo (nome e sobrenome)")
     public boolean isNomeCompleto() {
         return nome != null && nome.trim().split("\\s+").length >= 2;
     }
 
-    /**
-     * Limpa e formata os dados
-     */
     public void limparEFormatarDados() {
         if (nome != null) {
             nome = nome.trim();
@@ -74,9 +65,6 @@ public class SetupAdminDTO {
         }
     }
 
-    /**
-     * Valida força da senha
-     */
     public boolean isSenhaForte() {
         if (senha == null || senha.length() < PoliticaSenha.TAMANHO_MINIMO) {
             return false;

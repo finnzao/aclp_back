@@ -91,9 +91,6 @@ public class StatusSchedulerService {
         return executarVerificacaoStatus();
     }
 
-    /**
-     * Reprocessa todos os processos ativos + custodiados (compatibilidade)
-     */
     @Transactional
     public long reprocessarTodosStatus() {
         log.info("REPROCESSAMENTO COMPLETO de todos os status");

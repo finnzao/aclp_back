@@ -63,15 +63,6 @@ public interface HistoricoComparecimentoRepository
     List<HistoricoComparecimento> findByCustodiado_IdAndMudancaEnderecoTrue(
             @Param("custodiadoId") Long custodiadoId);
 
-    @Query("SELECT h FROM HistoricoComparecimento h " +
-            "LEFT JOIN FETCH h.custodiado c " +
-            "LEFT JOIN FETCH h.processo p " +
-            "LEFT JOIN FETCH p.custodiado " +
-            "WHERE h.custodiado.id = :custodiadoId AND h.dataComparecimento = :data")
-    List<HistoricoComparecimento> findByCustodiado_IdAndDataComparecimento(
-            @Param("custodiadoId") Long custodiadoId,
-            @Param("data") LocalDate data);
-
     @Query("SELECT CASE WHEN COUNT(h) > 0 THEN true ELSE false END FROM HistoricoComparecimento h " +
             "WHERE h.custodiado.id = :custodiadoId AND h.tipoValidacao = 'CADASTRO_INICIAL'")
     boolean existsCadastroInicialPorCustodiado(@Param("custodiadoId") Long custodiadoId);
@@ -109,17 +100,6 @@ public interface HistoricoComparecimentoRepository
             @Param("tipoValidacao") String tipoValidacao,
             Pageable pageable);
 
-    @Query(value = "SELECT h FROM HistoricoComparecimento h " +
-            "LEFT JOIN FETCH h.custodiado c " +
-            "LEFT JOIN FETCH h.processo p " +
-            "LEFT JOIN FETCH p.custodiado " +
-            "WHERE CAST(h.tipoValidacao AS string) = :tipoValidacao",
-            countQuery = "SELECT COUNT(h) FROM HistoricoComparecimento h " +
-            "WHERE CAST(h.tipoValidacao AS string) = :tipoValidacao")
-    Page<HistoricoComparecimento> findByTipoValidacao(
-            @Param("tipoValidacao") String tipoValidacao,
-            Pageable pageable);
-
     @Query("SELECT COUNT(h) FROM HistoricoComparecimento h")
     long countTotal();
 
@@ -154,10 +134,4 @@ public interface HistoricoComparecimentoRepository
 
     @Query("SELECT COUNT(DISTINCT h.custodiado.id) FROM HistoricoComparecimento h")
     long countPessoasMonitoradasDistintos();
-
-    @Query("SELECT COUNT(DISTINCT h.custodiado.id) FROM HistoricoComparecimento h " +
-            "WHERE h.dataComparecimento BETWEEN :inicio AND :fim")
-    long countPessoasMonitoradasDistintosBetween(
-            @Param("inicio") LocalDate inicio,
-            @Param("fim") LocalDate fim);
 }

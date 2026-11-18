@@ -24,9 +24,6 @@ public class SetupService {
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
 
-    /**
-     * Verifica se o setup é necessário
-     */
     public boolean isSetupRequired() {
         boolean statusCompleted = setupStatusRepository.isCompleted();
         long userCount = usuarioRepository.count();
@@ -40,9 +37,6 @@ public class SetupService {
         return setupRequired;
     }
 
-    /**
-     * Retorna informações sobre o status do setup
-     */
     public Map<String, Object> getSetupStatus() {
         SetupStatus status = setupStatusRepository.getSetupStatus();
         boolean setupRequired = isSetupRequired();
@@ -57,9 +51,6 @@ public class SetupService {
         );
     }
 
-    /**
-     * Cria o primeiro administrador do sistema
-     */
     @Transactional
     public Usuario createFirstAdmin(SetupAdminDTO dto, String clientIp) {
         log.info("Iniciando criação do primeiro administrador - Email: {}, IP: {}", dto.getEmail(), clientIp);
@@ -111,9 +102,6 @@ public class SetupService {
         }
     }
 
-    /**
-     * Valida os dados do administrador
-     */
     private void validarDadosAdmin(SetupAdminDTO dto) {
         // Validar email institucional
         if (!dto.getEmail().endsWith("@tjba.jus.br")) {
@@ -149,9 +137,6 @@ public class SetupService {
         }
     }
 
-    /**
-     * Força reset do setup (apenas para desenvolvimento)
-     */
     @Transactional
     public void resetSetup() {
         log.warn("🚨 RESET DO SETUP SOLICITADO");
@@ -162,16 +147,10 @@ public class SetupService {
         log.warn("Setup resetado - sistema retornará ao estado inicial");
     }
 
-    /**
-     * Verifica se o sistema tem administradores
-     */
     public boolean hasAdministrators() {
         return usuarioRepository.countByTipo(TipoUsuario.ADMIN) > 0;
     }
 
-    /**
-     * Informações para auditoria
-     */
     public Map<String, Object> getSetupAuditInfo() {
         SetupStatus status = setupStatusRepository.getSetupStatus();
 

@@ -2,9 +2,6 @@ package br.jus.tjba.aclp.model.enums;
 
 import com.fasterxml.jackson.annotation.JsonValue;
 
-/**
- * Status possíveis de um convite
- */
 public enum StatusConvite {
 
     PENDENTE("PENDENTE", "Pendente", "Aguardando ativação pelo usuário"),

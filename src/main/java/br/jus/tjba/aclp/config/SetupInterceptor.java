@@ -56,9 +56,6 @@ public class SetupInterceptor implements HandlerInterceptor {
         return false;
     }
 
-    /**
-     * Verifica se é uma rota relacionada ao setup
-     */
     private boolean isSetupRoute(String uri) {
         return uri.startsWith("/api/setup/") ||
                 uri.equals("/setup") ||
@@ -67,9 +64,6 @@ public class SetupInterceptor implements HandlerInterceptor {
                 uri.startsWith("/setup");
     }
 
-    /**
-     * Verifica se é uma rota pública que deve sempre estar disponível
-     */
     private boolean isPublicRoute(String uri) {
         return uri.startsWith("/css/") ||
                 uri.startsWith("/js/") ||
@@ -83,9 +77,6 @@ public class SetupInterceptor implements HandlerInterceptor {
                 uri.equals("/error");
     }
 
-    /**
-     * Trata o redirecionamento para o setup
-     */
     private void handleSetupRedirect(HttpServletRequest request, HttpServletResponse response)
             throws IOException {
 
@@ -117,9 +108,6 @@ public class SetupInterceptor implements HandlerInterceptor {
         response.sendRedirect(setupUrl);
     }
 
-    /**
-     * Verifica se é uma requisição AJAX/API
-     */
     private boolean isApiRequest(HttpServletRequest request) {
         String requestedWith = request.getHeader("X-Requested-With");
         String contentType = request.getHeader("Content-Type");

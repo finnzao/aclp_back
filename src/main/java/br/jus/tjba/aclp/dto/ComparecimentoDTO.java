@@ -73,9 +73,6 @@ public class ComparecimentoDTO {
         return Boolean.TRUE.equals(mudancaEndereco);
     }
 
-    /**
-     * Retorna o ID efetivo: processoId tem prioridade, fallback para custodiadoId
-     */
     public Long getIdEfetivo() {
         return processoId != null ? processoId : custodiadoId;
     }

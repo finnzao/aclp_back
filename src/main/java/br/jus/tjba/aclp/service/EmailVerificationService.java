@@ -31,9 +31,6 @@ import java.security.SecureRandom;
 import java.util.Optional;
 import java.util.UUID;
 
-/**
- * Serviço para gerenciar verificação de email em duas etapas
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -49,8 +46,6 @@ public class EmailVerificationService {
     private String frontendUrl;
 
     private final SecureRandom secureRandom = new SecureRandom();
-
-    // ========== DTOs INTERNOS PARA COMPATIBILIDADE ==========
 
     @Data
     @Builder
@@ -129,8 +124,6 @@ public class EmailVerificationService {
         private String mensagem;
     }
 
-    // ========== MÉTODOS PRINCIPAIS DO FLUXO DE CONVITES ==========
-
     /**
      * ETAPA 1: Cria pré-cadastro e envia email de verificação
      * Usado no fluxo de convites
@@ -195,9 +188,6 @@ public class EmailVerificationService {
                 .build();
     }
 
-    /**
-     * ETAPA 2: Verifica email e cria usuário definitivo
-     */
     @Transactional
     public VerificarEmailResponse verificarEmail(String token, HttpServletRequest httpRequest) {
         log.info("Verificando email - Token: {}", token);
@@ -282,9 +272,6 @@ public class EmailVerificationService {
                 .build();
     }
 
-    /**
-     * Reenvia email de verificação
-     */
     @Transactional
     public void reenviarEmailVerificacao(String email) {
         log.info("Reenviando email de verificação para: {}", email);
@@ -304,8 +291,6 @@ public class EmailVerificationService {
         enviarEmailVerificacao(preCadastro);
         log.info("Email de verificação reenviado");
     }
-
-    // ========== MÉTODOS ADICIONAIS PARA COMPATIBILIDADE ==========
 
     /**
      * Solicita código de verificação (método alternativo)
@@ -355,9 +340,6 @@ public class EmailVerificationService {
                 .build();
     }
 
-    /**
-     * Verifica código (compatibilidade)
-     */
     @Transactional
     public VerificarCodigoResponseDTO verificarCodigo(VerificarCodigoDTO request, String ipAddress) {
         log.info("Verificando código - Email: {}", request.getEmail());
@@ -382,9 +364,6 @@ public class EmailVerificationService {
                 .build();
     }
 
-    /**
-     * Consulta status de verificação
-     */
     @Transactional(readOnly = true)
     public StatusVerificacaoDTO consultarStatus(String email) {
         Optional<PreCadastro> preCadastroOpt = preCadastroRepository.findByEmail(email.toLowerCase());
@@ -408,17 +387,11 @@ public class EmailVerificationService {
                 .build();
     }
 
-    /**
-     * Reenvia código (compatibilidade)
-     */
     @Transactional
     public void reenviarCodigo(ReenviarCodigoDTO request, String ipAddress) {
         reenviarEmailVerificacao(request.getEmail());
     }
 
-    /**
-     * Valida token de verificação (compatibilidade)
-     */
     @Transactional
     public TokenValidoDTO validarTokenVerificacao(String token, String ipAddress) {
         Optional<PreCadastro> preCadastroOpt = preCadastroRepository.findByTokenVerificacao(token);
@@ -467,8 +440,6 @@ public class EmailVerificationService {
 
         log.info("Limpeza de pré-cadastros concluída");
     }
-
-    // ========== MÉTODOS AUXILIARES ==========
 
     private void enviarEmailVerificacao(PreCadastro preCadastro) {
         String linkVerificacao = String.format("%s/verificar-email/%s",

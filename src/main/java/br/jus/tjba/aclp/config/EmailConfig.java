@@ -33,9 +33,6 @@ public class EmailConfig {
     @Value("${spring.mail.properties.mail.smtp.starttls.enable:true}")
     private boolean smtpStartTls;
 
-    /**
-     * Cria bean JavaMailSender manualmente
-     */
     @Bean
     public JavaMailSender javaMailSender() {
         JavaMailSenderImpl mailSender = new JavaMailSenderImpl();

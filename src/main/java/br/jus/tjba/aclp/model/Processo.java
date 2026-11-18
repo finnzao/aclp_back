@@ -145,10 +145,6 @@ public class Processo {
     @JsonIgnore
     private List<HistoricoComparecimento> historicoComparecimentos = new ArrayList<>();
 
-    // =====================================================================
-    // Lifecycle hooks
-    // =====================================================================
-
     @PrePersist
     public void prePersist() {
         if (criadoEm == null) criadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
@@ -167,17 +163,12 @@ public class Processo {
         if (!situacaoProcesso.isAtivo()) proximoComparecimento = null;
     }
 
-    // =====================================================================
-    // Domain logic
-    // =====================================================================
-
     public void calcularProximoComparecimento() {
         if (ultimoComparecimento != null && periodicidade != null && situacaoProcesso.isAtivo()) {
             proximoComparecimento = ultimoComparecimento.plusDays(periodicidade);
         }
     }
 
-    /** Falta justificada: adia o ciclo a partir da falta SEM contar presença. */
     public void registrarFaltaJustificada(LocalDate dataFalta) {
         if (periodicidade != null) proximoComparecimento = dataFalta.plusDays(periodicidade);
         status = StatusComparecimento.EM_CONFORMIDADE;

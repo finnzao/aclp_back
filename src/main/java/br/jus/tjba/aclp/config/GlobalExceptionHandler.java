@@ -30,7 +30,6 @@ public class GlobalExceptionHandler {
 
     private final Environment environment;
 
-    // === CLASSE DE RESPOSTA INTERNA ===
     @Data
     @Builder
     @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -46,8 +45,6 @@ public class GlobalExceptionHandler {
         private Map<String, String> fieldErrors;
         private List<String> suggestions;
     }
-
-    // === EXCEÇÕES DE NEGÓCIO ===
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {

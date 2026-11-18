@@ -105,9 +105,6 @@ public class DataSourceHealthValidator {
         }
     }
 
-    /**
-     * Mascara credenciais embutidas em URLs JDBC para logs seguros.
-     */
     static String maskUrl(String url) {
         if (url == null) return "null";
         // Mascarar senha em URLs no formato jdbc:...//user:senha@host

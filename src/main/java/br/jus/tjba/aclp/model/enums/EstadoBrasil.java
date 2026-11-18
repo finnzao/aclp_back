@@ -2,9 +2,6 @@ package br.jus.tjba.aclp.model.enums;
 
 import com.fasterxml.jackson.annotation.JsonValue;
 
-/**
- * Enum com todos os estados brasileiros e o Distrito Federal
- */
 public enum EstadoBrasil {
 
     AC("AC", "Acre", "Norte"),

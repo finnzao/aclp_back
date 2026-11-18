@@ -27,7 +27,6 @@ import java.time.LocalTime;
 @AllArgsConstructor
 public class HistoricoComparecimentoResponseDTO {
 
-    // ===== CAMPOS EXISTENTES (inalterados) =====
     private Long id;
     private Long custodiadoId;
     private String custodiadoNome;
@@ -38,8 +37,6 @@ public class HistoricoComparecimentoResponseDTO {
     private String observacoes;
     private Boolean mudancaEndereco;
     private String motivoMudancaEndereco;
-
-    // ===== NOVOS CAMPOS — CORREÇÃO DE PERFORMANCE =====
 
     /**
      * Número do processo vinculado ao comparecimento.

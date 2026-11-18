@@ -99,10 +99,6 @@ public class PessoaMonitoradaController {
 
     }
 
-    // =====================================================================
-    // CORREÇÃO DE PERFORMANCE: GET /custodiados com paginação retrocompatível
-    // =====================================================================
-
     @GetMapping
     @Operation(summary = "Listar custodiados",
             description = "Sem parâmetros: retorna todos (retrocompatível). " +
@@ -171,10 +167,6 @@ public class PessoaMonitoradaController {
 
         return ResponseEntity.ok(resposta);
     }
-
-    // =====================================================================
-    // Endpoints existentes (todos mantidos inalterados)
-    // =====================================================================
 
     @PostMapping("/cadastro-inicial")
     @Operation(summary = "Cadastro inicial completo")

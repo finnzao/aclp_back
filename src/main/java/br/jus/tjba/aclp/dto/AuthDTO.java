@@ -16,14 +16,8 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
-/**
- * DTOs para operações de autenticação e autorização
- */
 public class AuthDTO {
 
-    /**
-     * DTO para requisição de login
-     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -37,8 +31,6 @@ public class AuthDTO {
         @NotBlank(message = "Senha é obrigatória")
         private String senha;
 
-        private String mfaCode; // Código MFA opcional
-
         private boolean rememberMe = false; // Lembrar login
 
         private boolean forceLogin = false; // Forçar login mesmo com sessões ativas
@@ -46,9 +38,6 @@ public class AuthDTO {
         private Map<String, String> deviceInfo; // Informações do dispositivo
     }
 
-    /**
-     * DTO para resposta de login
-     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -64,15 +53,11 @@ public class AuthDTO {
         private Long expiresIn; // Segundos até expirar
         private String sessionId;
         private UsuarioDTO usuario;
-        private boolean requiresMfa;
         private boolean requiresPasswordChange;
         private List<String> permissions;
         private LocalDateTime loginTime;
     }
 
-    /**
-     * DTO para informações do usuário autenticado
-     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -88,14 +73,10 @@ public class AuthDTO {
         private String cargo;
         private String avatar;
         private LocalDateTime ultimoLogin;
-        private boolean mfaEnabled;
         private List<String> roles;
         private Map<String, Object> preferences;
     }
 
-    /**
-     * DTO para requisição de refresh token
-     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -106,9 +87,6 @@ public class AuthDTO {
         private String refreshToken;
     }
 
-    /**
-     * DTO para resposta de refresh token
-     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -123,9 +101,6 @@ public class AuthDTO {
         private Long expiresIn;
     }
 
-    /**
-     * DTO para validação de token
-     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -140,9 +115,6 @@ public class AuthDTO {
         private Map<String, Object> claims;
     }
 
-    /**
-     * DTO para requisição de reset de senha
-     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -156,9 +128,6 @@ public class AuthDTO {
         private String recaptchaToken; // Token reCAPTCHA opcional
     }
 
-    /**
-     * DTO para confirmação de reset de senha
-     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -182,9 +151,6 @@ public class AuthDTO {
         }
     }
 
-    /**
-     * DTO para alteração de senha
-     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -208,9 +174,6 @@ public class AuthDTO {
         }
     }
 
-    /**
-     * DTO para logout
-     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -221,9 +184,6 @@ public class AuthDTO {
         private boolean logoutAllDevices = false; // Logout de todos os dispositivos
     }
 
-    /**
-     * DTO para informações de sessão
-     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -242,40 +202,6 @@ public class AuthDTO {
         private String location;
     }
 
-    /**
-     * DTO para configuração MFA
-     */
-    @Data
-    @NoArgsConstructor
-    @AllArgsConstructor
-    @Builder
-    public static class MfaSetupDTO {
-
-        private boolean enable;
-        private String secret; // Para QR Code
-        private String qrCodeUrl;
-        private List<String> backupCodes;
-    }
-
-    /**
-     * DTO para verificação MFA
-     */
-    @Data
-    @NoArgsConstructor
-    @AllArgsConstructor
-    @Builder
-    public static class MfaVerificationDTO {
-
-        @NotBlank(message = "Código é obrigatório")
-        @Pattern(regexp = "\\d{6}", message = "Código deve ter 6 dígitos")
-        private String code;
-
-        private boolean trustDevice = false;
-    }
-
-    /**
-     * DTO para resposta de erro de autenticação
-     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -291,9 +217,6 @@ public class AuthDTO {
         private LocalDateTime lockedUntil;
     }
 
-    /**
-     * DTO para auditoria de login
-     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -311,9 +234,6 @@ public class AuthDTO {
         private String device;
     }
 
-    /**
-     * DTO para política de senha
-     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -330,9 +250,6 @@ public class AuthDTO {
         private boolean requireChangeOnFirstLogin;
     }
 
-    /**
-     * DTO para verificação de força da senha
-     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor

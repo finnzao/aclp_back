@@ -27,7 +27,6 @@ import java.util.Set;
         matchIfMissing = true)
 public class SecretsStartupValidator {
 
-    /** Perfis tratados como produção para efeito desta validação. */
     private static final Set<String> PERFIS_DE_PRODUCAO = Set.of("prod", "render");
 
     /**

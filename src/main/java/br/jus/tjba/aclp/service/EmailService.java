@@ -11,7 +11,6 @@ import jakarta.mail.*;
 import jakarta.mail.internet.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Properties;
 
 @Slf4j
 @Service
@@ -53,11 +52,7 @@ public class EmailService {
         }
 
         try {
-            if (mailSender != null) {
-                enviarComSpringMail(destinatario, assunto, conteudo);
-            } else {
-                enviarComJavaMailManual(destinatario, assunto, conteudo);
-            }
+            enviarComSpringMail(destinatario, assunto, conteudo);
 
             log.info("Email enviado com sucesso - Destinatário: {}", destinatario);
 
@@ -84,55 +79,6 @@ public class EmailService {
 
         mailSender.send(message);
         log.debug("Email enviado via Spring Mail");
-    }
-
-    /**
-     * Implementação manual usando JavaMail diretamente.
-     *
-     * FIX #4: Removido configurarSSLInseguro() que chamava
-     * HttpsURLConnection.setDefaultSSLSocketFactory() com TrustManager que
-     * aceitava qualquer certificado. Isso afetava TODA a JVM globalmente
-     * (não só o email), desabilitando verificação SSL para HttpClient,
-     * RestTemplate, WebClient, etc.
-     *
-     * Agora usa mail.smtp.ssl.trust com o host específico do SMTP,
-     * que é o mecanismo correto do JavaMail para confiar no servidor.
-     */
-    private void enviarComJavaMailManual(String destinatario, String assunto, String conteudo) throws Exception {
-        log.info("Enviando email manual - Host: {}, Port: {}, User: {}", smtpHost, smtpPort, smtpUsername);
-
-        if (smtpUsername.isEmpty() || smtpPassword.isEmpty()) {
-            throw new IllegalStateException("Configurações SMTP não definidas (username/password)");
-        }
-
-        Properties props = new Properties();
-        props.put("mail.smtp.host", smtpHost);
-        props.put("mail.smtp.port", smtpPort);
-        props.put("mail.smtp.auth", "true");
-        props.put("mail.smtp.starttls.enable", "true");
-        props.put("mail.smtp.starttls.required", "true");
-        props.put("mail.smtp.ssl.trust", smtpHost);
-        props.put("mail.smtp.ssl.protocols", "TLSv1.2,TLSv1.3");
-        props.put("mail.smtp.connectiontimeout", "5000");
-        props.put("mail.smtp.timeout", "10000");
-        props.put("mail.smtp.writetimeout", "10000");
-
-        Session session = Session.getInstance(props, new Authenticator() {
-            @Override
-            protected PasswordAuthentication getPasswordAuthentication() {
-                return new PasswordAuthentication(smtpUsername, smtpPassword);
-            }
-        });
-
-        Message message = new MimeMessage(session);
-        message.setFrom(new InternetAddress(emailRemetente));
-        message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(destinatario));
-        message.setSubject(assunto);
-        message.setText(conteudo);
-        message.setSentDate(new java.util.Date());
-
-        Transport.send(message);
-        log.debug("Email enviado via JavaMail manual");
     }
 
     private void simularEnvioEmail(String destinatario, String assunto, String conteudo) {

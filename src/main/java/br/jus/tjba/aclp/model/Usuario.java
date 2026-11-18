@@ -109,14 +109,6 @@ public class Usuario {
     @Builder.Default
     private StatusUsuario statusUsuario = StatusUsuario.ACTIVE;
 
-    @Column(name = "mfa_enabled", nullable = false)
-    @Builder.Default
-    private Boolean mfaEnabled = false;
-
-    @Column(name = "mfa_secret", length = 100)
-    @JsonIgnore
-    private String mfaSecret;
-
     @Column(name = "email_verificado", nullable = false)
     @Builder.Default
     private Boolean emailVerificado = false;
@@ -163,9 +155,6 @@ public class Usuario {
         if (this.statusUsuario == null) {
             this.statusUsuario = StatusUsuario.ACTIVE;
         }
-        if (this.mfaEnabled == null) {
-            this.mfaEnabled = Boolean.FALSE;
-        }
         if (this.emailVerificado == null) {
             this.emailVerificado = Boolean.FALSE;
         }
@@ -203,9 +192,6 @@ public class Usuario {
         return nome + (departamento != null ? " (" + departamento + ")" : "");
     }
 
-    /**
-     * Verifica se usuário pode fazer login
-     */
     public boolean podeLogar() {
         if (statusUsuario != StatusUsuario.ACTIVE) {
             return false;
@@ -219,16 +205,10 @@ public class Usuario {
         return true;
     }
 
-    /**
-     * Verifica se senha expirou
-     */
     public boolean senhaExpirada() {
         return senhaExpiraEm != null && senhaExpiraEm.isBefore(br.jus.tjba.aclp.util.TempoAtual.agora());
     }
 
-    /**
-     * Incrementa tentativas de login falhadas
-     */
     public void incrementarTentativasFalhadas() {
         if (tentativasLoginFalhadas == null) {
             tentativasLoginFalhadas = 0;
@@ -241,17 +221,11 @@ public class Usuario {
         }
     }
 
-    /**
-     * Reseta tentativas de login
-     */
     public void resetarTentativas() {
         tentativasLoginFalhadas = 0;
         bloqueadoAte = null;
     }
 
-    /**
-     * Marca email como verificado
-     */
     public void marcarEmailVerificado() {
         this.emailVerificado = true;
         this.dataVerificacaoEmail = br.jus.tjba.aclp.util.TempoAtual.agora();

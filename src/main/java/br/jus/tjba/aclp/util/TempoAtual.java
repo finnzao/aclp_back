@@ -20,9 +20,7 @@ public final class TempoAtual {
 
     public static LocalDateTime agora() { return LocalDateTime.now(clock); }
 
-    /** Somente testes. */
     public static void fixar(Clock fixo) { clock = fixo; }
 
-    /** Somente testes. */
     public static void reset() { clock = Clock.systemDefaultZone(); }
 }

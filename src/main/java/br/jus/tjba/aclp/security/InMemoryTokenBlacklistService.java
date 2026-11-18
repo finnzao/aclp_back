@@ -53,9 +53,6 @@ public class InMemoryTokenBlacklistService implements TokenBlacklistService {
         return true;
     }
 
-    /**
-     * Limpa tokens expirados a cada 10 minutos para evitar memory leak.
-     */
     @Scheduled(fixedRate = 600_000)
     public void limparTokensExpirados() {
         int antes = blacklist.size();

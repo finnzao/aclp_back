@@ -16,9 +16,6 @@ public class InvalidTokenException extends RuntimeException {
 
     private static final long serialVersionUID = 1L;
 
-    /**
-     * Construtor padrão sem argumentos
-     */
     public InvalidTokenException() {
         super("Token inválido");
     }

@@ -97,46 +97,28 @@ public class EmailVerification {
         }
     }
 
-    /**
-     * Verifica se o código está expirado
-     */
     public boolean isExpirado() {
         return br.jus.tjba.aclp.util.TempoAtual.agora().isAfter(expiraEm);
     }
 
-    /**
-     * Verifica se ainda pode tentar verificar
-     */
     public boolean podeTentar() {
         return tentativas < maxTentativas && !isExpirado() && !verificado;
     }
 
-    /**
-     * Incrementa tentativas de verificação
-     */
     public void incrementarTentativas() {
         this.tentativas++;
     }
 
-    /**
-     * Marca como verificado
-     */
     public void marcarComoVerificado(String ipVerificacao) {
         this.verificado = Boolean.TRUE;
         this.verificadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
         this.ipVerificacao = ipVerificacao;
     }
 
-    /**
-     * Verifica se o código está válido para uso
-     */
     public boolean isValido() {
         return !isExpirado() && !verificado && podeTentar();
     }
 
-    /**
-     * Calcula tempo restante em minutos
-     */
     public long getMinutosRestantes() {
         if (isExpirado()) {
             return 0;
@@ -144,9 +126,6 @@ public class EmailVerification {
         return java.time.Duration.between(br.jus.tjba.aclp.util.TempoAtual.agora(), expiraEm).toMinutes();
     }
 
-    /**
-     * Retorna quantas tentativas restam
-     */
     public int getTentativasRestantes() {
         return Math.max(0, maxTentativas - tentativas);
     }

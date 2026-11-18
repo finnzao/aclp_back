@@ -66,9 +66,6 @@ public class AuthController {
         return null;
     }
 
-    /**
-     * Realiza o login do usuário
-     */
     @PostMapping("/login")
     @Operation(summary = "Login", description = "Realiza autenticação do usuário e retorna tokens JWT")
     @ApiResponses(value = {
@@ -85,15 +82,6 @@ public class AuthController {
 
         try {
             LoginResponseDTO response = authService.login(request, httpRequest);
-
-            if (response.isRequiresMfa()) {
-                // Retornar parcial se MFA necessário
-                return ResponseEntity.ok(Map.of(
-                        "success", false,
-                        "requiresMfa", true,
-                        "message", "Código de autenticação necessário"
-                ));
-            }
 
             long expiraEm = response.getExpiresIn() != null ? response.getExpiresIn() : 3600L;
             return ResponseEntity.ok()
@@ -116,9 +104,6 @@ public class AuthController {
         }
     }
 
-    /**
-     * Realiza logout do usuário
-     */
     @PostMapping("/logout")
     @Operation(summary = "Logout", description = "Invalida tokens e encerra sessão do usuário")
     @SecurityRequirement(name = "bearer-auth")
@@ -131,7 +116,6 @@ public class AuthController {
                                           : cookieValue(request, ACCESS_COOKIE);
         if (token != null) authService.logout(token, request);
 
-
         // sempre apaga os cookies, mesmo se a invalidacao no servidor falhar
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, authCookie(ACCESS_COOKIE, null, 0, "/").toString())
@@ -139,9 +123,6 @@ public class AuthController {
                 .body(Map.of("success", true, "message", "Logout realizado com sucesso"));
     }
 
-    /**
-     * Renova o token de acesso
-     */
     @PostMapping("/refresh")
     @Operation(summary = "Refresh Token",
             description = "Renova o token de acesso usando refresh token")
@@ -179,9 +160,6 @@ public class AuthController {
 
     }
 
-    /**
-     * Valida token JWT
-     */
     @GetMapping("/validate")
     @Operation(summary = "Validar Token", description = "Valida se token JWT está válido")
     @SecurityRequirement(name = "bearer-auth")
@@ -205,9 +183,6 @@ public class AuthController {
         }
     }
 
-    /**
-     * Solicita recuperação de senha
-     */
     @PostMapping("/forgot-password")
     @Operation(summary = "Esqueci a senha",
             description = "Envia email com link para recuperação de senha")
@@ -240,9 +215,6 @@ public class AuthController {
         }
     }
 
-    /**
-     * Reseta a senha usando token
-     */
     @PostMapping("/reset-password")
     @Operation(summary = "Resetar senha",
             description = "Define nova senha usando token de recuperação")
@@ -283,9 +255,6 @@ public class AuthController {
         }
     }
 
-    /**
-     * Altera senha do usuário autenticado
-     */
     @PostMapping("/change-password")
     @Operation(summary = "Alterar senha",
             description = "Altera senha do usuario autenticado (requer senha atual)")
@@ -337,9 +306,6 @@ public class AuthController {
         }
     }
 
-    /**
-     * Retorna informacoes do usuario autenticado
-     */
     @GetMapping("/me")
     @Operation(summary = "Dados do usuario",
             description = "Retorna informacoes do usuario autenticado")
@@ -395,9 +361,6 @@ public class AuthController {
                     ));
         }
     }
-    /**
-     * Retorna informações da sessão atual
-     */
     @GetMapping("/session")
     @Operation(summary = "Informações da sessão",
             description = "Retorna detalhes da sessão atual")
@@ -430,9 +393,6 @@ public class AuthController {
         }
     }
 
-    /**
-     * Lista todas as sessões do usuário
-     */
     @GetMapping("/sessions")
     @Operation(summary = "Listar sessoes",
             description = "Lista todas as sessoes ativas do usuario")
@@ -467,9 +427,6 @@ public class AuthController {
         }
     }
 
-    /**
-     * Invalida uma sessão específica
-     */
     @DeleteMapping("/sessions/{sessionId}")
     @Operation(summary = "Invalidar sessao",
             description = "Invalida uma sessao especifica")
@@ -508,10 +465,6 @@ public class AuthController {
         }
     }
 
-
-    /**
-     * Health check do módulo de autenticação
-     */
     @GetMapping("/health")
     @Operation(summary = "Health check", description = "Verifica se o módulo está funcionando")
     @ApiResponse(responseCode = "200", description = "Módulo funcionando")
@@ -525,15 +478,11 @@ public class AuthController {
                         "logout", true,
                         "refreshToken", true,
                         "passwordReset", true,
-                        "mfa", false,
                         "sessions", true
                 )
         ));
     }
 
-    /**
-     * Verifica se sistema requer setup inicial
-     */
     @GetMapping("/check-setup")
     @Operation(summary = "Verificar setup",
             description = "Verifica se o sistema precisa de configuração inicial")
@@ -547,11 +496,6 @@ public class AuthController {
         ));
     }
 
-    // ========== MÉTODOS AUXILIARES ==========
-
-    /**
-     * Extrai token do header Authorization
-     */
     private String extractTokenFromHeader(String authHeader) {
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             return authHeader.substring(7);
@@ -559,9 +503,6 @@ public class AuthController {
         throw new IllegalArgumentException("Token não encontrado no header");
     }
 
-    /**
-     * Handler para erros de validação
-     */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<?> handleValidationError(IllegalArgumentException e) {
         log.warn("Erro de validação: {}", e.getMessage());

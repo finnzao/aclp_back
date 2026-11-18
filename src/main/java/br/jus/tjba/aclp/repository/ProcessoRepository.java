@@ -34,13 +34,13 @@ public interface ProcessoRepository extends JpaRepository<Processo, Long> {
     // Listagem paginada com filtros — query principal do sistema
     @Query(value = "SELECT p FROM Processo p JOIN FETCH p.custodiado c " +
             "WHERE p.situacaoProcesso = 'ATIVO' " +
-            "AND (:termo IS NULL OR LOWER(c.nome) LIKE LOWER(CONCAT('%',:termo,'%')) " +
+            "AND (:termo = '' OR LOWER(c.nome) LIKE LOWER(CONCAT('%',:termo,'%')) " +
             "     OR c.cpf LIKE CONCAT('%',:termo,'%') " +
             "     OR p.numeroProcesso LIKE CONCAT('%',:termo,'%')) " +
             "AND (:status IS NULL OR p.status = :status)",
             countQuery = "SELECT COUNT(p) FROM Processo p JOIN p.custodiado c " +
                     "WHERE p.situacaoProcesso = 'ATIVO' " +
-                    "AND (:termo IS NULL OR LOWER(c.nome) LIKE LOWER(CONCAT('%',:termo,'%')) " +
+                    "AND (:termo = '' OR LOWER(c.nome) LIKE LOWER(CONCAT('%',:termo,'%')) " +
                     "     OR c.cpf LIKE CONCAT('%',:termo,'%') " +
                     "     OR p.numeroProcesso LIKE CONCAT('%',:termo,'%')) " +
                     "AND (:status IS NULL OR p.status = :status)")
@@ -55,15 +55,9 @@ public interface ProcessoRepository extends JpaRepository<Processo, Long> {
     @Query("SELECT COUNT(p) FROM Processo p WHERE p.status = :status AND p.situacaoProcesso = 'ATIVO'")
     long countByStatusAtivo(@Param("status") StatusComparecimento status);
 
-    // Processos com comparecimento entre datas
-    @Query("SELECT p FROM Processo p WHERE p.proximoComparecimento BETWEEN :inicio AND :fim AND p.situacaoProcesso = 'ATIVO'")
-    List<Processo> findByProximoComparecimentoBetween(@Param("inicio") LocalDate inicio, @Param("fim") LocalDate fim);
-
     // Para job de verificação de atrasados
     @Query("SELECT p FROM Processo p WHERE p.proximoComparecimento < CURRENT_DATE AND p.status = 'EM_CONFORMIDADE' AND p.situacaoProcesso = 'ATIVO'")
     List<Processo> findAtrasadosParaVerificacao();
-
-    List<Processo> findByCustodiado_IdOrderByCriadoEmDesc(Long custodiadoId);
 
     // Buscar por ID com custodiado carregado
     @Query("SELECT p FROM Processo p JOIN FETCH p.custodiado c WHERE p.id = :id")
@@ -72,10 +66,6 @@ public interface ProcessoRepository extends JpaRepository<Processo, Long> {
     // Todos processos ativos
     @Query("SELECT p FROM Processo p JOIN FETCH p.custodiado c WHERE p.situacaoProcesso = 'ATIVO' ORDER BY p.proximoComparecimento")
     List<Processo> findAllAtivosComPessoaMonitorada();
-
-    // Verificar se custodiado tem processos ativos não encerrados
-    @Query("SELECT COUNT(p) > 0 FROM Processo p WHERE p.custodiado.id = :custodiadoId AND p.situacaoProcesso NOT IN ('ENCERRADO', 'SUSPENSO')")
-    boolean existsProcessosAtivos(@Param("custodiadoId") Long custodiadoId);
 
     /**
      * CORREÇÃO DE PERFORMANCE: Busca processos de múltiplos custodiados em uma única query.
@@ -88,19 +78,6 @@ public interface ProcessoRepository extends JpaRepository<Processo, Long> {
            "WHERE p.custodiado.id IN :custodiadoIds " +
            "ORDER BY p.custodiado.id, p.criadoEm DESC")
     List<Processo> findByCustodiadoIdIn(@Param("custodiadoIds") List<Long> custodiadoIds);
-
-    /**
-     * CORREÇÃO DE PERFORMANCE: Busca apenas processos ativos de múltiplos custodiados.
-     * Versão filtrada da busca em lote.
-     */
-    @Query("SELECT p FROM Processo p JOIN FETCH p.custodiado c " +
-           "WHERE p.custodiado.id IN :custodiadoIds " +
-           "AND p.situacaoProcesso = :situacao " +
-           "ORDER BY p.custodiado.id, p.criadoEm DESC")
-    List<Processo> findByCustodiadoIdInAndSituacaoProcesso(
-        @Param("custodiadoIds") List<Long> custodiadoIds,
-        @Param("situacao") SituacaoProcesso situacao
-    );
 
     /**
      * CORREÇÃO DE PERFORMANCE: Busca processos de um custodiado por situação.

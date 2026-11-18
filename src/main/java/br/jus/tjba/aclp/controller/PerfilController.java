@@ -13,9 +13,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
-/**
- * Controller para gerenciamento do perfil do usuário autenticado
- */
 @RestController
 @RequestMapping("/api/auth/perfil")
 @RequiredArgsConstructor
@@ -24,9 +21,6 @@ public class PerfilController {
 
     private final UsuarioService usuarioService;
 
-    /**
-     * Retorna dados do perfil do usuário autenticado
-     */
     @GetMapping
     public ResponseEntity<ApiResponse<Usuario>> getPerfil(
             @AuthenticationPrincipal UserDetails userDetails) {
@@ -40,9 +34,6 @@ public class PerfilController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    /**
-     * Atualiza dados do perfil do usuário autenticado
-     */
     @PutMapping
     public ResponseEntity<ApiResponse<Usuario>> atualizarPerfil(
             @AuthenticationPrincipal UserDetails userDetails,
@@ -56,9 +47,6 @@ public class PerfilController {
         );
     }
 
-    /**
-     * Altera senha do usuário autenticado
-     */
     @PutMapping("/senha")
     public ResponseEntity<ApiResponse<Void>> alterarSenha(
             @AuthenticationPrincipal UserDetails userDetails,
@@ -72,9 +60,6 @@ public class PerfilController {
         );
     }
 
-    /**
-     * Desativa conta do próprio usuário
-     */
     @DeleteMapping
     public ResponseEntity<ApiResponse<Void>> desativarConta(
             @AuthenticationPrincipal UserDetails userDetails) {

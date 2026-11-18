@@ -49,7 +49,6 @@ public class ProcessoDTO {
     @Size(max = 500, message = "Observações deve ter no máximo 500 caracteres")
     private String observacoes;
 
-    /** Opcional — ausente = CAUTELAR (comportamento atual preservado). */
     private NaturezaVinculo naturezaVinculo;
 
     // obrigatorio na execucao: a pena nasce na mesma transacao

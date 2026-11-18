@@ -186,10 +186,8 @@ public class ExecucaoPenalService {
         Map<Long, LocalDate> ultProv = agrupar(providenciaRepository.ultimaMovimentacaoPorExecucao(ids));
         Map<Long, LocalDate> ultInc = agrupar(incidenteExecucaoRepository.ultimaMovimentacaoPorExecucao(ids));
         Map<Long, long[]> pendentes = new HashMap<>();
-        for (Providencia p : providenciaRepository.findPendentes()) {
-            long[] c = pendentes.computeIfAbsent(p.getExecucaoPenal().getId(), k -> new long[2]);
-            c[0]++;
-            if (p.isVencida()) c[1]++;
+        for (Object[] l : providenciaRepository.contarPendentesPorExecucao(ids, TempoAtual.hoje())) {
+            pendentes.put((Long) l[0], new long[]{((Number) l[1]).longValue(), l[2] != null ? ((Number) l[2]).longValue() : 0});
         }
 
         return execucoes.stream().map(e -> {

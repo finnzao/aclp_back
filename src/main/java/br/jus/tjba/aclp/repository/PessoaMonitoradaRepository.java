@@ -24,8 +24,6 @@ public interface PessoaMonitoradaRepository extends JpaRepository<PessoaMonitora
 
     Optional<PessoaMonitorada> findByPublicId(UUID publicId);
 
-    boolean existsByPublicId(UUID publicId);
-
     /** Ficha: processos junto para os campos derivados funcionarem fora da sessão. */
     @Query("SELECT DISTINCT c FROM PessoaMonitorada c LEFT JOIN FETCH c.processos WHERE c.publicId = :publicId")
     Optional<PessoaMonitorada> findByPublicIdComProcessos(@Param("publicId") UUID publicId);
@@ -83,9 +81,6 @@ public interface PessoaMonitoradaRepository extends JpaRepository<PessoaMonitora
             "WHERE EXISTS (SELECT 1 FROM Processo p WHERE p.custodiado = c " +
             "AND p.numeroProcesso = :processo) ORDER BY c.situacao, c.nome")
     List<PessoaMonitorada> findByProcessoIncludingArchived(@Param("processo") String processo);
-
-    @Query("SELECT c FROM PessoaMonitorada c WHERE c.cpf = :cpf AND c.situacao = 'ATIVO'")
-    Optional<PessoaMonitorada> findByCpfAndSituacaoAtivo(@Param("cpf") String cpf);
 
     Optional<PessoaMonitorada> findByCpfAndSituacao(String cpf, SituacaoPessoaMonitorada situacao);
 

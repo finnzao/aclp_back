@@ -23,8 +23,6 @@ public class HistoricoEnderecoDTO {
     @NotNull(message = "ID da pessoa é obrigatório")
     private Long pessoaId;
 
-    // === DADOS DO ENDEREÇO ===
-
     @NotBlank(message = "CEP é obrigatório")
     @Pattern(regexp = "\\d{5}-?\\d{3}", message = "CEP deve ter o formato 00000-000")
     private String cep;
@@ -52,8 +50,6 @@ public class HistoricoEnderecoDTO {
     @Pattern(regexp = "[A-Z]{2}", message = "Estado deve ser uma sigla válida com 2 letras maiúsculas")
     private String estado;
 
-    // === CONTROLE TEMPORAL ===
-
     @NotNull(message = "Data de início é obrigatória")
     private LocalDate dataInicio;
 
@@ -65,11 +61,7 @@ public class HistoricoEnderecoDTO {
     @Size(max = 100, message = "Validado por deve ter no máximo 100 caracteres")
     private String validadoPor;
 
-    // === REFERÊNCIAS ===
-
     private Long historicoComparecimentoId;
-
-    // === DADOS DE RESPOSTA (não enviados na requisição) ===
 
     private LocalDateTime criadoEm;
     private LocalDateTime atualizadoEm;
@@ -83,8 +75,6 @@ public class HistoricoEnderecoDTO {
     private String periodoResidencia;
     private Long diasResidencia;
     private Boolean enderecoAtivo;
-
-    // === MÉTODOS UTILITÁRIOS ===
 
     public boolean isCompleto() {
         return cep != null && !cep.trim().isEmpty() &&
@@ -132,9 +122,6 @@ public class HistoricoEnderecoDTO {
         }
     }
 
-    /**
-     * DTO simplificado para listagens
-     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -149,9 +136,6 @@ public class HistoricoEnderecoDTO {
         private String motivoAlteracao;
     }
 
-    /**
-     * DTO para estatísticas
-     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor

@@ -2,9 +2,6 @@ package br.jus.tjba.aclp.model.enums;
 
 import com.fasterxml.jackson.annotation.JsonValue;
 
-/**
- * Status do usuário no sistema
- */
 public enum StatusUsuario {
 
     INVITED("INVITED", "Convidado", "Usuário convidado aguardando primeiro acesso"),

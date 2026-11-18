@@ -1,6 +1,5 @@
 package br.jus.tjba.aclp.util;
 
-/** Formatação compartilhada entre cadastro e buscas. */
 public final class Formatadores {
 
     private Formatadores() {}

@@ -47,10 +47,6 @@ public class ComparecimentoService {
     private final ExecucaoPenalRepository execucaoPenalRepository;
     private final ProvidenciaRepository providenciaRepository;
 
-    // =====================================================================
-    // CORREÇÃO DE PERFORMANCE: Listagem paginada com filtros server-side
-    // =====================================================================
-
     @Transactional(readOnly = true)
     public Page<HistoricoComparecimentoResponseDTO> listarPaginadoComFiltros(
             int page, int size, LocalDate dataInicio, LocalDate dataFim,
@@ -97,10 +93,6 @@ public class ComparecimentoService {
 
         return historicoComparecimentoRepository.findAll(spec, pageable).map(this::toResponseDTO);
     }
-
-    // =====================================================================
-    // REGISTRAR COMPARECIMENTO (inalterado)
-    // =====================================================================
 
     @Transactional
     public HistoricoComparecimentoResponseDTO registrarComparecimento(ComparecimentoDTO dto) {
@@ -169,10 +161,6 @@ public class ComparecimentoService {
         return toResponseDTO(salvo);
     }
 
-    // =====================================================================
-    // BUSCAS (inalteradas)
-    // =====================================================================
-
     @Transactional(readOnly = true)
     public List<HistoricoComparecimentoResponseDTO> buscarHistoricoPorCustodiado(Long custodiadoId) {
         if (custodiadoId == null || custodiadoId <= 0) throw new IllegalArgumentException("ID inválido");
@@ -222,10 +210,6 @@ public class ComparecimentoService {
         h.setObservacoes(observacoes != null ? observacoes.trim() : null);
         return toResponseDTO(historicoComparecimentoRepository.save(h));
     }
-
-    // =====================================================================
-    // ESTATÍSTICAS (inalteradas — signatures mantidas)
-    // =====================================================================
 
     @Transactional(readOnly = true)
     public Map<String, Object> buscarEstatisticasDetalhadas() {
@@ -452,10 +436,6 @@ public class ComparecimentoService {
         return Map.of("status", "success", "totalCustodiados", todos.size(), "custodiadosMigrados", migrados, "erros", erros.size(), "detalhesErros", erros);
     }
 
-    // =====================================================================
-    // toResponseDTO — CORREÇÃO DE PERFORMANCE: inclui numeroProcesso e custodiadoCpf
-    // =====================================================================
-
     public HistoricoComparecimentoResponseDTO toResponseDTO(HistoricoComparecimento h) {
         Long custodiadoId = null; String custodiadoNome = null; String custodiadoCpf = null;
 
@@ -499,10 +479,6 @@ public class ComparecimentoService {
                 .numeroProcesso(numProc).custodiadoCpf(custodiadoCpf)
                 .build();
     }
-
-    // =====================================================================
-    // Métodos privados (inalterados)
-    // =====================================================================
 
     private void limparDTO(ComparecimentoDTO dto) {
         if (dto.getValidadoPor() != null) dto.setValidadoPor(dto.getValidadoPor().trim());

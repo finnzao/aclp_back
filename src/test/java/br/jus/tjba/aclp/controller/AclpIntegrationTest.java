@@ -65,18 +65,6 @@ class AclpIntegrationTest {
     private static Long usuarioId;
     private static Long comparecimentoId;
 
-    // ========== TESTE DE HEALTH CHECK ==========
-
-    @Test
-    @Order(1)
-    @DisplayName("Sistema deve estar funcionando")
-    void testSystemHealth() throws Exception {
-        mockMvc.perform(get("/api/test/health"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success", is(true)))
-                .andExpect(jsonPath("$.message", containsString("funcionando")));
-    }
-
     // ========== TESTES DE USUÁRIOS ==========
 
     @Test

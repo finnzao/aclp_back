@@ -158,9 +158,6 @@ public class SetupController {
                 ));
     }
 
-    /**
-     * Endpoint de reset isolado - só existe com profile "dev".
-     */
     @Profile("dev")
     @RestController
     @RequestMapping("/api/setup")

@@ -64,7 +64,7 @@ public class ProcessoService {
     public Page<ProcessoResponseDTO> listarComFiltros(String termo, StatusComparecimento status, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("proximoComparecimento").ascending());
         Page<Processo> pageResult = processoRepository.findComFiltros(
-                (termo != null && termo.isBlank()) ? null : termo, status, pageable);
+                termo == null ? "" : termo.trim(), status, pageable);
         List<ProcessoResponseDTO> dtos = pageResult.getContent().stream()
                 .map(ProcessoResponseDTO::fromEntity).collect(Collectors.toList());
         return new PageImpl<>(dtos, pageable, pageResult.getTotalElements());

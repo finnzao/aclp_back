@@ -26,9 +26,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
-/**
- * Controller responsável pela exportação de dados em formato Excel (.xlsx).
- */
 @RestController
 @RequestMapping("/api/exportar")
 @RequiredArgsConstructor
@@ -136,17 +133,12 @@ public class ExportacaoController {
 
     }
 
-    /**
-     * Gera o arquivo Excel com formatação profissional.
-     */
     private byte[] gerarExcel(List<PessoaMonitorada> custodiados,
                                Map<Long, List<Processo>> processosPorCustodiado,
                                Map<Long, HistoricoEndereco> enderecosPorCustodiado) throws Exception {
 
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("Pessoas monitoradas e Processos");
-
-            // ========== ESTILOS ==========
 
             // Cabeçalho
             CellStyle headerStyle = workbook.createCellStyle();
@@ -208,7 +200,6 @@ public class ExportacaoController {
             subtitleFont.setColor(IndexedColors.GREY_50_PERCENT.getIndex());
             subtitleStyle.setFont(subtitleFont);
 
-            // ========== TÍTULO ==========
             int totalColunas = 13; // A até M
 
             Row titleRow = sheet.createRow(0);
@@ -224,7 +215,6 @@ public class ExportacaoController {
             subtitleCell.setCellStyle(subtitleStyle);
             sheet.addMergedRegion(new CellRangeAddress(1, 1, 0, totalColunas - 1));
 
-            // ========== CABEÇALHOS ==========
             String[] headers = {
                     "Nome", "CPF", "RG", "Contato",
                     "Endereço", "Bairro", "Cidade/UF",
@@ -240,7 +230,6 @@ public class ExportacaoController {
                 cell.setCellStyle(headerStyle);
             }
 
-            // ========== DADOS ==========
             int rowNum = 4;
             int totalLinhas = 0;
 
@@ -274,7 +263,6 @@ public class ExportacaoController {
                 }
             }
 
-            // ========== RODAPÉ ==========
             rowNum += 1;
             Row totalRow = sheet.createRow(rowNum);
             Cell totalLabel = totalRow.createCell(0);
@@ -283,7 +271,6 @@ public class ExportacaoController {
             totalLabel.setCellStyle(subtitleStyle);
             sheet.addMergedRegion(new CellRangeAddress(rowNum, rowNum, 0, totalColunas - 1));
 
-            // ========== LARGURA DAS COLUNAS ==========
             int[] larguras = {35, 18, 18, 18, 40, 22, 22, 30, 25, 22, 18, 22, 22};
             for (int i = 0; i < larguras.length; i++) {
                 sheet.setColumnWidth(i, larguras[i] * 256);
@@ -295,16 +282,12 @@ public class ExportacaoController {
             // Filtro automático
             sheet.setAutoFilter(new CellRangeAddress(3, 3 + totalLinhas, 0, totalColunas - 1));
 
-            // ========== GERAR BYTES ==========
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             workbook.write(out);
             return out.toByteArray();
         }
     }
 
-    /**
-     * Cria estilo base para células de dados.
-     */
     private CellStyle criarEstiloDado(XSSFWorkbook workbook) {
         CellStyle style = workbook.createCellStyle();
         Font font = workbook.createFont();
@@ -320,9 +303,6 @@ public class ExportacaoController {
         return style;
     }
 
-    /**
-     * Preenche colunas 0-6: dados pessoais + endereço do custodiado.
-     */
     // CSV/formula injection: prefixo com apostrofo forca texto literal no Excel
     static String protegerFormula(String valor) {
         if (valor == null || valor.isEmpty()) return valor;
@@ -386,9 +366,6 @@ public class ExportacaoController {
         cidadeUf.setCellStyle(dataStyle);
     }
 
-    /**
-     * Preenche colunas 7-12: dados do processo.
-     */
     private void preencherDadosProcesso(Row row, Processo processo,
                                          CellStyle dataStyle, CellStyle centerStyle,
                                          CellStyle inadimplenteStyle,

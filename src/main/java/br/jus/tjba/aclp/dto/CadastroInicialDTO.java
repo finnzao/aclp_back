@@ -34,8 +34,6 @@ import java.time.LocalDate;
 @Builder
 public class CadastroInicialDTO {
 
-    // ======================== 1. DADOS PESSOAIS ========================
-
     @NotBlank(message = "Nome é obrigatório")
     @Size(min = 2, max = 150, message = "Nome deve ter entre 2 e 150 caracteres")
     private String nome;
@@ -48,22 +46,12 @@ public class CadastroInicialDTO {
             message = "Contato deve conter apenas números e caracteres de formatação")
     private String contato;
 
-    // ======================== 2. DOCUMENTOS ========================
-
-    /**
-     * CPF — opcional se RG for informado.
-     */
     @Pattern(regexp = "\\d{3}\\.?\\d{3}\\.?\\d{3}-?\\d{2}|\\d{11}|",
             message = "CPF deve ter o formato 000.000.000-00 ou apenas números")
     private String cpf;
 
-    /**
-     * RG — opcional se CPF for informado.
-     */
     @Size(max = 20, message = "RG deve ter no máximo 20 caracteres")
     private String rg;
-
-    // ======================== 3. DADOS PROCESSUAIS ========================
 
     /**
      * Número CNJ. O formato é o mesmo exigido em ProcessoDTO e PessoaMonitoradaCreateDTO —
@@ -91,7 +79,6 @@ public class CadastroInicialDTO {
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate dataComparecimentoInicial;
 
-    /** Opcional — ausente = CAUTELAR (comportamento atual preservado). */
     private NaturezaVinculo naturezaVinculo;
 
     // obrigatorio quando naturezaVinculo = EXECUCAO_PENAL (validado no service);
@@ -99,14 +86,11 @@ public class CadastroInicialDTO {
     @Valid
     private ExecucaoPenalDTO.RegistroPenaRequest pena;
 
-    // ======================== 4. PERIODICIDADE ========================
-
     // obrigatoria na cautelar e nas modalidades com agenda (validado no service)
     @Min(value = 1, message = "Periodicidade mínima é 1 dia")
     @Max(value = 365, message = "Periodicidade máxima é 365 dias")
     private Integer periodicidade;
 
-    // ======================== 5. ENDEREÇO ========================
     // obrigatorio na cautelar; opcional na execucao (validado no service)
 
     @Pattern(regexp = "\\d{5}-?\\d{3}|\\d{8}", message = "CEP deve ter o formato 00000-000 ou apenas números")
@@ -131,16 +115,9 @@ public class CadastroInicialDTO {
     @Pattern(regexp = "[A-Z]{2}", message = "Estado deve ser uma sigla válida com 2 letras maiúsculas")
     private String estado;
 
-    // ======================== 6. OBSERVAÇÕES ========================
-
     @Size(max = 500, message = "Observações deve ter no máximo 500 caracteres")
     private String observacoes;
 
-    // ======================== VALIDAÇÕES ========================
-
-    /**
-     * Pelo menos CPF ou RG deve ser informado.
-     */
     @AssertTrue(message = "Pelo menos CPF ou RG deve ser informado")
     public boolean isDocumentoValido() {
         boolean temCpf = cpf != null && !cpf.trim().isEmpty();
@@ -148,9 +125,6 @@ public class CadastroInicialDTO {
         return temCpf || temRg;
     }
 
-    /**
-     * Retorna o contato efetivo: valor informado ou "Pendente".
-     */
     public String getContatoEfetivo() {
         if (contato == null || contato.trim().isEmpty()) {
             return "Pendente";
@@ -158,9 +132,6 @@ public class CadastroInicialDTO {
         return contato.trim();
     }
 
-    /**
-     * Limpa e formata os dados antes do processamento.
-     */
     public void limparEFormatarDados() {
         if (nome != null) nome = nome.trim().toUpperCase();
         if (cpf != null) cpf = cpf.trim();

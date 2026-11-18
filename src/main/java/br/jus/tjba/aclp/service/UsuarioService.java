@@ -112,9 +112,6 @@ public class UsuarioService {
         return usuarioRepository.save(usuario);
     }
 
-    /**
-     * Atualiza perfil do próprio usuário (sem permissões admin)
-     */
     @Transactional
     public Usuario atualizarPerfil(String email, AtualizarPerfilDTO dto) {
         Usuario usuario = usuarioRepository.findByEmail(email)
@@ -142,9 +139,6 @@ public class UsuarioService {
         return usuarioRepository.save(usuario);
     }
 
-    /**
-     * Altera senha do próprio usuário
-     */
     @Transactional
     public void alterarSenha(String email, AlterarSenhaDTO dto) {
         Usuario usuario = usuarioRepository.findByEmail(email)
@@ -168,9 +162,6 @@ public class UsuarioService {
         usuarioRepository.save(usuario);
     }
 
-    /**
-     * Desativa própria conta (soft delete)
-     */
     @Transactional
     public void desativarPropriaConta(String email) {
         Usuario usuario = usuarioRepository.findByEmail(email)

@@ -36,7 +36,6 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
 
-    /** Rotas sensíveis: credenciais ou envio de e-mail disparado por anônimo. */
     private static final Set<String> ROTAS_PROTEGIDAS = Set.of(
             "/api/auth/login",
             "/api/auth/forgot-password",
@@ -120,7 +119,6 @@ public class RateLimitFilter extends OncePerRequestFilter {
         });
     }
 
-    /** Usado pelo agendador de limpeza para logar o tamanho do mapa. */
     public int getIpsMonitorados() {
         return tentativasPorIp.size();
     }

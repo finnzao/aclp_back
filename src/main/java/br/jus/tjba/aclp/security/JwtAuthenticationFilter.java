@@ -68,9 +68,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
-    /**
-     * Extrai o token JWT do header Authorization
-     */
     private String getJwtFromRequest(HttpServletRequest request) {
         String bearerToken = request.getHeader("Authorization");
 
@@ -110,7 +107,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return true;
         }
 
-        // ===== ROTAS PÚBLICAS DE CONVITES =====
         // Validar convite - GET /api/usuarios/convites/validar/{token}
         if (path.startsWith("/api/usuarios/convites/validar/")) {
             return true;

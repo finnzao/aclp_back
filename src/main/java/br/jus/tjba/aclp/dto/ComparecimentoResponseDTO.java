@@ -13,9 +13,6 @@ import java.util.Map;
  */
 public class ComparecimentoResponseDTO {
 
-    /**
-     * DTO para estatísticas de comparecimentos por período
-     */
     @Data
     @Builder
     public static class EstatisticasComparecimento {
@@ -29,9 +26,6 @@ public class ComparecimentoResponseDTO {
         private double percentualOnline;
     }
 
-    /**
-     * DTO para estatísticas gerais do sistema
-     */
     @Data
     @Builder
     public static class EstatisticasGerais {
@@ -48,9 +42,6 @@ public class ComparecimentoResponseDTO {
         private double mediaComparecimentosPorCustodiado;
     }
 
-    /**
-     * DTO para resumo completo do sistema
-     */
     @Data
     @Builder
     public static class ResumoSistema {
@@ -77,9 +68,6 @@ public class ComparecimentoResponseDTO {
         private AnaliseAtrasos analiseAtrasos;
     }
 
-    /**
-     * DTO para relatório dos últimos meses
-     */
     @Data
     @Builder
     public static class RelatorioUltimosMeses {
@@ -95,9 +83,6 @@ public class ComparecimentoResponseDTO {
         private double percentualOnline;
     }
 
-    /**
-     * DTO para tendência mensal
-     */
     @Data
     @Builder
     public static class TendenciaMensal {
@@ -111,9 +96,6 @@ public class ComparecimentoResponseDTO {
         private long totalComparecimentos;
     }
 
-    /**
-     * DTO para próximos comparecimentos
-     */
     @Data
     @Builder
     public static class ProximosComparecimentos {
@@ -126,9 +108,6 @@ public class ComparecimentoResponseDTO {
         private List<DetalhePessoaMonitorada> custodiadosAtrasados;
     }
 
-    /**
-     * DTO para comparecimentos diários
-     */
     @Data
     @Builder
     public static class ComparecimentoDiario {
@@ -138,9 +117,6 @@ public class ComparecimentoResponseDTO {
         private List<DetalhePessoaMonitorada> custodiados;
     }
 
-    /**
-     * DTO para detalhe de custodiado
-     */
     @Data
     @Builder
     public static class DetalhePessoaMonitorada {
@@ -151,9 +127,6 @@ public class ComparecimentoResponseDTO {
         private long diasAtraso;
     }
 
-    /**
-     * DTO para análise de comparecimentos
-     */
     @Data
     @Builder
     public static class AnaliseComparecimentos {
@@ -165,9 +138,6 @@ public class ComparecimentoResponseDTO {
         private Map<Integer, Long> comparecimentosPorHora;
     }
 
-    /**
-     * DTO para análise de atrasos
-     */
     @Data
     @Builder
     public static class AnaliseAtrasos {
@@ -186,9 +156,6 @@ public class ComparecimentoResponseDTO {
         private LocalDate dataAnalise;
     }
 
-    /**
-     * DTO para detalhe de custodiado atrasado
-     */
     @Data
     @Builder
     public static class DetalhePessoaMonitoradaAtrasado {

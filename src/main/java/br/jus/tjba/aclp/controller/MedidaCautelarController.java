@@ -21,7 +21,6 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 import java.util.List;
 
-/** O sistema registra as medidas impostas; fiscaliza so o comparecimento. */
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor

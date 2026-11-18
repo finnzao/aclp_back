@@ -25,16 +25,10 @@ public class PessoaMonitoradaDTO {
     @Size(min = 2, max = 150, message = "Nome deve ter entre 2 e 150 caracteres")
     private String nome;
 
-    /**
-     * CPF — opcional se RG for informado.
-     */
     @Pattern(regexp = "\\d{3}\\.?\\d{3}\\.?\\d{3}-?\\d{2}|\\d{11}|",
             message = "CPF deve ter o formato 000.000.000-00 ou apenas números")
     private String cpf;
 
-    /**
-     * RG — opcional se CPF for informado.
-     */
     @Size(max = 20, message = "RG deve ter no máximo 20 caracteres")
     private String rg;
 
@@ -80,8 +74,6 @@ public class PessoaMonitoradaDTO {
     @Size(max = 500, message = "Observações deve ter no máximo 500 caracteres")
     private String observacoes;
 
-    // === CAMPOS DE ENDEREÇO ===
-
     @NotBlank(message = "CEP é obrigatório")
     @Pattern(regexp = "\\d{5}-?\\d{3}|\\d{8}", message = "CEP deve ter o formato 00000-000 ou apenas números")
     private String cep;
@@ -122,9 +114,6 @@ public class PessoaMonitoradaDTO {
                 estado != null && !estado.trim().isEmpty();
     }
 
-    /**
-     * Retorna o contato efetivo: valor informado ou "Pendente".
-     */
     public String getContatoEfetivo() {
         if (contato == null || contato.trim().isEmpty()) {
             return "Pendente";

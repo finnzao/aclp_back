@@ -36,9 +36,6 @@ public class Convite {
     @Column(nullable = true, length = 255)
     private String email;
 
-    /**
-     * Tipo de usuário que será criado (USUARIO ou ADMIN)
-     */
     @Enumerated(EnumType.STRING)
     @Column(name = "tipo_usuario", nullable = false, length = 20)
     private TipoUsuario tipoUsuario;
@@ -75,9 +72,6 @@ public class Convite {
     @Column(name = "departamento", length = 100)
     private String departamento;
 
-    /**
-     * Admin que criou este convite
-     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "criado_por_id")
     private Usuario criadoPor;
@@ -90,15 +84,9 @@ public class Convite {
     @JoinColumn(name = "usuario_id")
     private Usuario usuario;
 
-    /**
-     * IP de onde o convite foi criado (auditoria)
-     */
     @Column(name = "ip_criacao", length = 45)
     private String ipCriacao;
 
-    /**
-     * IP de onde o convite foi ativado
-     */
     @Column(name = "ip_ativacao", length = 45)
     private String ipAtivacao;
 
@@ -127,9 +115,6 @@ public class Convite {
     @Column(name = "ativado_em")
     private LocalDateTime ativadoEm;
 
-    /**
-     * Inicializa valores padrão
-     */
     @PrePersist
     protected void onCreate() {
         if (this.criadoEm == null) {
@@ -152,46 +137,28 @@ public class Convite {
         }
     }
 
-    /**
-     * Verifica se é um convite genérico (sem email específico)
-     */
     public boolean isGenerico() {
         return this.email == null || this.email.trim().isEmpty();
     }
 
-    /**
-     * Verifica se o convite pode ser usado
-     */
     public boolean isValido() {
         return status == StatusConvite.PENDENTE &&
                 !isExpirado() &&
                 usosRealizados == 0; // Só válido se nunca foi usado
     }
 
-    /**
-     * Verifica se o convite já expirou
-     */
     public boolean isExpirado() {
         return br.jus.tjba.aclp.util.TempoAtual.agora().isAfter(expiraEm);
     }
 
-    /**
-     * Verifica se ainda há usos disponíveis (sempre 1 uso)
-     */
     public boolean temUsosDisponiveis() {
         return usosRealizados == 0;
     }
 
-    /**
-     * Retorna quantos usos ainda estão disponíveis (0 ou 1)
-     */
     public int getUsosRestantes() {
         return usosRealizados == 0 ? 1 : 0;
     }
 
-    /**
-     * Registra uso do convite (marca como usado)
-     */
     public void registrarUso() {
         this.usosRealizados = 1;
         this.status = StatusConvite.ATIVADO;
@@ -211,23 +178,14 @@ public class Convite {
         this.usosRealizados = 1;
     }
 
-    /**
-     * Cancela o convite (admin pode cancelar antes de ser usado)
-     */
     public void cancelar() {
         this.status = StatusConvite.CANCELADO;
     }
 
-    /**
-     * Marca o convite como expirado (job automático)
-     */
     public void expirar() {
         this.status = StatusConvite.EXPIRADO;
     }
 
-    /**
-     * Valida se o email pode ser usado com este convite
-     */
     public boolean validarEmail(String emailParaValidar) {
         if (emailParaValidar == null || emailParaValidar.trim().isEmpty()) {
             return false;
@@ -242,9 +200,6 @@ public class Convite {
         return true;
     }
 
-    /**
-     * Retorna descrição do tipo de convite
-     */
     public String getTipoConviteDescricao() {
         if (isGenerico()) {
             return "Link Genérico (Uso Único)";

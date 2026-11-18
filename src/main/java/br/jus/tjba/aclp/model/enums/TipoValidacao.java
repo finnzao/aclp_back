@@ -32,9 +32,6 @@ public enum TipoValidacao {
         return description;
     }
 
-    /**
-     * Aceita tanto o código quanto o nome do enum
-     */
     @JsonCreator
     public static TipoValidacao fromString(String value) {
         if (value == null) return null;

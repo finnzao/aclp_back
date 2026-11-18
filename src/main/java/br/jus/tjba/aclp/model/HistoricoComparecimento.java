@@ -157,10 +157,6 @@ public class HistoricoComparecimento {
     @Builder.Default
     private Long version = 0L;
 
-    // =====================================================================
-    // Lifecycle
-    // =====================================================================
-
     @PrePersist
     public void prePersist() {
         if (criadoEm == null) criadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
@@ -172,10 +168,6 @@ public class HistoricoComparecimento {
     public void preUpdate() {
         atualizadoEm = br.jus.tjba.aclp.util.TempoAtual.agora();
     }
-
-    // =====================================================================
-    // Domain helpers
-    // =====================================================================
 
     public LocalDateTime getDataHoraComparecimento() {
         if (dataComparecimento == null) return null;
