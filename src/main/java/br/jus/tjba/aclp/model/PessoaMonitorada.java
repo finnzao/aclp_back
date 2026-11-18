@@ -148,11 +148,9 @@ public class PessoaMonitorada {
         }
     }
 
-    // ---------------------------------------------------------------------
     // Dados processuais derivados de PROCESSOS (fonte da verdade).
     // Os getters manuais abaixo tem precedencia sobre o Lombok e substituem
     // as colunas legadas desta tabela. Fora de sessao, degradam para vazio.
-    // ---------------------------------------------------------------------
 
     private List<Processo> processosCarregados() {
         try {
@@ -223,14 +221,19 @@ public class PessoaMonitorada {
         return getStatusEfetivo();
     }
 
-    /** EXECUCAO/CAUTELAR/MISTO pelos processos ativos; requer sessao aberta (processos LAZY). */
+    /**
+     * EXECUCAO/CAUTELAR/MISTO pelos processos ativos; sem nenhum ativo (execucao
+     * extinta/suspensa), vale o que a pessoa tem. Requer sessao aberta (processos LAZY).
+     */
     public String getNaturezaMonitoramento() {
-        boolean execucao = false, cautelar = false;
+        boolean execucao = false, cautelar = false, algumaExecucao = false;
         for (Processo p : processos) {
+            if (p.isExecucao()) algumaExecucao = true;
             if (p.getSituacaoProcesso() != br.jus.tjba.aclp.model.enums.SituacaoProcesso.ATIVO) continue;
             if (p.isExecucao()) execucao = true; else cautelar = true;
         }
         if (execucao && cautelar) return "MISTO";
+        if (!execucao && !cautelar) return algumaExecucao ? "EXECUCAO" : "CAUTELAR";
         return execucao ? "EXECUCAO" : "CAUTELAR";
     }
 
@@ -241,7 +244,6 @@ public class PessoaMonitorada {
                 : br.jus.tjba.aclp.model.enums.StatusComparecimento.EM_CONFORMIDADE;
     }
 
-    /** Maior atraso entre os processos ativos. */
     public long getDiasAtraso() {
         if (!isAtivo()) return 0;
         java.time.LocalDate hoje = br.jus.tjba.aclp.util.TempoAtual.hoje();

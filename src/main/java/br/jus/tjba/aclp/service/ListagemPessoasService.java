@@ -23,20 +23,26 @@ public class ListagemPessoasService {
     private final PessoaMonitoradaRepository custodiadoRepository;
     private final jakarta.persistence.EntityManager entityManager;
 
-    // =====================================================================
     // LISTAGEM: uma SQL por pagina (LEFT JOIN do processo mais urgente).
     // Substitui o par Specification+entidade e o N+1 da natureza.
     // ponytail: subquery com ROW_NUMBER e portavel (H2 dos testes + PG);
     // trocar por LEFT JOIN LATERAL se processos passar de dezenas de milhares.
-    // =====================================================================
+
+    // Processos ativos decidem a natureza; sem nenhum ativo (execucao extinta/suspensa),
+    // vale o que a pessoa tem — senao ela caia em CAUTELAR por falta de opcao.
+    private static final String EXISTS_EXECUCAO = """
+            EXISTS (SELECT 1 FROM processos e WHERE e.custodiado_id = c.id
+                    AND e.natureza_vinculo = 'EXECUCAO_PENAL'
+                    AND (e.situacao_processo = 'ATIVO'
+                         OR NOT EXISTS (SELECT 1 FROM processos a WHERE a.custodiado_id = c.id
+                                        AND a.situacao_processo = 'ATIVO')))
+            """;
 
     private static final String LISTA_SELECT = """
             SELECT c.id, c.public_id, c.nome, c.cpf, c.rg, c.situacao,
                    pp.numero_processo, pp.vara, pp.comarca, pp.periodicidade,
                    pp.ultimo_comparecimento, pp.proximo_comparecimento,
-                   CASE WHEN EXISTS (SELECT 1 FROM processos e WHERE e.custodiado_id = c.id
-                                     AND e.situacao_processo = 'ATIVO'
-                                     AND e.natureza_vinculo = 'EXECUCAO_PENAL')
+                   CASE WHEN\s""" + EXISTS_EXECUCAO + """
                         THEN CASE WHEN EXISTS (SELECT 1 FROM processos e2 WHERE e2.custodiado_id = c.id
                                                AND e2.situacao_processo = 'ATIVO'
                                                AND e2.natureza_vinculo = 'CAUTELAR')
@@ -72,10 +78,8 @@ public class ListagemPessoasService {
         } else if ("EM_CONFORMIDADE".equalsIgnoreCase(status)) {
             w.append(" AND (pp.proximo_comparecimento IS NULL OR pp.proximo_comparecimento >= CURRENT_DATE)");
         }
-        String existsExec = "EXISTS (SELECT 1 FROM processos e WHERE e.custodiado_id = c.id "
-                + "AND e.situacao_processo = 'ATIVO' AND e.natureza_vinculo = 'EXECUCAO_PENAL')";
-        if ("EXECUCAO".equalsIgnoreCase(natureza)) w.append(" AND ").append(existsExec);
-        else if ("CAUTELAR".equalsIgnoreCase(natureza)) w.append(" AND NOT ").append(existsExec);
+        if ("EXECUCAO".equalsIgnoreCase(natureza)) w.append(" AND ").append(EXISTS_EXECUCAO);
+        else if ("CAUTELAR".equalsIgnoreCase(natureza)) w.append(" AND NOT ").append(EXISTS_EXECUCAO);
         return w.toString();
     }
 

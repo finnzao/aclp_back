@@ -33,6 +33,13 @@ class NaturezaMonitoramentoTest {
     }
 
     @Test
+    void execucaoExtintaSemProcessoAtivoContinuaExecucao() {
+        PessoaMonitorada c = PessoaMonitorada.builder().build();
+        c.getProcessos().add(processo(NaturezaVinculo.EXECUCAO_PENAL, SituacaoProcesso.ENCERRADO));
+        assertEquals("EXECUCAO", c.getNaturezaMonitoramento());
+    }
+
+    @Test
     void ambasAtivasEhMisto() {
         PessoaMonitorada c = PessoaMonitorada.builder().build();
         c.getProcessos().add(processo(NaturezaVinculo.CAUTELAR, SituacaoProcesso.ATIVO));
