@@ -37,6 +37,7 @@ public class ProcessoService {
     private final ProcessoRepository processoRepository;
     private final PessoaMonitoradaRepository custodiadoRepository;
     private final ExecucaoPenalService execucaoPenalService;
+    private final br.jus.tjba.aclp.repository.HistoricoComparecimentoRepository historicoComparecimentoRepository;
 
     /**
      * CORREÇÃO DE PERFORMANCE: Busca processos de múltiplos custodiados em uma query.
@@ -159,9 +160,10 @@ public class ProcessoService {
         processo.setComarca(dto.getComarca().trim());
         processo.setDataDecisao(dto.getDataDecisao());
         processo.setPeriodicidade(dto.getPeriodicidade());
-        processo.setDataComparecimentoInicial(dto.getDataComparecimentoInicial());
         processo.setObservacoes(dto.getObservacoes());
-        processo.calcularProximoComparecimento();
+        processo.corrigirComparecimentoInicial(dto.getDataComparecimentoInicial(),
+                historicoComparecimentoRepository.existsByProcessoIdAndTipoValidacaoNot(
+                        id, br.jus.tjba.aclp.model.enums.TipoValidacao.CADASTRO_INICIAL));
         return ProcessoResponseDTO.fromEntity(processoRepository.save(processo));
     }
 

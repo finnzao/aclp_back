@@ -35,6 +35,37 @@ class FronteiraDataTest {
         return c;
     }
 
+    private Processo cadastradoHojeSemDataReal(LocalDate hoje) {
+        Processo p = Processo.builder().situacaoProcesso(SituacaoProcesso.ATIVO).periodicidade(30)
+                .dataComparecimentoInicial(hoje).ultimoComparecimento(hoje).build();
+        p.calcularProximoComparecimento();
+        return p;
+    }
+
+    @Test
+    void corrigirDataInicialSemRegistroPosteriorRecalculaPrazoEStatus() {
+        LocalDate hoje = LocalDate.of(2026, 11, 18);
+        fixarDia(hoje);
+        Processo p = cadastradoHojeSemDataReal(hoje);
+
+        p.corrigirComparecimentoInicial(LocalDate.of(2026, 9, 24), false);
+
+        assertEquals(LocalDate.of(2026, 10, 24), p.getProximoComparecimento());
+        assertEquals(StatusComparecimento.INADIMPLENTE, p.getStatus());
+    }
+
+    @Test
+    void corrigirDataInicialComRegistroPosteriorNaoMexeNoPrazo() {
+        LocalDate hoje = LocalDate.of(2026, 11, 18);
+        fixarDia(hoje);
+        Processo p = cadastradoHojeSemDataReal(hoje);
+
+        p.corrigirComparecimentoInicial(LocalDate.of(2026, 9, 24), true);
+
+        assertEquals(hoje.plusDays(30), p.getProximoComparecimento());
+        assertEquals(StatusComparecimento.EM_CONFORMIDADE, p.getStatus());
+    }
+
     @Test
     void noDiaDoPrazoAindaEstaEmConformidade() {
         fixarDia(PRAZO);

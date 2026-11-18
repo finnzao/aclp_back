@@ -169,6 +169,18 @@ public class Processo {
         }
     }
 
+    /**
+     * Corrige a data do comparecimento inicial. Enquanto nao ha registro posterior
+     * ao cadastro, o "ultimo comparecimento" e essa mesma data — entao ela acompanha
+     * a correcao e o prazo e recalculado. Com registro posterior, so a data muda.
+     */
+    public void corrigirComparecimentoInicial(LocalDate novaData, boolean temRegistroPosterior) {
+        dataComparecimentoInicial = novaData;
+        if (novaData != null && !temRegistroPosterior) ultimoComparecimento = novaData;
+        calcularProximoComparecimento();
+        atualizarStatusBaseadoEmData();
+    }
+
     public void registrarFaltaJustificada(LocalDate dataFalta) {
         if (periodicidade != null) proximoComparecimento = dataFalta.plusDays(periodicidade);
         status = StatusComparecimento.EM_CONFORMIDADE;

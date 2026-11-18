@@ -21,6 +21,13 @@ public interface HistoricoComparecimentoRepository
         extends JpaRepository<HistoricoComparecimento, Long>,
                 JpaSpecificationExecutor<HistoricoComparecimento> {
 
+    /** Algum registro alem do cadastro inicial (presenca ou falta justificada)? */
+    @Query("SELECT COUNT(h) > 0 FROM HistoricoComparecimento h " +
+            "WHERE h.processo.id = :processoId AND h.tipoValidacao <> :tipo")
+    boolean existsByProcessoIdAndTipoValidacaoNot(
+            @Param("processoId") Long processoId,
+            @Param("tipo") br.jus.tjba.aclp.model.enums.TipoValidacao tipoValidacao);
+
     /** Guarda de idempotência: mesmo processo, mesma data e mesmo tipo = duplicata. */
     @Query("SELECT COUNT(h) > 0 FROM HistoricoComparecimento h " +
             "WHERE h.processo.id = :processoId AND h.dataComparecimento = :data " +
