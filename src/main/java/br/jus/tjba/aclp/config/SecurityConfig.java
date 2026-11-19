@@ -122,6 +122,11 @@ public class SecurityConfig {
                         // GET  /api/comparecimentos/todos      (com filtros server-side)
                         .anyRequest().authenticated()
                 )
+                // Sem entry point o Spring responde 403 a quem nao esta autenticado, e o
+                // frontend so renova o token (ou volta ao login) quando recebe 401.
+                .exceptionHandling(e -> e.authenticationEntryPoint(
+                        new org.springframework.security.web.authentication.HttpStatusEntryPoint(
+                                org.springframework.http.HttpStatus.UNAUTHORIZED)))
                 .authenticationProvider(authenticationProvider())
                 // Rate limit primeiro: requisição barrada não chega a validar token.
                 // Os dois ancoram no mesmo filtro padrão — a ordem entre eles é a ordem

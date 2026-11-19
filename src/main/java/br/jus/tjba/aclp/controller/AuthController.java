@@ -147,8 +147,15 @@ public class AuthController {
                     .body(Map.of("success", false, "message", "Refresh token ausente"));
         }
 
-        RefreshTokenResponseDTO response = authService.refreshToken(
-                new RefreshTokenRequestDTO(refreshToken), httpRequest);
+        RefreshTokenResponseDTO response;
+        try {
+            response = authService.refreshToken(new RefreshTokenRequestDTO(refreshToken), httpRequest);
+        } catch (br.jus.tjba.aclp.exception.InvalidTokenException
+                 | br.jus.tjba.aclp.exception.AuthenticationException e) {
+            // sem isto caia no handler generico e virava 500: o frontend nao sabia que a sessao acabou
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("success", false, "message", "Sessão expirada. Faça login novamente."));
+        }
 
         long expiraEm = response.getExpiresIn() != null ? response.getExpiresIn() : 3600L;
         return ResponseEntity.ok()
